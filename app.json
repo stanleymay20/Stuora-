@@ -1,0 +1,19 @@
+{
+  "expo": {
+    "name": "Stuora",
+    "slug": "stuora",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.stuora.app"
+    },
+    "android": {
+      "package": "com.stuora.app"
+    },
+    "web": {
+      "bundler": "metro"
+    }
+  }
+}
