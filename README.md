@@ -4,9 +4,27 @@ Stuora is a cross-platform student-life app for web, iOS, and Android.
 
 The product is intentionally independent of university systems. The first MVP focuses on practical student life: community discovery, housing, marketplace, trips, jobs, messaging, and a portable trust/profile layer.
 
+## Student-first rule
+
+Stuora is designed to **reduce the cost of student life, not add another tax to it**.
+
+Core participation should remain free for students wherever practical. Employers, professional housing providers, local businesses, travel partners, sponsors, and optional commercial tools should carry most of the economics.
+
+Examples:
+
+- job applications: free for students;
+- ordinary peer-to-peer marketplace listings: free;
+- core housing discovery: no Stuora student application fee;
+- community, messaging, profile, and discovery: free core access;
+- trips and events: prioritize student/group pricing;
+- verified partner benefits: show the real normal price, student price, sponsor, terms, and validity period;
+- no hidden fees.
+
+See `docs/STUDENT_FIRST_ECONOMICS.md` for the full policy.
+
 ## Current MVP shell
 
-The current branch implements a functional local-state vertical slice with:
+The current app implements a functional local-state vertical slice with:
 
 - Home and local Berlin discovery
 - Explore by Housing, Marketplace, Trips, Jobs, Events, and People
@@ -19,6 +37,22 @@ The current branch implements a functional local-state vertical slice with:
 
 No fake payments, fake verification backend, or fake production services are exposed. Those will only be enabled after their end-to-end backend flows exist.
 
+## Backend foundation
+
+The repository now includes a Supabase/Postgres schema blueprint covering:
+
+- profiles and student verification state;
+- housing, marketplace, trips, jobs, and events;
+- saved listings;
+- trip participation;
+- job applications;
+- conversations and messages;
+- reports/moderation primitives;
+- verified student benefits and savings accounting;
+- Row Level Security and explicit Data API grants.
+
+The schema has **not** been pointed at an unrelated Supabase project. A dedicated Stuora project should be created before applying it.
+
 ## Stack
 
 - Expo SDK 57
@@ -26,6 +60,7 @@ No fake payments, fake verification backend, or fake production services are exp
 - React Native 0.86
 - React Native Web 0.21
 - TypeScript 6
+- planned production backend: Supabase/Postgres
 
 ## Run locally
 
@@ -53,4 +88,4 @@ GitHub Actions verifies:
 
 ## Next engineering slice
 
-The next production slice should add Supabase-backed authentication, profiles, listings, media uploads, messaging, row-level security, moderation/reporting primitives, and seeded demo data while preserving the working shell.
+Create a dedicated Stuora Supabase project, apply and verify the schema with security/performance advisors, connect Auth and profiles, replace local listing state with repository-backed persistence, then add media uploads and realtime messaging.
