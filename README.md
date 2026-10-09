@@ -34,6 +34,9 @@ The current app implements a functional local-state vertical slice with:
 - Stuora Passport profile/reputation concept
 - Responsive web layout plus mobile navigation
 - One Expo codebase targeting web, iOS, and Android
+- Student Savings overlay with category filters, transparent normal-vs-student pricing, sponsor and eligibility disclosure, validity dates, and computed savings totals
+
+Seeded savings offers are clearly labelled demo data. Production offers must be verified before they can be presented as subsidized student benefits.
 
 No fake payments, fake verification backend, or fake production services are exposed. Those will only be enabled after their end-to-end backend flows exist.
 
