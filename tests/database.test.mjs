@@ -1,0 +1,122 @@
+import { PGlite } from '@electric-sql/pglite';
+import { readFileSync, readdirSync } from 'node:fs';
+import assert from 'node:assert/strict';
+import { test } from 'node:test';
+
+const id = n => `00000000-0000-0000-0000-${String(n).padStart(12, '0')}`;
+const a = id(1), b = id(2), c = id(3);
+const house = id(11), draft = id(12), job = id(13), trip = id(14);
+const ab = id(21), bc = id(22);
+
+async function database(inheritedGrants) {
+  const db = new PGlite();
+  await db.exec(`
+    create role anon; create role authenticated;
+    create schema auth;
+    create table auth.users (id uuid primary key);
+    create function auth.uid() returns uuid language sql stable as
+      $$ select nullif(current_setting('request.jwt.claim.sub', true), '')::uuid $$;
+    grant usage on schema public, auth to anon, authenticated;
+    grant execute on function auth.uid() to anon, authenticated;
+    ${inheritedGrants ? 'alter default privileges in schema public grant all on tables to anon, authenticated;' : ''}
+  `);
+  const files = readdirSync(new URL('../supabase/migrations/', import.meta.url)).filter(f => f.endsWith('.sql')).sort();
+  assert.ok(files.length > 0, 'At least one controlled migration is required');
+  for (const f of files) await db.exec(readFileSync(new URL(`../supabase/migrations/${f}`, import.meta.url), 'utf8'));
+  await db.exec(`
+    insert into auth.users values ('${a}'), ('${b}'), ('${c}');
+    insert into public.profiles (id, display_name, is_discoverable)
+      values ('${a}', 'Alice', true), ('${b}', 'Bob', true), ('${c}', 'Private Charlie', false);
+    insert into public.listings (id, owner_id, kind, status, title) values
+      ('${house}', '${a}', 'housing', 'active', 'Room in Berlin'),
+      ('${draft}', '${a}', 'marketplace', 'draft', 'Private draft'),
+      ('${job}', '${a}', 'job', 'active', 'Student job'),
+      ('${trip}', '${a}', 'trip', 'active', 'Prague trip');
+    insert into public.housing_details (listing_id, housing_type, rent_cents) values ('${house}', 'room', 62000);
+    insert into public.marketplace_details (listing_id) values ('${draft}');
+    insert into public.trip_details (listing_id, destination, starts_at, capacity) values ('${trip}', 'Prague', now(), 2);
+    insert into public.conversations (id, creator_id) values ('${ab}', '${a}'), ('${bc}', '${b}');
+    insert into public.conversation_members (conversation_id, user_id) values
+      ('${ab}', '${a}'), ('${ab}', '${b}'), ('${bc}', '${b}'), ('${bc}', '${c}');
+    insert into public.messages (conversation_id, sender_id, body) values
+      ('${ab}', '${a}', 'Private Alice/Bob'), ('${bc}', '${c}', 'Private Bob/Charlie');
+    insert into public.student_benefits (title, benefit_type, sponsor_name, verified_at) values
+      ('Verified offer', 'discount', 'Sponsor', now()),
+      ('Unverified offer', 'discount', 'Sponsor', null);
+  `);
+  return db;
+}
+
+for (const inheritedGrants of [false, true]) {
+  test(`migration + role isolation (inherited grants: ${inheritedGrants})`, async t => {
+    const db = await database(inheritedGrants);
+    let assertions = 0;
+    async function as(role, user, sql) {
+      await db.exec(`set role ${role}; select set_config('request.jwt.claim.sub', '${user ?? ''}', false);`);
+      try { return await db.query(sql); } finally { await db.exec('reset role'); }
+    }
+    async function count(role, user, sql, expected) {
+      const { rows } = await as(role, user, sql);
+      assert.equal(rows.length, expected); assertions++;
+    }
+    async function deny(user, sql, code = '42501') {
+      await assert.rejects(as('authenticated', user, sql), e => e.code === code); assertions++;
+    }
+    try {
+      await count('anon', null, 'select * from public.listings', 3);
+      await count('anon', null, 'select * from public.marketplace_details', 0);
+      await count('authenticated', a, 'select * from public.listings', 4);
+      await count('authenticated', b, `select * from public.listings where id = '${draft}'`, 0);
+      await count('authenticated', a, 'select * from public.profiles', 2);
+      await count('authenticated', c, 'select * from public.profiles', 3);
+      await deny(b, `insert into public.profiles (id, display_name) values ('${id(99)}', 'Impersonated')`);
+      await deny(a, `update public.profiles set student_status = 'verified' where id = '${a}'`);
+      await deny(a, `update public.profiles set account_kind = 'employer' where id = '${a}'`);
+      await count('authenticated', b, `update public.profiles set bio = 'Tampered' where id = '${a}' returning *`, 0);
+      await count('authenticated', a, `update public.profiles set bio = 'Hello Berlin' where id = '${a}' returning *`, 1);
+      await deny(b, `insert into public.listings (owner_id, kind, title) values ('${a}', 'housing', 'Impersonated listing')`);
+      await deny(a, `update public.listings set owner_id = '${b}' where id = '${house}'`);
+      await deny(a, `update public.listings set kind = 'job' where id = '${house}'`);
+      await count('authenticated', b, `update public.listings set title = 'Tampered' where id = '${house}' returning *`, 0);
+      await count('authenticated', a, `update public.listings set title = 'Updated room' where id = '${house}' returning *`, 1);
+      await deny(a, `insert into public.housing_details (listing_id, housing_type, rent_cents) values ('${job}', 'room', 10)`);
+      await deny(b, `update public.housing_details set listing_id = '${job}' where listing_id = '${house}'`);
+      await count('authenticated', b, `update public.housing_details set rent_cents = 1 where listing_id = '${house}' returning *`, 0);
+      await count('authenticated', a, `update public.housing_details set rent_cents = 60000 where listing_id = '${house}' returning *`, 1);
+      await deny(b, `insert into public.job_applications (job_listing_id, applicant_id, status) values ('${job}', '${b}', 'accepted')`);
+      await deny(b, `insert into public.job_applications (job_listing_id, applicant_id) values ('${job}', '${a}')`);
+      await count('authenticated', b, `insert into public.job_applications (job_listing_id, applicant_id, cover_note) values ('${job}', '${b}', 'My application') returning *`, 1);
+      await count('authenticated', a, 'select * from public.job_applications', 1);
+      await count('authenticated', c, 'select * from public.job_applications', 0);
+      await deny(b, `update public.job_applications set status = 'accepted'`);
+      await count('authenticated', b, 'update public.job_applications set withdrawn_at = now() returning *', 1);
+      await deny(b, `insert into public.trip_participants (trip_listing_id, user_id) values ('${trip}', '${b}')`);
+      await count('authenticated', a, 'select * from public.messages', 1);
+      await count('authenticated', b, 'select * from public.messages', 2);
+      await count('authenticated', c, 'select * from public.messages', 1);
+      await deny(a, `insert into public.messages (conversation_id, sender_id, body) values ('${bc}', '${a}', 'Cross-conversation attack')`);
+      await deny(a, `insert into public.messages (conversation_id, sender_id, body) values ('${ab}', '${b}', 'Spoofed sender')`);
+      await count('authenticated', a, `insert into public.messages (conversation_id, sender_id, body) values ('${ab}', '${a}', 'Legitimate message') returning *`, 1);
+      await deny(a, `update public.messages set body = 'Rewritten history'`);
+      await deny(a, `insert into public.messages (conversation_id, sender_id, body, created_at) values ('${ab}', '${a}', 'Backdated', '2000-01-01')`);
+      await count('authenticated', a, `insert into public.conversations (creator_id, title) values ('${a}', 'Bootstrap') returning *`, 1);
+      const { rows: conversations } = await as('authenticated', a, `select id from public.conversations where title = 'Bootstrap'`);
+      const bootstrap = conversations[0].id;
+      await count('authenticated', a, `insert into public.conversation_members (conversation_id, user_id) values ('${bootstrap}', '${a}') returning *`, 1);
+      // Member insertion has self-only RETURNING visibility; add Bob without RETURNING.
+      await as('authenticated', a, `insert into public.conversation_members (conversation_id, user_id) values ('${bootstrap}', '${b}')`);
+      await count('authenticated', b, `select * from public.conversations where id = '${bootstrap}'`, 1);
+      await deny(c, `insert into public.conversation_members (conversation_id, user_id) values ('${ab}', '${c}')`);
+      await count('anon', null, 'select * from public.student_benefits', 1);
+      await deny(a, `insert into public.student_benefits (title, benefit_type, sponsor_name, verified_at) values ('Fake verified offer', 'discount', 'Me', now())`);
+      await deny(a, 'update public.student_benefits set verified_at = now()');
+      await deny(a, `insert into public.benefit_redemptions (benefit_id, user_id, savings_cents) select id, '${a}', 999999 from public.student_benefits`);
+      await deny(a, `insert into public.reports (reporter_id, reported_user_id, reason) values ('${b}', '${c}', 'spam')`);
+      await count('authenticated', a, `insert into public.reports (reporter_id, reported_user_id, reason) values ('${a}', '${c}', 'spam') returning *`, 1);
+      await count('authenticated', b, 'select * from public.reports', 0);
+      const { rows: rls } = await db.query("select relname from pg_class join pg_namespace on pg_namespace.oid = relnamespace where nspname = 'public' and relkind = 'r' and not relrowsecurity");
+      assert.deepEqual(rls, []); assertions++;
+      t.diagnostic(`${assertions} authorization assertions passed against Postgres`);
+    } finally { await db.close(); }
+  });
+}

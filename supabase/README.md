@@ -6,7 +6,9 @@ This directory contains the database blueprint for the first production backend 
 
 - `schema.sql` defines the domain tables, explicit Data API grants, and first-pass RLS policies.
 - `policy_hardening.sql` tightens listing identity updates and fixes conversation bootstrap visibility.
-- Neither file has been applied to an unrelated Supabase project.
+- `migrations/20261010223551_verified_foundation.sql` is the controlled initial migration.
+- `tests/database.test.mjs` verifies role-based allow/deny behavior against Postgres.
+- No SQL has been applied to a hosted project. See `docs/BACKEND_CHECKPOINT.md` for the recovered account state and blocker.
 
 ## Before applying
 
@@ -18,8 +20,8 @@ Supabase changed Data API defaults in 2026, so this schema uses explicit grants 
 
 1. Connect the dedicated Stuora project.
 2. Use the current Supabase CLI and discover commands via `supabase --help`.
-3. Create the actual migration with `supabase migration new <descriptive-name>` rather than inventing a migration filename.
-4. Apply `schema.sql` and `policy_hardening.sql` into that generated migration, reviewing the combined SQL before execution.
+3. Review the existing CLI-generated migration in `migrations/`. Future changes require a new migration created with `supabase migration new <descriptive-name>`.
+4. Apply the controlled migration once. Do not separately apply `schema.sql` or `policy_hardening.sql`; they are review source files already incorporated in the initial migration.
 5. Apply to a development environment first.
 6. Verify allow/deny behavior for `anon` and `authenticated` users.
 7. Run Supabase security and performance advisors.
@@ -44,7 +46,9 @@ Supabase changed Data API defaults in 2026, so this schema uses explicit grants 
 - realtime channel authorization;
 - server-side benefit redemption;
 - transaction/payments integration;
-- database policy test suite;
+- hosted Data API/Auth integration tests;
 - production seed fixtures.
 
 Those should be added only after the dedicated project exists so they can be verified against the actual platform configuration.
+
+Run the local authorization suite with `npm run test:database`. Direct trip joins remain denied until an atomic capacity-enforcing API is implemented. Keep the `private` helper schema outside Data API exposure.

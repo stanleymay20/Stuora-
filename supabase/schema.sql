@@ -216,11 +216,21 @@ alter table public.student_benefits enable row level security;
 alter table public.benefit_redemptions enable row level security;
 alter table public.reports enable row level security;
 
+-- Supabase installations can grant table-wide privileges by default. Remove
+-- those before issuing column grants; RLS alone cannot protect trust fields.
+revoke all on public.profiles, public.listings, public.housing_details,
+  public.marketplace_details, public.trip_details, public.job_details,
+  public.event_details, public.saved_listings, public.trip_participants,
+  public.job_applications, public.conversations, public.conversation_members,
+  public.messages, public.student_benefits, public.benefit_redemptions,
+  public.reports from public, anon, authenticated;
+
 -- Explicit grants are required because new Supabase projects may not auto-expose public tables.
 grant select on public.listings, public.housing_details, public.marketplace_details, public.trip_details, public.job_details, public.event_details, public.student_benefits to anon, authenticated;
 grant select on public.profiles, public.saved_listings, public.trip_participants, public.job_applications, public.conversations, public.conversation_members, public.messages, public.reports to authenticated;
 grant insert, update, delete on public.listings, public.housing_details, public.marketplace_details, public.trip_details, public.job_details, public.event_details, public.saved_listings, public.trip_participants, public.conversations, public.conversation_members, public.messages, public.reports to authenticated;
-grant insert, delete on public.job_applications to authenticated;
+grant insert (job_listing_id, applicant_id, cover_note) on public.job_applications to authenticated;
+grant delete on public.job_applications to authenticated;
 grant update (withdrawn_at) on public.job_applications to authenticated;
 grant insert (id, display_name, city, bio, avatar_path, is_discoverable) on public.profiles to authenticated;
 grant update (display_name, city, bio, avatar_path, is_discoverable) on public.profiles to authenticated;
@@ -270,57 +280,57 @@ using (owner_id = (select auth.uid()));
 create policy "housing_read_when_parent_visible"
 on public.housing_details for select
 to anon, authenticated
-using (exists (select 1 from public.listings l where l.id = listing_id));
+using (exists (select 1 from public.listings l where l.id = housing_details.listing_id and l.kind = 'housing'));
 
 create policy "housing_write_when_parent_owned"
 on public.housing_details for all
 to authenticated
-using (exists (select 1 from public.listings l where l.id = listing_id and l.owner_id = (select auth.uid())))
-with check (exists (select 1 from public.listings l where l.id = listing_id and l.owner_id = (select auth.uid())));
+using (exists (select 1 from public.listings l where l.id = housing_details.listing_id and l.kind = 'housing' and l.owner_id = (select auth.uid())))
+with check (exists (select 1 from public.listings l where l.id = housing_details.listing_id and l.kind = 'housing' and l.owner_id = (select auth.uid())));
 
 create policy "marketplace_read_when_parent_visible"
 on public.marketplace_details for select
 to anon, authenticated
-using (exists (select 1 from public.listings l where l.id = listing_id));
+using (exists (select 1 from public.listings l where l.id = marketplace_details.listing_id and l.kind = 'marketplace'));
 
 create policy "marketplace_write_when_parent_owned"
 on public.marketplace_details for all
 to authenticated
-using (exists (select 1 from public.listings l where l.id = listing_id and l.owner_id = (select auth.uid())))
-with check (exists (select 1 from public.listings l where l.id = listing_id and l.owner_id = (select auth.uid())));
+using (exists (select 1 from public.listings l where l.id = marketplace_details.listing_id and l.kind = 'marketplace' and l.owner_id = (select auth.uid())))
+with check (exists (select 1 from public.listings l where l.id = marketplace_details.listing_id and l.kind = 'marketplace' and l.owner_id = (select auth.uid())));
 
 create policy "trip_read_when_parent_visible"
 on public.trip_details for select
 to anon, authenticated
-using (exists (select 1 from public.listings l where l.id = listing_id));
+using (exists (select 1 from public.listings l where l.id = trip_details.listing_id and l.kind = 'trip'));
 
 create policy "trip_write_when_parent_owned"
 on public.trip_details for all
 to authenticated
-using (exists (select 1 from public.listings l where l.id = listing_id and l.owner_id = (select auth.uid())))
-with check (exists (select 1 from public.listings l where l.id = listing_id and l.owner_id = (select auth.uid())));
+using (exists (select 1 from public.listings l where l.id = trip_details.listing_id and l.kind = 'trip' and l.owner_id = (select auth.uid())))
+with check (exists (select 1 from public.listings l where l.id = trip_details.listing_id and l.kind = 'trip' and l.owner_id = (select auth.uid())));
 
 create policy "job_read_when_parent_visible"
 on public.job_details for select
 to anon, authenticated
-using (exists (select 1 from public.listings l where l.id = listing_id));
+using (exists (select 1 from public.listings l where l.id = job_details.listing_id and l.kind = 'job'));
 
 create policy "job_write_when_parent_owned"
 on public.job_details for all
 to authenticated
-using (exists (select 1 from public.listings l where l.id = listing_id and l.owner_id = (select auth.uid())))
-with check (exists (select 1 from public.listings l where l.id = listing_id and l.owner_id = (select auth.uid())));
+using (exists (select 1 from public.listings l where l.id = job_details.listing_id and l.kind = 'job' and l.owner_id = (select auth.uid())))
+with check (exists (select 1 from public.listings l where l.id = job_details.listing_id and l.kind = 'job' and l.owner_id = (select auth.uid())));
 
 create policy "event_read_when_parent_visible"
 on public.event_details for select
 to anon, authenticated
-using (exists (select 1 from public.listings l where l.id = listing_id));
+using (exists (select 1 from public.listings l where l.id = event_details.listing_id and l.kind = 'event'));
 
 create policy "event_write_when_parent_owned"
 on public.event_details for all
 to authenticated
-using (exists (select 1 from public.listings l where l.id = listing_id and l.owner_id = (select auth.uid())))
-with check (exists (select 1 from public.listings l where l.id = listing_id and l.owner_id = (select auth.uid())));
+using (exists (select 1 from public.listings l where l.id = event_details.listing_id and l.kind = 'event' and l.owner_id = (select auth.uid())))
+with check (exists (select 1 from public.listings l where l.id = event_details.listing_id and l.kind = 'event' and l.owner_id = (select auth.uid())));
 
 create policy "saved_listings_self"
 on public.saved_listings for all
@@ -420,7 +430,7 @@ to authenticated
 using (
   exists (
     select 1 from public.conversation_members cm
-    where cm.conversation_id = conversation_id and cm.user_id = (select auth.uid())
+    where cm.conversation_id = messages.conversation_id and cm.user_id = (select auth.uid())
   )
 );
 
@@ -431,7 +441,7 @@ with check (
   sender_id = (select auth.uid())
   and exists (
     select 1 from public.conversation_members cm
-    where cm.conversation_id = conversation_id and cm.user_id = (select auth.uid())
+    where cm.conversation_id = messages.conversation_id and cm.user_id = (select auth.uid())
   )
 );
 
