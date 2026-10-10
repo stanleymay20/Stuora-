@@ -88,7 +88,12 @@ GitHub Actions verifies:
 1. Expo dependency compatibility
 2. strict TypeScript
 3. production web export
+4. Postgres authorization regression tests (three users + anon, including inherited grants)
 
 ## Next engineering slice
 
 Create a dedicated Stuora Supabase project, apply and verify the schema with security/performance advisors, connect Auth and profiles, replace local listing state with repository-backed persistence, then add media uploads and realtime messaging.
+
+## Controlled backend checkpoint
+
+The reviewed initial migration and Postgres authorization tests are now committed. No hosted migration or Auth integration has been performed. See `docs/BACKEND_CHECKPOINT.md` for the current account state, project-creation blocker, security fixes and next execution steps.

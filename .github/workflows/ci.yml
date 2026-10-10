@@ -20,10 +20,13 @@ jobs:
           node-version: '22.13.0'
 
       - name: Install dependencies
-        run: npm install
+        run: npm ci
 
       - name: Check Expo dependency compatibility
         run: npx expo install --check
+
+      - name: Test database authorization
+        run: npm run test:database
 
       - name: Typecheck
         run: npm run typecheck

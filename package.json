@@ -12,7 +12,8 @@
     "ios": "expo start --ios",
     "web": "expo start --web",
     "typecheck": "tsc --noEmit",
-    "export:web": "expo export --platform web --output-dir dist"
+    "export:web": "expo export --platform web --output-dir dist",
+    "test:database": "node --test tests/database.test.mjs"
   },
   "dependencies": {
     "@expo/metro-runtime": "~57.0.16",
@@ -23,6 +24,7 @@
     "react-native-web": "~0.21.0"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "0.5.8",
     "@types/react": "~19.2.2",
     "typescript": "~6.0.3"
   }
