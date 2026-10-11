@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import {
   Modal,
-  Platform,
+  useWindowDimensions,
   Pressable,
   SafeAreaView,
   ScrollView,
@@ -83,6 +83,7 @@ function euro(value: number) {
 }
 
 export default function StudentSavingsOverlay() {
+  const { width } = useWindowDimensions();
   const [open, setOpen] = useState(false);
   const [category, setCategory] = useState<BenefitCategory | 'All'>('All');
 
@@ -98,12 +99,12 @@ export default function StudentSavingsOverlay() {
         accessibilityRole="button"
         accessibilityLabel="Open Student Savings"
         onPress={() => setOpen(true)}
-        style={({ pressed }) => [styles.floatingButton, pressed && styles.pressed]}
+        style={({ pressed }) => [styles.floatingButton, { bottom: width >= 960 ? 22 : 82 }, pressed && styles.pressed]}
       >
         <Text style={styles.floatingIcon}>€</Text>
         <View>
           <Text style={styles.floatingLabel}>Student Savings</Text>
-          <Text style={styles.floatingValue}>{euro(monthlySavings)} saved</Text>
+          <Text style={styles.floatingValue}>Demo · {euro(monthlySavings)} saved</Text>
         </View>
       </Pressable>
 
@@ -208,7 +209,6 @@ const styles = StyleSheet.create({
   floatingButton: {
     position: 'absolute',
     right: 16,
-    bottom: Platform.OS === 'web' ? 22 : 82,
     zIndex: 999,
     flexDirection: 'row',
     alignItems: 'center',

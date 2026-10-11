@@ -654,7 +654,21 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      save_student_listing: {
+        Args: {
+          p_bills_included: boolean
+          p_city: string
+          p_condition: Database["public"]["Enums"]["marketplace_condition"]
+          p_description: string
+          p_furnished: boolean
+          p_housing_type: string
+          p_id: string | null // SQL accepts NULL to create a new listing.
+          p_kind: Database["public"]["Enums"]["listing_kind"]
+          p_price_cents: number
+          p_title: string
+        }
+        Returns: string
+      }
     }
     Enums: {
       account_kind: "student" | "employer" | "partner"

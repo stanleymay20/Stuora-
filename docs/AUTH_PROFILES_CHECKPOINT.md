@@ -63,6 +63,6 @@ No public web deployment or app-store build was published in this slice. A
 bundle export proves compilation, not native runtime behavior. Native device
 session persistence and foreground/background refresh still require tests.
 
-Next slice: persistent Housing and Marketplace creation/read/edit/archive with
-strict domain validation and two-account Data API tests. Media, messaging,
+Housing/Marketplace persistence has now been implemented; see
+`LISTINGS_CHECKPOINT.md` for its evidence and remaining release qualifications. Media, messaging,
 atomic trip joins, safety/blocks and real Savings remain later dependencies.

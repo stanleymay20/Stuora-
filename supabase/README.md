@@ -52,3 +52,9 @@ Supabase changed Data API defaults in 2026, so this schema uses explicit grants 
 Those should be added only after the dedicated project exists so they can be verified against the actual platform configuration.
 
 Run the local authorization suite with `npm run test:database`. Direct trip joins remain denied until an atomic capacity-enforcing API is implemented. Keep the `private` helper schema outside Data API exposure.
+
+## Persistent listings
+
+`save_student_listing` is a caller-permission transaction for Housing/Marketplace.
+It never bypasses RLS. Hosted rollback verification is in `tests/hosted/listings.sql`;
+current app behavior and release limits are in `docs/LISTINGS_CHECKPOINT.md`.
