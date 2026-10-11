@@ -127,18 +127,11 @@ test('public pagination loads beyond the first page', async ({ page }) => {
   await expect(page.getByRole('button', { name: 'Load more listings' })).toHaveCount(0);
 });
 
-test('Trips retain clearly labeled session-only demo publishing', async ({ page }) => {
+test('unsupported categories cannot publish session-only data', async ({ page }) => {
   await api().install(page); await page.goto('/');
   await page.getByRole('button', { name: 'Create listing', exact: true }).click();
-  await page.getByRole('button', { name: 'Post Trips', exact: true }).click();
-  await page.getByPlaceholder('e.g. Desk for sale').fill('Demo trip from Alice');
-  await page.getByPlaceholder('e.g. Neukölln · pickup only').fill('Prague weekend');
-  await page.getByText('Publish local demo listing', { exact: true }).click();
-  await expect(page.getByText('Demo trip from Alice', { exact: true })).toBeVisible();
-  await expect(page.getByText('✓ Your demo listing is visible in this session only.')).toBeVisible();
-  await page.reload();
-  if (await page.getByText('Explore', { exact: true }).count()) await page.getByText('Explore', { exact: true }).click();
-  else await page.getByText('Trips', { exact: true }).first().click();
-  await page.getByRole('button', { name: 'Browse Trips', exact: true }).click();
-  await expect(page.getByText('Demo trip from Alice', { exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Post Trips', exact: true })).toHaveCount(0);
+  await expect(page.getByText('Publish local demo listing', { exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Post Housing', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Post Marketplace', exact: true })).toBeVisible();
 });

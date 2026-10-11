@@ -1,207 +1,56 @@
-import React, { useMemo, useState } from 'react';
-import {
-  Modal,
-  useWindowDimensions,
-  Pressable,
-  SafeAreaView,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
-
-type BenefitCategory = 'Food' | 'Mobility' | 'Housing' | 'Study';
-
-type Benefit = {
-  id: string;
-  category: BenefitCategory;
-  emoji: string;
-  title: string;
-  sponsor: string;
-  normalPrice: number;
-  studentPrice: number;
-  unit: string;
-  eligibility: string;
-  validUntil: string;
-};
-
-const benefits: Benefit[] = [
-  {
-    id: 'benefit-food-1',
-    category: 'Food',
-    emoji: '🥗',
-    title: 'Student lunch menu',
-    sponsor: 'Stuora Demo Partner',
-    normalPrice: 12.5,
-    studentPrice: 8.5,
-    unit: 'per meal',
-    eligibility: 'Verified student profile',
-    validUntil: '31 Dec 2026',
-  },
-  {
-    id: 'benefit-mobility-1',
-    category: 'Mobility',
-    emoji: '🚲',
-    title: 'Monthly bike membership',
-    sponsor: 'Stuora Demo Partner',
-    normalPrice: 24,
-    studentPrice: 16,
-    unit: 'per month',
-    eligibility: 'Verified student profile',
-    validUntil: '31 Dec 2026',
-  },
-  {
-    id: 'benefit-housing-1',
-    category: 'Housing',
-    emoji: '📦',
-    title: 'Moving starter package',
-    sponsor: 'Stuora Demo Partner',
-    normalPrice: 49,
-    studentPrice: 29,
-    unit: 'one-time',
-    eligibility: 'Student moving within Berlin',
-    validUntil: '30 Nov 2026',
-  },
-  {
-    id: 'benefit-study-1',
-    category: 'Study',
-    emoji: '🖨️',
-    title: 'Print & copy credit',
-    sponsor: 'Stuora Demo Partner',
-    normalPrice: 15,
-    studentPrice: 10,
-    unit: 'credit pack',
-    eligibility: 'Verified student profile',
-    validUntil: '31 Jan 2027',
-  },
-];
-
-const redeemedSavings = [12.4, 8, 7.5, 14.9];
-
-function euro(value: number) {
-  return new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(value);
-}
-
+import React, { useEffect, useState } from 'react';
+import { ActivityIndicator, Modal, Pressable, SafeAreaView, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { supabase } from './backend/supabase';
+import type { Database } from './backend/database.types';
+type Benefit = Database['public']['Tables']['student_benefits']['Row'];
+function euro(cents: number, currency: string) { return new Intl.NumberFormat('de-DE', { style: 'currency', currency }).format(cents / 100); }
+function date(value: string | null) { return value ? new Date(value).toLocaleDateString('de-DE', { timeZone: 'Europe/Berlin' }) : 'No end date specified'; }
 export default function StudentSavingsOverlay() {
   const { width } = useWindowDimensions();
   const [open, setOpen] = useState(false);
-  const [category, setCategory] = useState<BenefitCategory | 'All'>('All');
-
-  const monthlySavings = redeemedSavings.reduce((sum, value) => sum + value, 0);
-  const visibleBenefits = useMemo(
-    () => benefits.filter((benefit) => category === 'All' || benefit.category === category),
-    [category],
-  );
-
-  return (
-    <>
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel="Open Student Savings"
-        onPress={() => setOpen(true)}
-        style={({ pressed }) => [styles.floatingButton, { bottom: width >= 960 ? 22 : 82 }, pressed && styles.pressed]}
-      >
-        <Text style={styles.floatingIcon}>€</Text>
-        <View>
-          <Text style={styles.floatingLabel}>Student Savings</Text>
-          <Text style={styles.floatingValue}>Demo · {euro(monthlySavings)} saved</Text>
-        </View>
-      </Pressable>
-
-      <Modal visible={open} animationType="slide" onRequestClose={() => setOpen(false)}>
-        <SafeAreaView style={styles.safeArea}>
-          <View style={styles.header}>
-            <View>
-              <Text style={styles.eyebrow}>STUORA SAVINGS</Text>
-              <Text style={styles.title}>Student life for less.</Text>
-            </View>
-            <Pressable accessibilityRole="button" onPress={() => setOpen(false)} style={styles.closeButton}>
-              <Text style={styles.closeText}>Close</Text>
-            </Pressable>
-          </View>
-
-          <ScrollView contentContainerStyle={styles.page} showsVerticalScrollIndicator={false}>
-            <View style={styles.summaryCard}>
-              <Text style={styles.summaryLabel}>Savings this month</Text>
-              <Text style={styles.summaryValue}>{euro(monthlySavings)}</Text>
-              <Text style={styles.summaryNote}>
-                This is a savings total, not a cash balance. Stuora does not hold this money.
-              </Text>
-            </View>
-
-            <View style={styles.integrityCard}>
-              <Text style={styles.integrityTitle}>✓ Transparent student pricing</Text>
-              <Text style={styles.integrityText}>
-                Every production benefit must show who funds it, the normal price, the student price, eligibility,
-                validity and terms. The offers below are seeded demo offers until partner verification is live.
-              </Text>
-            </View>
-
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filters}>
-              {(['All', 'Food', 'Mobility', 'Housing', 'Study'] as const).map((item) => (
-                <Pressable
-                  key={item}
-                  onPress={() => setCategory(item)}
-                  style={[styles.filterPill, category === item && styles.filterPillActive]}
-                >
-                  <Text style={[styles.filterText, category === item && styles.filterTextActive]}>{item}</Text>
-                </Pressable>
-              ))}
-            </ScrollView>
-
-            <Text style={styles.sectionTitle}>Verified-benefit format</Text>
-            {visibleBenefits.map((benefit) => {
-              const saving = benefit.normalPrice - benefit.studentPrice;
-              const percent = Math.round((saving / benefit.normalPrice) * 100);
-              return (
-                <View key={benefit.id} style={styles.benefitCard}>
-                  <View style={styles.benefitTopRow}>
-                    <View style={styles.iconBox}><Text style={styles.icon}>{benefit.emoji}</Text></View>
-                    <View style={styles.benefitHeading}>
-                      <Text style={styles.benefitCategory}>{benefit.category}</Text>
-                      <Text style={styles.benefitTitle}>{benefit.title}</Text>
-                      <Text style={styles.sponsor}>Funded by {benefit.sponsor}</Text>
-                    </View>
-                    <View style={styles.discountBadge}><Text style={styles.discountText}>-{percent}%</Text></View>
-                  </View>
-
-                  <View style={styles.priceRow}>
-                    <View>
-                      <Text style={styles.priceLabel}>Normal</Text>
-                      <Text style={styles.normalPrice}>{euro(benefit.normalPrice)}</Text>
-                    </View>
-                    <Text style={styles.arrow}>→</Text>
-                    <View>
-                      <Text style={styles.priceLabel}>Student</Text>
-                      <Text style={styles.studentPrice}>{euro(benefit.studentPrice)}</Text>
-                    </View>
-                    <View style={styles.saveBox}>
-                      <Text style={styles.saveLabel}>Save</Text>
-                      <Text style={styles.saveValue}>{euro(saving)}</Text>
-                    </View>
-                  </View>
-
-                  <View style={styles.metaRow}>
-                    <Text style={styles.metaText}>🎓 {benefit.eligibility}</Text>
-                    <Text style={styles.metaText}>📅 Until {benefit.validUntil}</Text>
-                    <Text style={styles.metaText}>ℹ️ {benefit.unit}</Text>
-                  </View>
-                </View>
-              );
-            })}
-
-            <View style={styles.policyCard}>
-              <Text style={styles.policyTitle}>Stuora student-first rule</Text>
-              <Text style={styles.policyText}>
-                Core participation stays free or low-cost for students. Employers, verified commercial providers,
-                partners and sponsors fund the platform before ordinary students do.
-              </Text>
-            </View>
-          </ScrollView>
-        </SafeAreaView>
-      </Modal>
-    </>
-  );
+  const [benefits, setBenefits] = useState<Benefit[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [issue, setIssue] = useState(false);
+  const [revision, setRevision] = useState(0);
+  const [pages, setPages] = useState(1);
+  const [more, setMore] = useState(false);
+  useEffect(() => {
+    if (!open) return;
+    const ac = new AbortController(); setLoading(true); setIssue(false); setBenefits([]);
+    const timeout = setTimeout(() => { setIssue(true); setLoading(false); ac.abort(); }, 15000);
+    async function load() {
+      try {
+        const { data, error } = await supabase.from('student_benefits').select('*').not('verified_at', 'is', null).order('created_at', { ascending: false }).order('id').range(0, pages * 24).abortSignal(ac.signal);
+        if (ac.signal.aborted) return;
+        if (error) { setIssue(true); return; }
+        setMore((data?.length ?? 0) > pages * 24); setBenefits((data ?? []).slice(0, pages * 24));
+      } catch { if (!ac.signal.aborted) setIssue(true); }
+      finally { clearTimeout(timeout); if (!ac.signal.aborted) setLoading(false); }
+    }
+    void load(); return () => { clearTimeout(timeout); ac.abort(); };
+  }, [open, pages, revision]);
+  return <>
+    <Pressable accessibilityRole="button" accessibilityLabel="Open Student Savings" onPress={() => { setPages(1); setOpen(true); }} style={[styles.floatingButton, { bottom: width >= 960 ? 22 : 82 }]}><Text style={styles.floatingIcon}>€</Text><View><Text style={styles.floatingLabel}>Student Savings</Text><Text style={styles.floatingValue}>Browse verified benefits</Text></View></Pressable>
+    <Modal visible={open} animationType="slide" onRequestClose={() => setOpen(false)}><SafeAreaView style={styles.safeArea}>
+      <View style={styles.header}><View><Text style={styles.eyebrow}>STUORA SAVINGS</Text><Text style={styles.title}>Student life for less.</Text></View><Pressable accessibilityRole="button" accessibilityLabel="Close Student Savings" onPress={() => setOpen(false)} style={styles.closeButton}><Text style={styles.closeText}>Close</Text></Pressable></View>
+      <ScrollView contentContainerStyle={styles.page}>
+        <View style={styles.integrityCard}><Text style={styles.integrityTitle}>Verified partner benefits</Text><Text style={styles.integrityText}>Only verified, currently valid offers from Stuora are shown. Personal redemption accounting is not available yet. Stuora does not hold money or show a cash balance.</Text></View>
+        {loading ? <ActivityIndicator accessibilityLabel="Loading benefits" /> : issue ? <View><Text accessibilityRole="alert">Could not load benefits. Check your connection and retry.</Text><Pressable accessibilityRole="button" onPress={() => setRevision(v => v + 1)}><Text style={styles.closeText}>Retry benefits</Text></Pressable></View> : <>
+          <Pressable accessibilityRole="button" onPress={() => setRevision(v => v + 1)}><Text style={styles.closeText}>Refresh benefits</Text></Pressable>
+          {!benefits.length ? <Text>No verified benefits available yet.</Text> : benefits.map(benefit => {
+            const priced = benefit.original_price_cents !== null && benefit.student_price_cents !== null;
+            const saving = priced ? benefit.original_price_cents! - benefit.student_price_cents! : null;
+            return <View key={benefit.id} style={styles.benefitCard}><Text style={styles.benefitTitle}>{benefit.title}</Text><Text style={styles.sponsor}>Funded by {benefit.sponsor_name}</Text><Text>{benefit.description}</Text><Text>Verification: verified</Text>
+              {priced ? <View style={styles.priceRow}><View><Text style={styles.priceLabel}>Normal</Text><Text style={styles.normalPrice}>{euro(benefit.original_price_cents!, benefit.currency)}</Text></View><View><Text style={styles.priceLabel}>Student</Text><Text style={styles.studentPrice}>{euro(benefit.student_price_cents!, benefit.currency)}</Text></View><View><Text style={styles.priceLabel}>Save</Text><Text style={styles.saveValue}>{euro(saving!, benefit.currency)}{benefit.original_price_cents! > 0 ? ` (${Math.round(saving! / benefit.original_price_cents! * 100)}%)` : ''}</Text></View></View> : <Text>Price comparison not provided by the sponsor.</Text>}
+              <Text>Eligibility: {benefit.eligibility_text || 'Not provided'}</Text><Text>Valid from: {benefit.starts_at ? date(benefit.starts_at) : 'No start date specified'}</Text><Text>Valid until: {date(benefit.ends_at)}</Text><Text selectable>Terms: {benefit.terms_url || 'No terms link provided'}</Text>{benefit.sponsor_url ? <Text selectable>Source: {benefit.sponsor_url}</Text> : null}
+              <Text>Redemption is not available in Stuora yet.</Text>
+            </View>;
+          })}
+          {more ? <Pressable accessibilityRole="button" onPress={() => setPages(v => v + 1)}><Text style={styles.closeText}>Load more benefits</Text></Pressable> : null}
+        </>}
+      </ScrollView>
+    </SafeAreaView></Modal>
+  </>;
 }
 
 const styles = StyleSheet.create({

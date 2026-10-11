@@ -15,6 +15,7 @@ export async function backend(page: Page, failProfile = false) {
     const req = route.request();
     const url = new URL(req.url());
     if (url.pathname.endsWith('/listings') && req.method() === 'GET') return route.fulfill({ json: [] });
+    if (url.pathname.endsWith('/student_benefits') && req.method() === 'GET') return route.fulfill({ json: [] });
     if (url.pathname.endsWith('/signup')) return route.fulfill({ json: { user: session().user, session: null } });
     if (url.pathname.endsWith('/token')) {
       if (req.postDataJSON()?.password === 'bad-password') return route.fulfill({ status: 400, json: { error_code: 'invalid_credentials', msg: 'Invalid login credentials' } });
