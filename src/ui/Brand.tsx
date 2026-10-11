@@ -24,6 +24,7 @@ const paths: Record<string, string> = {
   location: 'M12 22C12 22 4 14 4 9A8 8 0 1 1 20 9C20 14 12 22 12 22Z',
   arrow: 'M5 12H19M13 6L19 12L13 18',
   close: 'M5 5L19 19M19 5L5 19',
+  send: 'M3 11L21 3L13 21L10 14L3 11ZM10 14L21 3',
 };
 export function Icon({ name, size = 22, color = '#747B91' }: { name: string; size?: number; color?: string }) {
   const key = name.toLowerCase();

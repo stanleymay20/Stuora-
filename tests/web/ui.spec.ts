@@ -20,14 +20,15 @@ test('responsive branding and real empty Housing without invented offers', async
   await page.getByRole('button', { name: 'See all housing', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Refresh listings' })).toBeVisible();
 });
-test('styled email login and unavailable messaging expose no fake sending', async ({ page }) => {
+test('styled email login and secure messaging gate expose no fake conversations', async ({ page }) => {
   await backend(page); await page.goto('/');
   await page.getByText('You', { exact: true }).click();
   await expect(page.getByText('Welcome to Stuora', { exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Sign in', exact: true })).toBeVisible();
   await page.screenshot({ path: test.info().outputPath('welcome.png') });
   await page.getByText('Messages', { exact: true }).first().click();
-  await expect(page.getByText('Messaging is not available yet', { exact: true })).toBeVisible();
+  await expect(page.getByText('Sign in to use secure messaging', { exact: true })).toBeVisible();
   await expect(page.getByText('Emma L.', { exact: true })).toHaveCount(0);
-  await expect(page.getByRole('button', { name: /Send message|Continue with Google|Continue with Apple/ })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Send message' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Open account' })).toBeVisible();
 });

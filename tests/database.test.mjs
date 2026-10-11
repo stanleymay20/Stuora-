@@ -75,6 +75,7 @@ for (const inheritedGrants of [false, true]) {
       await count('authenticated', b, `update public.profiles set bio = 'Tampered' where id = '${a}' returning *`, 0);
       await count('authenticated', a, `update public.profiles set bio = 'Hello Berlin' where id = '${a}' returning *`, 1);
       await deny(b, `insert into public.listings (owner_id, kind, title) values ('${a}', 'housing', 'Impersonated listing')`);
+      await deny(a, `insert into public.listings (owner_id, kind, title) values ('${a}', 'job', 'Unverified employer post')`);
       await deny(a, `update public.listings set owner_id = '${b}' where id = '${house}'`);
       await deny(a, `update public.listings set kind = 'job' where id = '${house}'`);
       await count('authenticated', b, `update public.listings set title = 'Tampered' where id = '${house}' returning *`, 0);
@@ -97,16 +98,26 @@ for (const inheritedGrants of [false, true]) {
       await deny(a, `insert into public.messages (conversation_id, sender_id, body) values ('${bc}', '${a}', 'Cross-conversation attack')`);
       await deny(a, `insert into public.messages (conversation_id, sender_id, body) values ('${ab}', '${b}', 'Spoofed sender')`);
       await count('authenticated', a, `insert into public.messages (conversation_id, sender_id, body) values ('${ab}', '${a}', 'Legitimate message') returning *`, 1);
+      await deny(a, `insert into public.messages (conversation_id, sender_id, body) values ('${ab}', '${a}', '   ')`, '23514');
       await deny(a, `update public.messages set body = 'Rewritten history'`);
       await deny(a, `insert into public.messages (conversation_id, sender_id, body, created_at) values ('${ab}', '${a}', 'Backdated', '2000-01-01')`);
-      await count('authenticated', a, `insert into public.conversations (creator_id, title) values ('${a}', 'Bootstrap') returning *`, 1);
-      const { rows: conversations } = await as('authenticated', a, `select id from public.conversations where title = 'Bootstrap'`);
-      const bootstrap = conversations[0].id;
-      await count('authenticated', a, `insert into public.conversation_members (conversation_id, user_id) values ('${bootstrap}', '${a}') returning *`, 1);
-      // Member insertion has self-only RETURNING visibility; add Bob without RETURNING.
-      await as('authenticated', a, `insert into public.conversation_members (conversation_id, user_id) values ('${bootstrap}', '${b}')`);
-      await count('authenticated', b, `select * from public.conversations where id = '${bootstrap}'`, 1);
-      await deny(c, `insert into public.conversation_members (conversation_id, user_id) values ('${ab}', '${c}')`);
+      await deny(a, `insert into public.conversations (creator_id, title) values ('${a}', 'Arbitrary conversation')`);
+      await deny(a, `insert into public.conversation_members (conversation_id, user_id) values ('${ab}', '${c}')`);
+
+      const { rows: started } = await as('authenticated', b, `select public.start_listing_conversation('${house}') as id`);
+      const listingConversation = started[0].id;
+      assert.ok(listingConversation); assertions++;
+      await count('authenticated', a, `select * from public.conversations where id = '${listingConversation}' and listing_id = '${house}'`, 1);
+      await count('authenticated', b, `select * from public.conversations where id = '${listingConversation}' and listing_id = '${house}'`, 1);
+      await count('authenticated', c, `select * from public.conversations where id = '${listingConversation}'`, 0);
+      const { rows: reused } = await as('authenticated', b, `select public.start_listing_conversation('${house}') as id`);
+      assert.equal(reused[0].id, listingConversation); assertions++;
+      await count('authenticated', b, `insert into public.messages (conversation_id, sender_id, body) values ('${listingConversation}', '${b}', 'Is this still available?') returning *`, 1);
+      await count('authenticated', a, `select * from public.messages where conversation_id = '${listingConversation}'`, 1);
+      await deny(a, `select public.start_listing_conversation('${house}')`, '22023');
+      await deny(b, `select public.start_listing_conversation('${draft}')`, '22023');
+      await deny(b, `select public.start_listing_conversation('${job}')`, '22023');
+
       await count('anon', null, 'select * from public.student_benefits', 1);
       await deny(a, `insert into public.student_benefits (title, benefit_type, sponsor_name, verified_at) values ('Fake verified offer', 'discount', 'Me', now())`);
       await deny(a, 'update public.student_benefits set verified_at = now()');
