@@ -54,7 +54,7 @@ The repository now includes a Supabase/Postgres schema blueprint covering:
 - verified student benefits and savings accounting;
 - Row Level Security and explicit Data API grants.
 
-The schema has **not** been pointed at an unrelated Supabase project. A dedicated Stuora project should be created before applying it.
+The reviewed migrations are applied to the dedicated Stuora project `mljmifovcthvtuquvyzf` in Frankfurt, in a separate organization. The app uses its publishable key only.
 
 ## Stack
 
@@ -92,8 +92,10 @@ GitHub Actions verifies:
 
 ## Next engineering slice
 
-Create a dedicated Stuora Supabase project, apply and verify the schema with security/performance advisors, connect Auth and profiles, replace local listing state with repository-backed persistence, then add media uploads and realtime messaging.
+Auth and profile editing now use the dedicated backend. Next, qualify real email confirmation and native-device authentication, then replace local listing state with repository-backed persistence, followed by media uploads and realtime messaging.
 
 ## Controlled backend checkpoint
 
-The reviewed initial migration and Postgres authorization tests are now committed. No hosted migration or Auth integration has been performed. See `docs/BACKEND_CHECKPOINT.md` for the current account state, project-creation blocker, security fixes and next execution steps.
+Auth and profiles now use the dedicated backend. Hosted profile allow/deny tests pass and security advisors are clear. Desktop/mobile web account contract tests and iOS/Android bundle exports are in CI. See `docs/AUTH_PROFILES_CHECKPOINT.md` for verification scope and remaining release qualifications.
+
+The **You** tab supports account creation, sign-in, persisted sessions, profile creation/editing, discovery privacy and logout. Other content is explicitly labelled demo; publishing there remains local to the running app session.

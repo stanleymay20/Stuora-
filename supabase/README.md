@@ -6,9 +6,9 @@ This directory contains the database blueprint for the first production backend 
 
 - `schema.sql` defines the domain tables, explicit Data API grants, and first-pass RLS policies.
 - `policy_hardening.sql` tightens listing identity updates and fixes conversation bootstrap visibility.
-- `migrations/20261010223551_verified_foundation.sql` is the controlled initial migration.
+- `migrations/20261011020220_verified_foundation.sql` is the controlled initial migration.
 - `tests/database.test.mjs` verifies role-based allow/deny behavior against Postgres.
-- No SQL has been applied to a hosted project. See `docs/BACKEND_CHECKPOINT.md` for the recovered account state and blocker.
+- Both controlled migrations are applied to dedicated project `mljmifovcthvtuquvyzf`. Local filenames match hosted migration history. See `docs/AUTH_PROFILES_CHECKPOINT.md` for current live verification.
 
 ## Before applying
 

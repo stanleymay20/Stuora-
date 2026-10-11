@@ -1,0 +1,25 @@
+begin;
+drop policy "housing_write_when_parent_owned" on public.housing_details;
+create policy "housing_insert_when_parent_owned" on public.housing_details for insert to authenticated with check (exists (select 1 from public.listings l where l.id = housing_details.listing_id and l.kind = 'housing' and l.owner_id = (select auth.uid())));
+create policy "housing_update_when_parent_owned" on public.housing_details for update to authenticated using (exists (select 1 from public.listings l where l.id = housing_details.listing_id and l.kind = 'housing' and l.owner_id = (select auth.uid()))) with check (exists (select 1 from public.listings l where l.id = housing_details.listing_id and l.kind = 'housing' and l.owner_id = (select auth.uid())));
+create policy "housing_delete_when_parent_owned" on public.housing_details for delete to authenticated using (exists (select 1 from public.listings l where l.id = housing_details.listing_id and l.kind = 'housing' and l.owner_id = (select auth.uid())));
+drop policy "marketplace_write_when_parent_owned" on public.marketplace_details;
+create policy "marketplace_insert_when_parent_owned" on public.marketplace_details for insert to authenticated with check (exists (select 1 from public.listings l where l.id = marketplace_details.listing_id and l.kind = 'marketplace' and l.owner_id = (select auth.uid())));
+create policy "marketplace_update_when_parent_owned" on public.marketplace_details for update to authenticated using (exists (select 1 from public.listings l where l.id = marketplace_details.listing_id and l.kind = 'marketplace' and l.owner_id = (select auth.uid()))) with check (exists (select 1 from public.listings l where l.id = marketplace_details.listing_id and l.kind = 'marketplace' and l.owner_id = (select auth.uid())));
+create policy "marketplace_delete_when_parent_owned" on public.marketplace_details for delete to authenticated using (exists (select 1 from public.listings l where l.id = marketplace_details.listing_id and l.kind = 'marketplace' and l.owner_id = (select auth.uid())));
+drop policy "trip_write_when_parent_owned" on public.trip_details;
+create policy "trip_insert_when_parent_owned" on public.trip_details for insert to authenticated with check (exists (select 1 from public.listings l where l.id = trip_details.listing_id and l.kind = 'trip' and l.owner_id = (select auth.uid())));
+create policy "trip_update_when_parent_owned" on public.trip_details for update to authenticated using (exists (select 1 from public.listings l where l.id = trip_details.listing_id and l.kind = 'trip' and l.owner_id = (select auth.uid()))) with check (exists (select 1 from public.listings l where l.id = trip_details.listing_id and l.kind = 'trip' and l.owner_id = (select auth.uid())));
+create policy "trip_delete_when_parent_owned" on public.trip_details for delete to authenticated using (exists (select 1 from public.listings l where l.id = trip_details.listing_id and l.kind = 'trip' and l.owner_id = (select auth.uid())));
+drop policy "job_write_when_parent_owned" on public.job_details;
+create policy "job_insert_when_parent_owned" on public.job_details for insert to authenticated with check (exists (select 1 from public.listings l where l.id = job_details.listing_id and l.kind = 'job' and l.owner_id = (select auth.uid())));
+create policy "job_update_when_parent_owned" on public.job_details for update to authenticated using (exists (select 1 from public.listings l where l.id = job_details.listing_id and l.kind = 'job' and l.owner_id = (select auth.uid()))) with check (exists (select 1 from public.listings l where l.id = job_details.listing_id and l.kind = 'job' and l.owner_id = (select auth.uid())));
+create policy "job_delete_when_parent_owned" on public.job_details for delete to authenticated using (exists (select 1 from public.listings l where l.id = job_details.listing_id and l.kind = 'job' and l.owner_id = (select auth.uid())));
+drop policy "event_write_when_parent_owned" on public.event_details;
+create policy "event_insert_when_parent_owned" on public.event_details for insert to authenticated with check (exists (select 1 from public.listings l where l.id = event_details.listing_id and l.kind = 'event' and l.owner_id = (select auth.uid())));
+create policy "event_update_when_parent_owned" on public.event_details for update to authenticated using (exists (select 1 from public.listings l where l.id = event_details.listing_id and l.kind = 'event' and l.owner_id = (select auth.uid()))) with check (exists (select 1 from public.listings l where l.id = event_details.listing_id and l.kind = 'event' and l.owner_id = (select auth.uid())));
+create policy "event_delete_when_parent_owned" on public.event_details for delete to authenticated using (exists (select 1 from public.listings l where l.id = event_details.listing_id and l.kind = 'event' and l.owner_id = (select auth.uid())));
+-- Explicit deny-all: only a future controlled redemption server may write.
+create policy "redemptions_public_denied" on public.benefit_redemptions
+for all to anon, authenticated using (false) with check (false);
+commit;
