@@ -135,3 +135,55 @@ test('unsupported categories cannot publish session-only data', async ({ page })
   await expect(page.getByRole('button', { name: 'Post Housing', exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Post Marketplace', exact: true })).toBeVisible();
 });
+
+test('stalled listing read times out and retry recovers without stale results', async ({ page }) => {
+  const data = api(); await data.install(page); await page.clock.install();
+  await page.goto('/'); await explore(page, 'Marketplace');
+  await expect(page.getByRole('button', { name: 'Refresh listings' })).toBeEnabled();
+  let held = false;
+  let settled = false;
+  let release!: () => void;
+  const waiting = new Promise<void>(resolve => { release = resolve; });
+  await page.route('**/rest/v1/listings?**', async route => {
+    if (held) return route.fallback();
+    held = true; await waiting;
+    await route.fulfill({ json: [{ id: 'late', title: 'Late desk', price_cents: 100, city: 'Berlin', status: 'active' }] }).catch(() => {});
+    settled = true;
+  });
+  await page.getByRole('button', { name: 'Refresh listings' }).click();
+  await expect.poll(() => held).toBe(true);
+  await expect(page.getByLabel('Loading listings')).toBeVisible();
+  await page.clock.fastForward(15001);
+  await expect(page.getByText('Could not load listings. Check your connection and retry.')).toBeVisible();
+  await page.getByRole('button', { name: 'Retry listings' }).click();
+  await expect(page.getByText('No marketplace listings found.')).toBeVisible();
+  release();
+  await expect.poll(() => settled).toBe(true);
+  await page.clock.runFor(100);
+  await expect(page.getByRole('button', { name: 'View Late desk' })).toHaveCount(0);
+});
+
+test('search changes cancel old listing requests and their timers', async ({ page }) => {
+  const data = api(); await data.install(page); await page.clock.install();
+  await page.goto('/'); await explore(page, 'Marketplace');
+  await expect(page.getByRole('button', { name: 'Refresh listings' })).toBeEnabled();
+  let held = false;
+  let settled = false;
+  let release!: () => void;
+  const waiting = new Promise<void>(resolve => { release = resolve; });
+  await page.route('**/rest/v1/listings?**', async route => {
+    const title = new URL(route.request().url()).searchParams.get('title');
+    if (title !== 'ilike.%Old%') return route.fallback();
+    held = true; await waiting;
+    await route.fulfill({ json: [{ id: 'old', title: 'Old desk', price_cents: 100, city: 'Berlin', status: 'active' }] }).catch(() => {});
+    settled = true;
+  });
+  await page.getByPlaceholder('Search marketplace…').fill('Old');
+  await expect.poll(() => held).toBe(true);
+  await page.getByPlaceholder('Search marketplace…').fill('New');
+  await expect(page.getByText('No marketplace listings found.')).toBeVisible();
+  release(); await expect.poll(() => settled).toBe(true);
+  await page.clock.fastForward(15001);
+  await expect(page.getByText(/Could not load listings/)).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'View Old desk' })).toHaveCount(0);
+});

@@ -47,19 +47,24 @@ export default function ListingWorkspace({ category, mode = 'browse', search = '
   }, [kind, mode, userId, own, search]);
   useEffect(() => {
     if (mode === 'create') { setLoading(false); return; }
-    let active = true;
+    const ac = new AbortController();
     setLoading(true); setError(''); setItems([]);
-    let query = supabase.from('listings').select('*,housing_details(*),marketplace_details(*)').eq('kind', kind).order('created_at', { ascending: false }).order('id').range(0, pages * 24);
+    const timeout = setTimeout(() => {
+      setError('Could not load listings. Check your connection and retry.');
+      setLoading(false);
+      ac.abort();
+    }, 15000);
+    let query = supabase.from('listings').select('*,housing_details(*),marketplace_details(*)').eq('kind', kind).order('created_at', { ascending: false }).order('id').range(0, pages * 24).abortSignal(ac.signal);
     query = own && userId ? query.eq('owner_id', userId) : query.eq('status', 'active');
     // Search only titles; escape LIKE wildcards so user input remains literal.
     if (search.trim()) query = query.ilike('title', `%${search.trim().replace(/[\\%_]/g, '\\$&')}%`);
     void Promise.resolve(query).then(({ data, error: issue }) => {
-      if (!active) return;
+      if (ac.signal.aborted) return;
       if (issue) setError('Could not load listings. Check your connection and retry.');
       else { setItems((data ?? []).slice(0, pages * 24)); setMore((data?.length ?? 0) > pages * 24); }
       setLoading(false);
-    }).catch(() => { if (active) { setError('Could not load listings. Check your connection and retry.'); setLoading(false); } });
-    return () => { active = false; };
+    }).catch(() => { if (!ac.signal.aborted) { setError('Could not load listings. Check your connection and retry.'); setLoading(false); } }).finally(() => { clearTimeout(timeout); });
+    return () => { clearTimeout(timeout); ac.abort(); };
   }, [kind, userId, own, revision, pages, search, mode]);
   const change = <K extends keyof Draft>(key: K, value: Draft[K]) => setDraft(d => ({ ...d, [key]: value }));
   function edit(item: Item) {

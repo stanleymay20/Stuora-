@@ -59,26 +59,32 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const userId = session?.user.id;
   useEffect(() => {
-    let active = true;
+    const ac = new AbortController();
     setProfile(null);
     setError('');
     if (!userId) { setProfileLoading(false); return; }
     setProfileLoading(true);
-    void Promise.resolve(supabase.from('profiles').select('*').eq('id', userId).maybeSingle())
+    const timeout = setTimeout(() => {
+      setLoadedUser(userId);
+      setError('Could not load your profile. Check your connection and retry.');
+      setProfileLoading(false);
+      ac.abort();
+    }, 15000);
+    void Promise.resolve(supabase.from('profiles').select('*').eq('id', userId).abortSignal(ac.signal).maybeSingle())
       .then(({ data, error: issue }) => {
-        if (!active) return;
+        if (ac.signal.aborted) return;
         setLoadedUser(userId);
         setProfile(data);
         setError(issue ? 'Could not load your profile. Please retry.' : '');
         setProfileLoading(false);
       }).catch(() => {
-        if (!active) return;
+        if (ac.signal.aborted) return;
         setLoadedUser(userId);
         setError('Could not load your profile. Check your connection and retry.');
         setProfileLoading(false);
-      });
+      }).finally(() => { clearTimeout(timeout); });
     // A result from an old account may never populate a new account's profile.
-    return () => { active = false; };
+    return () => { clearTimeout(timeout); ac.abort(); };
   }, [userId, revision]);
 
   return <AuthContext.Provider value={{ session, initializing, profile: profile?.id === userId ? profile : null, profileLoading: profileLoading || (!!userId && loadedUser !== userId), error, reloadProfile: () => setRevision(v => v + 1) }}>{children}</AuthContext.Provider>;
