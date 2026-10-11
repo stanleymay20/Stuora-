@@ -55,3 +55,53 @@ test('profile fetch errors offer retry, never an accidental create form', async 
   await page.getByRole('button', { name: 'Retry profile' }).click();
   await expect(page.getByLabel('Display name')).toBeVisible();
 });
+
+test('stalled profile read times out, retries and ignores its late response', async ({ page }) => {
+  await backend(page);
+  await page.clock.install();
+  let held = false;
+  let settled = false;
+  let release!: () => void;
+  const waiting = new Promise<void>(resolve => { release = resolve; });
+  await page.route('**/rest/v1/profiles?**', async route => {
+    if (held) return route.fallback();
+    held = true;
+    await waiting;
+    await route.fulfill({ json: { id: '00000000-0000-0000-0000-000000000001', display_name: 'Late profile', city: 'Berlin' } }).catch(() => {});
+    settled = true;
+  });
+  await account(page); await signin(page);
+  await expect.poll(() => held).toBe(true);
+  await expect(page.getByLabel('Display name')).toHaveCount(0);
+  await page.clock.fastForward(15001);
+  await expect(page.getByText('Could not load your profile. Check your connection and retry.')).toBeVisible();
+  await expect(page.getByLabel('Display name')).toHaveCount(0);
+  await page.getByRole('button', { name: 'Retry profile' }).click();
+  await expect(page.getByLabel('Display name')).toHaveValue('');
+  release();
+  await expect.poll(() => settled).toBe(true);
+  await page.clock.runFor(100);
+  await expect(page.getByRole('button', { name: 'Create profile', exact: true })).toBeVisible();
+  await expect(page.getByLabel('Display name')).toHaveValue('');
+});
+
+test('signing out cancels a stalled profile read and its timeout', async ({ page }) => {
+  await backend(page); await page.clock.install();
+  let held = false;
+  let settled = false;
+  let release!: () => void;
+  const waiting = new Promise<void>(resolve => { release = resolve; });
+  await page.route('**/rest/v1/profiles?**', async route => {
+    held = true; await waiting;
+    await route.fulfill({ json: { id: '00000000-0000-0000-0000-000000000001', display_name: 'Old account', city: 'Berlin' } }).catch(() => {});
+    settled = true;
+  });
+  await account(page); await signin(page);
+  await expect.poll(() => held).toBe(true);
+  await page.getByRole('button', { name: 'Sign out', exact: true }).click();
+  await expect(page.getByText('Welcome to Stuora', { exact: true })).toBeVisible();
+  release(); await expect.poll(() => settled).toBe(true);
+  await page.clock.fastForward(15001);
+  await expect(page.getByText(/Could not load your profile/)).toHaveCount(0);
+  await expect(page.getByLabel('Display name')).toHaveCount(0);
+});
