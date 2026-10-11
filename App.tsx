@@ -1,11 +1,11 @@
-import React, { useMemo, useState } from 'react';
+import React, { useState } from 'react';
 import AccountPanel from './src/account/AccountPanel';
 import ListingWorkspace from './src/listings/ListingWorkspace';
+import PeopleDirectory from './src/people/PeopleDirectory';
 import { useAuth } from './src/account/AuthProvider';
 import { Icon, StuoraMark } from './src/ui/Brand';
 import {
   Platform,
-  Modal,
   Image,
   Pressable,
   SafeAreaView,
@@ -20,17 +20,6 @@ import {
 
 type Tab = 'home' | 'explore' | 'create' | 'messages' | 'profile';
 type Category = 'Housing' | 'Marketplace' | 'Trips' | 'Jobs' | 'Events' | 'People';
-
-type Listing = {
-  id: string;
-  category: Category;
-  emoji: string;
-  title: string;
-  subtitle: string;
-  detail: string;
-  price?: string;
-  badge?: string;
-};
 
 const BRAND = {
   ink: '#11162F',
@@ -54,104 +43,6 @@ const categories: { name: Category; emoji: string; tint: string }[] = [
   { name: 'Jobs', emoji: '💼', tint: '#FFF4E8' },
   { name: 'Events', emoji: '🎟️', tint: '#FFF0F5' },
   { name: 'People', emoji: '👥', tint: '#F1EEFF' },
-];
-
-const visualTone: Record<Category, string> = {
-  Housing: '#E9E1D8',
-  Marketplace: '#E7E3DE',
-  Trips: '#DDECF3',
-  Jobs: '#E8EAF7',
-  Events: '#EEE0F0',
-  People: '#E7E2F3',
-};
-
-const seedListings: Listing[] = [
-  {
-    id: 'h1',
-    category: 'Housing',
-    emoji: '🛏️',
-    title: 'Bright room in shared apartment',
-    subtitle: 'Prenzlauer Berg, Berlin',
-    detail: 'Available 1 Nov · Furnished · 20 m²',
-    price: '€620 / month',
-    badge: 'Verified host',
-  },
-  {
-    id: 'm1',
-    category: 'Marketplace',
-    emoji: '🪑',
-    title: 'IKEA desk — excellent condition',
-    subtitle: 'Kreuzberg · 1.2 km away',
-    detail: 'Pickup available this weekend',
-    price: '€40',
-    badge: 'Student seller',
-  },
-  {
-    id: 't1',
-    category: 'Trips',
-    emoji: '🏰',
-    title: 'Berlin → Prague weekend',
-    subtitle: '23–25 Oct · 4 going',
-    detail: 'Train + hostel · 2 spaces left',
-    price: '~€125',
-    badge: 'Trip group',
-  },
-  {
-    id: 'j1',
-    category: 'Jobs',
-    emoji: '🤖',
-    title: 'Working Student — Data & AI',
-    subtitle: 'TechStart GmbH · Berlin · Hybrid',
-    detail: '16–20 hours/week · Python · SQL',
-    price: '€20/hour',
-    badge: 'Verified employer',
-  },
-  {
-    id: 'e1',
-    category: 'Events',
-    emoji: '⚽',
-    title: 'Student football tonight',
-    subtitle: 'Tempelhofer Feld · 18:30',
-    detail: '7 of 12 spots filled',
-    price: 'Free',
-    badge: 'Open event',
-  },
-  {
-    id: 'p1',
-    category: 'People',
-    emoji: '👩🏽‍💻',
-    title: 'Maya — Computer Science',
-    subtitle: 'New to Berlin · speaks EN / DE',
-    detail: 'AI · hiking · photography',
-    badge: 'Student verified',
-  },
-  {
-    id: 'h2',
-    category: 'Housing',
-    emoji: '🏡',
-    title: 'Room in Neukölln WG',
-    subtitle: 'Neukölln, Berlin',
-    detail: 'Available now · Bills included',
-    price: '€570 / month',
-    badge: 'Roommate wanted',
-  },
-  {
-    id: 'm2',
-    category: 'Marketplace',
-    emoji: '🚲',
-    title: 'City bike',
-    subtitle: 'Friedrichshain · 2.4 km away',
-    detail: 'Recently serviced · lock included',
-    price: '€120',
-    badge: 'Good condition',
-  },
-];
-
-const threads = [
-  { name: 'Emma L.', message: 'Is the room still available?', time: '10:24', emoji: '👩🏻' },
-  { name: 'Berlin → Prague', message: 'Lukas: See you all at 10!', time: '09:41', emoji: '🧳' },
-  { name: 'Max K.', message: 'Sounds good!', time: 'Yesterday', emoji: '👨🏽' },
-  { name: 'Housing Berlin', message: 'You: Thanks!', time: 'Mon', emoji: '🏠' },
 ];
 
 function BrandMark({ compact = false }: { compact?: boolean }) {
@@ -183,33 +74,6 @@ function CategoryTile({ item, onPress }: { item: (typeof categories)[number]; on
   );
 }
 
-function ListingCard({ item, compact = false, onPress }: { item: Listing; compact?: boolean; onPress: () => void }) {
-  return (
-    <Pressable accessibilityRole="button" accessibilityLabel={`Preview ${item.title}`} onPress={onPress} style={({ pressed }) => [styles.listingCard, compact && styles.listingCardCompact, pressed && styles.pressed]}>
-      <View style={[styles.listingVisual, { backgroundColor: visualTone[item.category] }, compact && styles.listingVisualCompact]}>
-        <View style={styles.visualBadge}>
-          <Text style={styles.visualBadgeText}>{item.category}</Text>
-        </View>
-        <Icon name={item.category} size={54} color={BRAND.purple} />
-        <View style={styles.visualShine} />
-
-      </View>
-      <View style={styles.listingBody}>
-        <Text style={styles.listingTitle} numberOfLines={2}>{item.title}</Text>
-        <Text style={styles.listingPrice}>{item.price ?? 'Student offer'}</Text>
-        <Text style={styles.listingSubtitle} numberOfLines={1}>{item.subtitle}</Text>
-        <Text style={styles.listingDetail} numberOfLines={1}>{item.detail}</Text>
-        {item.badge ? (
-          <View style={styles.trustRow}>
-            <View style={styles.trustDot} />
-            <Text style={styles.badge}>{`Demo · ${item.badge}`}</Text>
-          </View>
-        ) : null}
-      </View>
-    </Pressable>
-  );
-}
-
 function SearchField({ value, onChangeText, placeholder, onSubmit }: { value: string; onChangeText: (value: string) => void; placeholder: string; onSubmit?: () => void }) {
   return (
     <View style={styles.searchBox}>
@@ -232,54 +96,12 @@ export default function App() {
   const isDesktop = width >= 960;
   const [tab, setTab] = useState<Tab>('home');
   const [category, setCategory] = useState<Category>('Housing');
-  const [listings, setListings] = useState(seedListings.filter(item => item.category !== 'Housing' && item.category !== 'Marketplace'));
   const [search, setSearch] = useState('');
-  const [draftType, setDraftType] = useState<Category>('Marketplace');
-  const [draftTitle, setDraftTitle] = useState('');
-  const [draftSubtitle, setDraftSubtitle] = useState('');
-  const [draftPrice, setDraftPrice] = useState('');
-  const [published, setPublished] = useState(false);
-  const [demo, setDemo] = useState<Listing | null>(null);
-  const [messageSearch, setMessageSearch] = useState('');
-  const [selectedThread, setSelectedThread] = useState(0);
-
-  const filteredListings = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    return listings.filter((item) => {
-      const inCategory = item.category === category;
-      const matches = !q || `${item.title} ${item.subtitle} ${item.detail}`.toLowerCase().includes(q);
-      return inCategory && matches;
-    });
-  }, [category, listings, search]);
+  const [draftType, setDraftType] = useState<'Housing' | 'Marketplace'>('Marketplace');
 
   const goToCategory = (next: Category) => {
     setCategory(next);
     setSearch('');
-    setTab('explore');
-  };
-
-  const publish = () => {
-    if (!draftTitle.trim() || !draftSubtitle.trim()) return;
-    const categoryEmoji = categories.find((item) => item.name === draftType)?.emoji ?? '✨';
-    setListings((current) => [
-      {
-        id: `user-${Date.now()}`,
-        category: draftType,
-        emoji: categoryEmoji,
-        title: draftTitle.trim(),
-        subtitle: draftSubtitle.trim(),
-        detail: 'Posted just now',
-        price: draftPrice.trim() || undefined,
-        badge: 'Your listing',
-      },
-      ...current,
-    ]);
-    setCategory(draftType);
-    setDraftTitle('');
-    setDraftSubtitle('');
-    setDraftPrice('');
-    setPublished(true);
-    setTimeout(() => setPublished(false), 3000);
     setTab('explore');
   };
 
@@ -302,9 +124,6 @@ export default function App() {
     { label: 'Messages', icon: '◫', action: () => setTab('messages'), active: tab === 'messages' },
     { label: 'You', icon: '○', action: () => setTab('profile'), active: tab === 'profile' },
   ];
-
-  const currentThread = threads[selectedThread] ?? threads[0];
-  const filteredThreads = threads.filter(thread => `${thread.name} ${thread.message}`.toLowerCase().includes(messageSearch.toLowerCase()));
 
   const content = (
     <View style={styles.contentFrame}>
@@ -346,41 +165,24 @@ export default function App() {
             {categories.map((item) => <CategoryTile key={item.name} item={item} onPress={() => goToCategory(item.name)} />)}
           </View>
 
-          <View style={styles.sectionHeaderInline}><Text style={styles.sectionTitle}>Housing near you</Text><Pressable accessibilityRole="button" accessibilityLabel="See all housing" onPress={() => goToCategory('Housing')}><Text style={styles.linkText}>See all</Text></Pressable></View>
+          <View style={styles.sectionHeaderInline}><Text style={styles.sectionTitle}>Community housing</Text><Pressable accessibilityRole="button" accessibilityLabel="See all housing" onPress={() => goToCategory('Housing')}><Text style={styles.linkText}>See all</Text></Pressable></View>
           <ListingWorkspace key={`home-${session?.user.id ?? 'public'}`} category="Housing" preview onAccount={() => setTab('profile')} />
 
-          <View style={styles.sectionHeaderInline}>
-            <View>
-              <Text style={styles.sectionTitle}>Explore demo previews</Text>
-              <Text style={styles.sectionHint}>Trips, Jobs, Events and People · not live offers</Text>
-            </View>
-            <Pressable accessibilityRole="button" accessibilityLabel="See trip demo previews" onPress={() => goToCategory('Trips')}><Text style={styles.linkText}>See all</Text></Pressable>
-          </View>
-          <View style={styles.cardsGrid}>
-            {listings.slice(0, isDesktop ? 6 : 4).map((item) => (
-              <View key={item.id} style={isDesktop ? styles.desktopCardWrap : styles.mobileCardWrap}>
-                <ListingCard item={item} compact={!isDesktop} onPress={() => setDemo(item)} />
-              </View>
-            ))}
-          </View>
+          <View style={styles.sectionHeaderInline}><Text style={styles.sectionTitle}>Marketplace</Text><Pressable accessibilityRole="button" accessibilityLabel="See all marketplace" onPress={() => goToCategory('Marketplace')}><Text style={styles.linkText}>See all</Text></Pressable></View>
+          <ListingWorkspace key={`home-market-${session?.user.id ?? 'public'}`} category="Marketplace" preview onAccount={() => setTab('profile')} />
         </ScrollView>
       )}
 
       {tab === 'explore' && (
         <ScrollView contentContainerStyle={[styles.page, isDesktop && styles.pageDesktop]} showsVerticalScrollIndicator={false}>
-          {published ? (
-            <View style={styles.successBanner}>
-              <Text style={styles.successBannerText}>✓ Your demo listing is visible in this session only.</Text>
-            </View>
-          ) : null}
           <View style={styles.pageHeadingRow}>
             <View>
               <Text style={styles.pageTitle}>{category}</Text>
-              <Text style={styles.pageSubtitle}>{category === 'Housing' || category === 'Marketplace' ? 'Live community listings · one shared backend.' : 'Demo listings in Berlin · local prototype.'}</Text>
+              <Text style={styles.pageSubtitle}>{category === 'Housing' || category === 'Marketplace' ? 'Live community listings · one shared backend.' : category === 'People' ? 'Discoverable profiles from Stuora.' : 'This category is not available yet.'}</Text>
             </View>
-            {isDesktop ? <Pressable accessibilityRole="button" accessibilityLabel="Create in this category" onPress={() => setTab('create')} style={styles.createTopButton}><Text style={styles.createTopButtonText}>Create</Text></Pressable> : null}
+            {isDesktop && (category === 'Housing' || category === 'Marketplace') ? <Pressable accessibilityRole="button" accessibilityLabel="Create in this category" onPress={() => { setDraftType(category); setTab('create'); }} style={styles.createTopButton}><Text style={styles.createTopButtonText}>Create</Text></Pressable> : null}
           </View>
-          <SearchField value={search} onChangeText={setSearch} placeholder={`Search ${category.toLowerCase()}…`} />
+          {category === "Housing" || category === "Marketplace" || category === "People" ? <SearchField value={search} onChangeText={setSearch} placeholder={`Search ${category.toLowerCase()}…`} /> : null}
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipsRow}>
             {categories.map((item) => (
               <Pressable accessibilityRole="button" accessibilityLabel={`Browse ${item.name}`} key={item.name} onPress={() => { setCategory(item.name); setSearch(''); }}>
@@ -388,27 +190,7 @@ export default function App() {
               </Pressable>
             ))}
           </ScrollView>
-          {category === 'Housing' || category === 'Marketplace' ? <ListingWorkspace key={`${category}-${session?.user.id ?? 'public'}`} category={category} search={search} onAccount={() => setTab('profile')} /> : <>
-          <View style={styles.resultHeader}>
-            <Text style={styles.sectionTitle}>{filteredListings.length ? 'Recommended' : 'No matches'}</Text>
-            <Text style={styles.resultCount}>{filteredListings.length} results</Text>
-          </View>
-          <View style={styles.cardsGrid}>
-            {filteredListings.map((item) => (
-              <View key={item.id} style={isDesktop ? styles.desktopCardWrap : styles.mobileCardWrap}>
-                <ListingCard item={item} compact={!isDesktop} onPress={() => setDemo(item)} />
-              </View>
-            ))}
-          </View>
-          {filteredListings.length === 0 ? (
-            <View style={styles.emptyState}>
-              <Text style={styles.emptyEmoji}>🔎</Text>
-              <Text style={styles.emptyTitle}>Nothing matches yet</Text>
-              <Text style={styles.emptyText}>Try another search or publish the first useful listing in this category.</Text>
-              <Pressable onPress={() => setTab('create')} style={styles.secondaryButton}><Text style={styles.secondaryButtonText}>Create listing</Text></Pressable>
-            </View>
-          ) : null}
-          </>}
+          {category === 'Housing' || category === 'Marketplace' ? <ListingWorkspace key={`${category}-${session?.user.id ?? 'public'}`} category={category} search={search} onAccount={() => setTab('profile')} /> : category === 'People' ? <PeopleDirectory key={session?.user.id ?? 'public'} search={search} onAccount={() => setTab('profile')} /> : <View style={styles.emptyState}><Icon name={category} size={40} color={BRAND.purple} /><Text style={styles.emptyTitle}>{category} is not available yet</Text><Text style={styles.emptyText}>Posting and participation will open after persistence and permissions are verified. No sample offers are displayed.</Text></View>}
         </ScrollView>
       )}
 
@@ -416,31 +198,21 @@ export default function App() {
         <ScrollView contentContainerStyle={[styles.page, styles.formPage]} keyboardShouldPersistTaps="handled">
           <View style={styles.formCard}>
             <View style={styles.formHeader}>
-              <View style={styles.formIcon}><Text style={styles.formIconText}>＋</Text></View>
+              <View style={styles.formIcon}><Icon name="plus" color={BRAND.purple} size={26} /></View>
               <View style={styles.formHeaderCopy}>
                 <Text style={styles.pageTitle}>Create on Stuora</Text>
-                <Text style={styles.pageSubtitle}>Housing and Marketplace posts are saved. Other categories are local demos.</Text>
+                <Text style={styles.pageSubtitle}>Create a Housing or Marketplace listing saved to your account.</Text>
               </View>
             </View>
             <Text style={styles.formLabel}>What are you posting?</Text>
             <View style={styles.wrapRow}>
-              {categories.filter((item) => item.name !== 'People').map((item) => (
-                <Pressable accessibilityRole="button" accessibilityLabel={`Post ${item.name}`} key={item.name} onPress={() => setDraftType(item.name)}>
+              {categories.filter((item) => item.name === 'Housing' || item.name === 'Marketplace').map((item) => (
+                <Pressable accessibilityRole="button" accessibilityLabel={`Post ${item.name}`} key={item.name} onPress={() => { if (item.name === "Housing" || item.name === "Marketplace") setDraftType(item.name); }}>
                   <Pill active={draftType === item.name}>{item.name}</Pill>
                 </Pressable>
               ))}
             </View>
-            {draftType === 'Housing' || draftType === 'Marketplace' ? <ListingWorkspace key={`${draftType}-${session?.user.id ?? 'public'}`} category={draftType} mode="create" onAccount={() => setTab('profile')} /> : <>
-            <Text style={styles.formLabel}>Title</Text>
-            <TextInput value={draftTitle} onChangeText={setDraftTitle} placeholder="e.g. Desk for sale" placeholderTextColor="#A2A8B8" style={styles.field} />
-            <Text style={styles.formLabel}>Location or short description</Text>
-            <TextInput value={draftSubtitle} onChangeText={setDraftSubtitle} placeholder="e.g. Neukölln · pickup only" placeholderTextColor="#A2A8B8" style={styles.field} />
-            <Text style={styles.formLabel}>Price / compensation (optional)</Text>
-            <TextInput value={draftPrice} onChangeText={setDraftPrice} placeholder="e.g. €35" placeholderTextColor="#A2A8B8" style={styles.field} />
-            <Pressable onPress={publish} disabled={!draftTitle.trim() || !draftSubtitle.trim()} style={({ pressed }) => [styles.primaryButton, (!draftTitle.trim() || !draftSubtitle.trim()) && styles.primaryButtonDisabled, pressed && styles.pressed]}>
-              <Text style={styles.primaryButtonText}>Publish local demo listing</Text>
-            </Pressable>
-            </>}
+            <ListingWorkspace key={`${draftType}-${session?.user.id ?? 'public'}`} category={draftType} mode="create" onAccount={() => setTab('profile')} />
             <View style={styles.noteCard}>
               <Text style={styles.noteTitle}>Stuora quality rule</Text>
               <Text style={styles.noteText}>If a feature appears in the product, it must work end-to-end. Payments, production verification and media upload stay hidden until their backend flows are ready.</Text>
@@ -449,41 +221,7 @@ export default function App() {
         </ScrollView>
       )}
 
-      {tab === 'messages' && (
-        <View style={[styles.messagesPage, !isDesktop && styles.messagesPageMobile]}>
-          <View style={[styles.threadPane, !isDesktop && styles.threadPaneMobile]}>
-            <View style={styles.messagesHeading}>
-              <Text style={styles.pageTitle}>Messages</Text>
-              <Text style={styles.pageSubtitle}>Demo conversations · messages are not sent.</Text>
-            </View>
-            <SearchField value={messageSearch} onChangeText={setMessageSearch} placeholder="Search demo conversations…" />
-            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.threadList}>
-              {!filteredThreads.length ? <Text style={styles.emptyText}>No demo conversations match.</Text> : null}
-              {filteredThreads.map((thread) => (
-                <Pressable accessibilityRole="button" accessibilityLabel={`Preview conversation with ${thread.name}`} key={thread.name} onPress={() => setSelectedThread(threads.indexOf(thread))} style={({ pressed }) => [styles.thread, threads[selectedThread] === thread && styles.threadActive, pressed && styles.pressed]}>
-                  <View style={styles.avatar}><Text style={styles.avatarEmoji}>{thread.name.charAt(0)}</Text></View>
-                  <View style={styles.threadBody}>
-                    <View style={styles.rowBetween}><Text style={styles.threadName}>{thread.name}</Text><Text style={styles.threadTime}>{thread.time}</Text></View>
-                    <Text style={styles.threadMessage} numberOfLines={1}>{thread.message}</Text>
-                  </View>
-                </Pressable>
-              ))}
-            </ScrollView>
-          </View>
-          <View style={[styles.conversationPane, !isDesktop && styles.conversationPaneMobile]}>
-            <View style={styles.conversationHeader}>
-              <View style={styles.avatar}><Text style={styles.avatarEmoji}>{currentThread.name.charAt(0)}</Text></View>
-              <View><Text style={styles.conversationName}>{currentThread.name}</Text><Text style={styles.onlineText}>Demo preview</Text></View>
-            </View>
-            <View style={styles.conversationBody}>
-              <View style={styles.bubbleIncoming}><Text style={styles.bubbleText}>Hey! Is the room still available?</Text></View>
-              <View style={styles.bubbleOutgoing}><Text style={styles.bubbleTextOutgoing}>Yes — would you like to arrange a viewing?</Text></View>
-              <View style={styles.bubbleIncoming}><Text style={styles.bubbleText}>Thursday at 5pm would be great.</Text></View>
-            </View>
-            <View style={styles.composer}><Text style={styles.composerPlaceholder}>Preview only · secure messaging is coming next.</Text></View>
-          </View>
-        </View>
-      )}
+      {tab === 'messages' && <ScrollView contentContainerStyle={styles.page}><Text style={styles.pageTitle}>Messages</Text><View style={styles.emptyState}><Icon name="messages" size={40} color={BRAND.purple} /><Text style={styles.emptyTitle}>Messaging is not available yet</Text><Text style={styles.emptyText}>Secure conversations must be verified before messaging opens. No sample conversations or send controls are displayed.</Text></View></ScrollView>}
 
       {tab === 'profile' && (
         <ScrollView contentContainerStyle={[styles.page, styles.profilePage]} showsVerticalScrollIndicator={false}>
@@ -495,9 +233,6 @@ export default function App() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <Modal visible={!!demo} transparent animationType="fade" onRequestClose={() => setDemo(null)}>
-        <View style={styles.demoBackdrop}><View style={styles.demoPanel}><Text style={styles.pageTitle}>{demo?.title}</Text><Text style={styles.pageSubtitle}>Demo preview · not a live offer</Text><Text style={styles.noteText}>{demo?.subtitle}</Text><Text style={styles.noteText}>{demo?.detail}</Text><Text style={styles.listingPrice}>{demo?.price}</Text><Pressable accessibilityRole="button" accessibilityLabel="Close demo preview" onPress={() => setDemo(null)} style={styles.primaryButton}><Text style={styles.primaryButtonText}>Close preview</Text></Pressable></View></View>
-      </Modal>
       <StatusBar barStyle="dark-content" backgroundColor={BRAND.white} />
       <View style={styles.appShell}>
         {isDesktop ? (
@@ -514,7 +249,7 @@ export default function App() {
                 ))}
               </View>
               <Pressable accessibilityRole="button" accessibilityLabel="Create listing" onPress={() => setTab('create')} style={styles.sidebarCreate}><Icon name="plus" color={BRAND.white} size={18} /><Text style={styles.sidebarCreateText}>Create</Text></Pressable>
-              <View style={styles.sidebarFooter}><View style={styles.miniAvatar}><Text style={styles.miniAvatarText}>S</Text></View><View><Text style={styles.sidebarUser}>{profile?.display_name ?? "Your account"}</Text><Text style={styles.sidebarUserSub}>{profile?.city ?? "Sign in to get started"}</Text></View></View>
+              <View style={styles.sidebarFooter}><View style={styles.miniAvatar}><Text style={styles.miniAvatarText}>{profile?.display_name.charAt(0).toUpperCase() ?? "S"}</Text></View><View><Text style={styles.sidebarUser}>{profile?.display_name ?? "Your account"}</Text><Text style={styles.sidebarUserSub}>{profile?.city ?? "Sign in to get started"}</Text></View></View>
             </View>
             <View style={styles.desktopMain}>
               <View style={styles.desktopTopBar}>
