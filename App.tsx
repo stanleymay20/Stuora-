@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import AccountPanel from './src/account/AccountPanel';
 import ListingWorkspace from './src/listings/ListingWorkspace';
+import MessageWorkspace from './src/messages/MessageWorkspace';
 import PeopleDirectory from './src/people/PeopleDirectory';
 import { useAuth } from './src/account/AuthProvider';
 import { Icon, StuoraMark } from './src/ui/Brand';
@@ -140,8 +141,8 @@ export default function App() {
           ) : null}
 
           {isDesktop ? <View style={[styles.hero, styles.heroDesktop]}>
-            <Image source={require("./assets/berlin-skyline.jpg")} resizeMode="cover" style={[StyleSheet.absoluteFill, { width: "100%", height: "100%" }]} accessibilityLabel="Berlin skyline at sunset" />
-            <View style={[StyleSheet.absoluteFill, { backgroundColor: "rgba(17,22,47,0.48)" }]} />
+            <Image source={require('./assets/berlin-skyline.jpg')} resizeMode="cover" style={[StyleSheet.absoluteFill, { width: '100%', height: '100%' }]} accessibilityLabel="Berlin skyline at sunset" />
+            <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(17,22,47,0.48)' }]} />
 
             <View style={styles.heroCopy}>
               <Text style={styles.eyebrow}>STUDENT LIFE, CONNECTED</Text>
@@ -166,10 +167,10 @@ export default function App() {
           </View>
 
           <View style={styles.sectionHeaderInline}><Text style={styles.sectionTitle}>Community housing</Text><Pressable accessibilityRole="button" accessibilityLabel="See all housing" onPress={() => goToCategory('Housing')}><Text style={styles.linkText}>See all</Text></Pressable></View>
-          <ListingWorkspace key={`home-${session?.user.id ?? 'public'}`} category="Housing" preview onAccount={() => setTab('profile')} />
+          <ListingWorkspace key={`home-${session?.user.id ?? 'public'}`} category="Housing" preview onAccount={() => setTab('profile')} onMessage={() => setTab('messages')} />
 
           <View style={styles.sectionHeaderInline}><Text style={styles.sectionTitle}>Marketplace</Text><Pressable accessibilityRole="button" accessibilityLabel="See all marketplace" onPress={() => goToCategory('Marketplace')}><Text style={styles.linkText}>See all</Text></Pressable></View>
-          <ListingWorkspace key={`home-market-${session?.user.id ?? 'public'}`} category="Marketplace" preview onAccount={() => setTab('profile')} />
+          <ListingWorkspace key={`home-market-${session?.user.id ?? 'public'}`} category="Marketplace" preview onAccount={() => setTab('profile')} onMessage={() => setTab('messages')} />
         </ScrollView>
       )}
 
@@ -182,7 +183,7 @@ export default function App() {
             </View>
             {isDesktop && (category === 'Housing' || category === 'Marketplace') ? <Pressable accessibilityRole="button" accessibilityLabel="Create in this category" onPress={() => { setDraftType(category); setTab('create'); }} style={styles.createTopButton}><Text style={styles.createTopButtonText}>Create</Text></Pressable> : null}
           </View>
-          {category === "Housing" || category === "Marketplace" || category === "People" ? <SearchField value={search} onChangeText={setSearch} placeholder={`Search ${category.toLowerCase()}…`} /> : null}
+          {category === 'Housing' || category === 'Marketplace' || category === 'People' ? <SearchField value={search} onChangeText={setSearch} placeholder={`Search ${category.toLowerCase()}…`} /> : null}
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipsRow}>
             {categories.map((item) => (
               <Pressable accessibilityRole="button" accessibilityLabel={`Browse ${item.name}`} key={item.name} onPress={() => { setCategory(item.name); setSearch(''); }}>
@@ -190,7 +191,7 @@ export default function App() {
               </Pressable>
             ))}
           </ScrollView>
-          {category === 'Housing' || category === 'Marketplace' ? <ListingWorkspace key={`${category}-${session?.user.id ?? 'public'}`} category={category} search={search} onAccount={() => setTab('profile')} /> : category === 'People' ? <PeopleDirectory key={session?.user.id ?? 'public'} search={search} onAccount={() => setTab('profile')} /> : <View style={styles.emptyState}><Icon name={category} size={40} color={BRAND.purple} /><Text style={styles.emptyTitle}>{category} is not available yet</Text><Text style={styles.emptyText}>Posting and participation will open after persistence and permissions are verified. No sample offers are displayed.</Text></View>}
+          {category === 'Housing' || category === 'Marketplace' ? <ListingWorkspace key={`${category}-${session?.user.id ?? 'public'}`} category={category} search={search} onAccount={() => setTab('profile')} onMessage={() => setTab('messages')} /> : category === 'People' ? <PeopleDirectory key={session?.user.id ?? 'public'} search={search} onAccount={() => setTab('profile')} /> : <View style={styles.emptyState}><Icon name={category} size={40} color={BRAND.purple} /><Text style={styles.emptyTitle}>{category} is not available yet</Text><Text style={styles.emptyText}>Posting and participation will open after persistence and permissions are verified. No sample offers are displayed.</Text></View>}
         </ScrollView>
       )}
 
@@ -207,12 +208,12 @@ export default function App() {
             <Text style={styles.formLabel}>What are you posting?</Text>
             <View style={styles.wrapRow}>
               {categories.filter((item) => item.name === 'Housing' || item.name === 'Marketplace').map((item) => (
-                <Pressable accessibilityRole="button" accessibilityLabel={`Post ${item.name}`} key={item.name} onPress={() => { if (item.name === "Housing" || item.name === "Marketplace") setDraftType(item.name); }}>
+                <Pressable accessibilityRole="button" accessibilityLabel={`Post ${item.name}`} key={item.name} onPress={() => { if (item.name === 'Housing' || item.name === 'Marketplace') setDraftType(item.name); }}>
                   <Pill active={draftType === item.name}>{item.name}</Pill>
                 </Pressable>
               ))}
             </View>
-            <ListingWorkspace key={`${draftType}-${session?.user.id ?? 'public'}`} category={draftType} mode="create" onAccount={() => setTab('profile')} />
+            <ListingWorkspace key={`${draftType}-${session?.user.id ?? 'public'}`} category={draftType} mode="create" onAccount={() => setTab('profile')} onMessage={() => setTab('messages')} />
             <View style={styles.noteCard}>
               <Text style={styles.noteTitle}>Stuora quality rule</Text>
               <Text style={styles.noteText}>If a feature appears in the product, it must work end-to-end. Payments, production verification and media upload stay hidden until their backend flows are ready.</Text>
@@ -221,7 +222,7 @@ export default function App() {
         </ScrollView>
       )}
 
-      {tab === 'messages' && <ScrollView contentContainerStyle={styles.page}><Text style={styles.pageTitle}>Messages</Text><View style={styles.emptyState}><Icon name="messages" size={40} color={BRAND.purple} /><Text style={styles.emptyTitle}>Messaging is not available yet</Text><Text style={styles.emptyText}>Secure conversations must be verified before messaging opens. No sample conversations or send controls are displayed.</Text></View></ScrollView>}
+      {tab === 'messages' && <MessageWorkspace onAccount={() => setTab('profile')} />}
 
       {tab === 'profile' && (
         <ScrollView contentContainerStyle={[styles.page, styles.profilePage]} showsVerticalScrollIndicator={false}>
@@ -243,13 +244,13 @@ export default function App() {
               <View style={styles.sidebarMenu}>
                 {sidebarItems.map((item) => (
                   <Pressable key={item.label} onPress={item.action} style={({ pressed }) => [styles.sidebarItem, item.active && styles.sidebarItemActive, pressed && styles.pressed]}>
-                    <Icon name={item.label === "You" ? "profile" : item.label} size={21} color={item.active ? BRAND.purple : BRAND.muted} />
+                    <Icon name={item.label === 'You' ? 'profile' : item.label} size={21} color={item.active ? BRAND.purple : BRAND.muted} />
                     <Text style={[styles.sidebarLabel, item.active && styles.sidebarLabelActive]}>{item.label}</Text>
                   </Pressable>
                 ))}
               </View>
               <Pressable accessibilityRole="button" accessibilityLabel="Create listing" onPress={() => setTab('create')} style={styles.sidebarCreate}><Icon name="plus" color={BRAND.white} size={18} /><Text style={styles.sidebarCreateText}>Create</Text></Pressable>
-              <View style={styles.sidebarFooter}><View style={styles.miniAvatar}><Text style={styles.miniAvatarText}>{profile?.display_name.charAt(0).toUpperCase() ?? "S"}</Text></View><View><Text style={styles.sidebarUser}>{profile?.display_name ?? "Your account"}</Text><Text style={styles.sidebarUserSub}>{profile?.city ?? "Sign in to get started"}</Text></View></View>
+              <View style={styles.sidebarFooter}><View style={styles.miniAvatar}><Text style={styles.miniAvatarText}>{profile?.display_name.charAt(0).toUpperCase() ?? 'S'}</Text></View><View><Text style={styles.sidebarUser}>{profile?.display_name ?? 'Your account'}</Text><Text style={styles.sidebarUserSub}>{profile?.city ?? 'Sign in to get started'}</Text></View></View>
             </View>
             <View style={styles.desktopMain}>
               <View style={styles.desktopTopBar}>
@@ -261,14 +262,14 @@ export default function App() {
           </View>
         ) : (
           <>
-            <View style={styles.mobileTopBar}><BrandMark /><View style={styles.mobileTopActions}><Pressable accessibilityRole="button" accessibilityLabel="Open your account" onPress={() => setTab("profile")} style={styles.miniAvatar}><Icon name="profile" color="#FFFFFF" size={22} /></Pressable></View></View>
+            <View style={styles.mobileTopBar}><BrandMark /><View style={styles.mobileTopActions}><Pressable accessibilityRole="button" accessibilityLabel="Open your account" onPress={() => setTab('profile')} style={styles.miniAvatar}><Icon name="profile" color="#FFFFFF" size={22} /></Pressable></View></View>
             {content}
             <View style={styles.bottomNav}>
               {bottomNav.map((item) => {
                 const isCreate = item.key === 'create';
                 return (
-                  <Pressable key={item.key} accessibilityRole="button" accessibilityLabel={isCreate ? "Create listing" : item.label} onPress={() => setTab(item.key)} style={styles.navButton}>
-                    <View style={[styles.navIconWrap, isCreate && styles.navIconCreate, tab === item.key && !isCreate && styles.navIconActive]}><Icon name={isCreate ? "plus" : item.key === "explore" ? "search" : item.key} size={isCreate ? 25 : 21} color={isCreate ? BRAND.white : tab === item.key ? BRAND.purple : BRAND.muted} /></View>
+                  <Pressable key={item.key} accessibilityRole="button" accessibilityLabel={isCreate ? 'Create listing' : item.label} onPress={() => setTab(item.key)} style={styles.navButton}>
+                    <View style={[styles.navIconWrap, isCreate && styles.navIconCreate, tab === item.key && !isCreate && styles.navIconActive]}><Icon name={isCreate ? 'plus' : item.key === 'explore' ? 'search' : item.key} size={isCreate ? 25 : 21} color={isCreate ? BRAND.white : tab === item.key ? BRAND.purple : BRAND.muted} /></View>
                     {!isCreate ? <Text style={[styles.navLabel, tab === item.key && styles.navLabelActive]}>{item.label}</Text> : null}
                   </Pressable>
                 );
@@ -282,8 +283,8 @@ export default function App() {
 }
 
 const styles = StyleSheet.create({
-  demoBackdrop: { flex: 1, backgroundColor: "rgba(17,22,47,0.55)", padding: 24, alignItems: "center", justifyContent: "center" },
-  demoPanel: { width: "100%", maxWidth: 480, padding: 24, borderRadius: 24, backgroundColor: BRAND.white, gap: 18 },
+  demoBackdrop: { flex: 1, backgroundColor: 'rgba(17,22,47,0.55)', padding: 24, alignItems: 'center', justifyContent: 'center' },
+  demoPanel: { width: '100%', maxWidth: 480, padding: 24, borderRadius: 24, backgroundColor: BRAND.white, gap: 18 },
   safeArea: { flex: 1, backgroundColor: BRAND.white },
   appShell: { flex: 1, backgroundColor: BRAND.soft },
   desktopShell: { flex: 1, flexDirection: 'row' },
@@ -349,7 +350,7 @@ const styles = StyleSheet.create({
   sectionHint: { color: BRAND.subtle, fontSize: 11, marginTop: 2 },
   categoryGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   categoryTile: { flexGrow: 0, flexBasis: '22%', backgroundColor: BRAND.white, borderWidth: 0, borderColor: BRAND.line, borderRadius: 16, paddingVertical: 13, paddingHorizontal: 10, alignItems: 'center', gap: 7, shadowColor: '#10162F', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.03, shadowRadius: 6, elevation: 1 },
-  categoryTileDesktop: { flexBasis: "15%" },
+  categoryTileDesktop: { flexBasis: '15%' },
   categoryIcon: { width: 43, height: 43, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
   categoryEmoji: { fontSize: 21 },
   categoryName: { color: BRAND.ink, fontWeight: '800', fontSize: 11 },
