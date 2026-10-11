@@ -30,7 +30,7 @@ export default function StudentSavingsOverlay() {
     void load(); return () => { clearTimeout(timeout); ac.abort(); };
   }, [open, pages, revision]);
   return <>
-    <Pressable accessibilityRole="button" accessibilityLabel="Open Student Savings" onPress={() => { setPages(1); setOpen(true); }} style={[styles.floatingButton, { bottom: width >= 960 ? 22 : 82 }]}><Text style={styles.floatingIcon}>€</Text><View><Text style={styles.floatingLabel}>Student Savings</Text><Text style={styles.floatingValue}>Browse verified benefits</Text></View></Pressable>
+    <Pressable accessibilityRole="button" accessibilityLabel="Open Student Savings" onPress={() => { setPages(1); setOpen(true); }} style={[styles.floatingButton, { bottom: width >= 960 ? 96 : 152 }]}><Text style={styles.floatingIcon}>€</Text><View><Text style={styles.floatingLabel}>Student Savings</Text><Text style={styles.floatingValue}>Browse verified benefits</Text></View></Pressable>
     <Modal visible={open} animationType="slide" onRequestClose={() => setOpen(false)}><SafeAreaView style={styles.safeArea}>
       <View style={styles.header}><View><Text style={styles.eyebrow}>STUORA SAVINGS</Text><Text style={styles.title}>Student life for less.</Text></View><Pressable accessibilityRole="button" accessibilityLabel="Close Student Savings" onPress={() => setOpen(false)} style={styles.closeButton}><Text style={styles.closeText}>Close</Text></Pressable></View>
       <ScrollView contentContainerStyle={styles.page}>
