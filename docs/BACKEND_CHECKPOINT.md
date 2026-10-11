@@ -1,5 +1,7 @@
 # Stuora backend checkpoint — 2026-10-10 UTC
 
+Historical recovery checkpoint. Superseded by `AUTH_PROFILES_CHECKPOINT.md`: the connected Stuora project has since been adopted and both migrations applied.
+
 ## Recovered state
 
 - Verified remote main: `1dff9e58e5423c8be07f3baa61131d0b6addc387`.

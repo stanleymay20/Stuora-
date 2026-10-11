@@ -33,3 +33,12 @@ jobs:
 
       - name: Export web build
         run: npm run export:web
+
+      - name: Install browser for account regression tests
+        run: npx playwright install --with-deps chromium
+
+      - name: Test desktop and mobile web account flows
+        run: npm run test:web
+
+      - name: Export native bundles
+        run: npx expo export --platform ios --platform android --output-dir native-build

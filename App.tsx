@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from 'react';
+import AccountPanel from './src/account/AccountPanel';
 import {
   Platform,
   Pressable,
@@ -199,7 +200,7 @@ function ListingCard({ item, compact = false }: { item: Listing; compact?: boole
         {item.badge ? (
           <View style={styles.trustRow}>
             <View style={styles.trustDot} />
-            <Text style={styles.badge}>{item.badge}</Text>
+            <Text style={styles.badge}>{`Demo · ${item.badge}`}</Text>
           </View>
         ) : null}
       </View>
@@ -346,7 +347,7 @@ export default function App() {
           <View style={styles.sectionHeaderInline}>
             <View>
               <Text style={styles.sectionTitle}>For you in Berlin</Text>
-              <Text style={styles.sectionHint}>Fresh opportunities around you</Text>
+              <Text style={styles.sectionHint}>Demo listings · not live offers</Text>
             </View>
             <Pressable onPress={() => setTab('explore')}><Text style={styles.linkText}>See all</Text></Pressable>
           </View>
@@ -364,13 +365,13 @@ export default function App() {
         <ScrollView contentContainerStyle={[styles.page, isDesktop && styles.pageDesktop]} showsVerticalScrollIndicator={false}>
           {published ? (
             <View style={styles.successBanner}>
-              <Text style={styles.successBannerText}>✓ Your listing was published successfully.</Text>
+              <Text style={styles.successBannerText}>✓ Your demo listing is visible in this session only.</Text>
             </View>
           ) : null}
           <View style={styles.pageHeadingRow}>
             <View>
               <Text style={styles.pageTitle}>{category}</Text>
-              <Text style={styles.pageSubtitle}>Discover trusted student listings in Berlin.</Text>
+              <Text style={styles.pageSubtitle}>Demo listings in Berlin · local prototype.</Text>
             </View>
             {isDesktop ? <Pressable onPress={() => setTab('create')} style={styles.createTopButton}><Text style={styles.createTopButtonText}>＋ Create</Text></Pressable> : null}
           </View>
@@ -411,7 +412,7 @@ export default function App() {
               <View style={styles.formIcon}><Text style={styles.formIconText}>＋</Text></View>
               <View style={styles.formHeaderCopy}>
                 <Text style={styles.pageTitle}>Create on Stuora</Text>
-                <Text style={styles.pageSubtitle}>Post something useful to the student community.</Text>
+                <Text style={styles.pageSubtitle}>Try a local demo post. It is not saved to your account yet.</Text>
               </View>
             </View>
             <Text style={styles.formLabel}>What are you posting?</Text>
@@ -429,7 +430,7 @@ export default function App() {
             <Text style={styles.formLabel}>Price / compensation (optional)</Text>
             <TextInput value={draftPrice} onChangeText={setDraftPrice} placeholder="e.g. €35" placeholderTextColor="#A2A8B8" style={styles.field} />
             <Pressable onPress={publish} disabled={!draftTitle.trim() || !draftSubtitle.trim()} style={({ pressed }) => [styles.primaryButton, (!draftTitle.trim() || !draftSubtitle.trim()) && styles.primaryButtonDisabled, pressed && styles.pressed]}>
-              <Text style={styles.primaryButtonText}>Publish to Stuora</Text>
+              <Text style={styles.primaryButtonText}>Publish local demo listing</Text>
             </Pressable>
             <View style={styles.noteCard}>
               <Text style={styles.noteTitle}>Stuora quality rule</Text>
@@ -444,7 +445,7 @@ export default function App() {
           <View style={[styles.threadPane, !isDesktop && styles.threadPaneMobile]}>
             <View style={styles.messagesHeading}>
               <Text style={styles.pageTitle}>Messages</Text>
-              <Text style={styles.pageSubtitle}>Conversations tied to real activity.</Text>
+              <Text style={styles.pageSubtitle}>Demo conversations · messages are not sent.</Text>
             </View>
             <SearchField value="" onChangeText={() => undefined} placeholder="Search conversations…" />
             <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.threadList}>
@@ -462,7 +463,7 @@ export default function App() {
           <View style={[styles.conversationPane, !isDesktop && styles.conversationPaneMobile]}>
             <View style={styles.conversationHeader}>
               <View style={styles.avatar}><Text style={styles.avatarEmoji}>{currentThread.emoji}</Text></View>
-              <View><Text style={styles.conversationName}>{currentThread.name}</Text><Text style={styles.onlineText}>● online</Text></View>
+              <View><Text style={styles.conversationName}>{currentThread.name}</Text><Text style={styles.onlineText}>Demo preview</Text></View>
             </View>
             <View style={styles.conversationBody}>
               <View style={styles.bubbleIncoming}><Text style={styles.bubbleText}>Hey! Is the room still available?</Text></View>
@@ -476,28 +477,7 @@ export default function App() {
 
       {tab === 'profile' && (
         <ScrollView contentContainerStyle={[styles.page, styles.profilePage]} showsVerticalScrollIndicator={false}>
-          <View style={styles.profileHero}>
-            <View style={styles.profileAvatar}><Text style={styles.profileAvatarText}>S</Text></View>
-            <View style={styles.profileCopy}>
-              <Text style={styles.profileName}>Your Stuora Passport</Text>
-              <Text style={styles.profileSub}>Berlin · Data & AI · English / German</Text>
-              <View style={styles.profileBadges}><Pill active>✓ Verified demo</Pill><Pill>📍 Berlin</Pill></View>
-            </View>
-            {isDesktop ? <Pressable style={styles.editButton}><Text style={styles.editButtonText}>Edit profile</Text></Pressable> : null}
-          </View>
-          <Text style={styles.profileBio}>A portable trust profile for housing, marketplace, trips, events and student work.</Text>
-          <View style={styles.statsRow}>
-            <View style={styles.statCard}><Text style={styles.statNumber}>4.9</Text><Text style={styles.statLabel}>Rating</Text></View>
-            <View style={styles.statCard}><Text style={styles.statNumber}>12</Text><Text style={styles.statLabel}>Connections</Text></View>
-            <View style={styles.statCard}><Text style={styles.statNumber}>3</Text><Text style={styles.statLabel}>Listings</Text></View>
-          </View>
-          <View style={styles.menuCard}>
-            {['My listings', 'Saved', 'My trips', 'Job applications', 'Privacy & safety', 'Settings'].map((label, index) => (
-              <Pressable key={label} style={({ pressed }) => [styles.menuRow, index === 5 && styles.menuRowLast, pressed && styles.pressed]}>
-                <Text style={styles.menuText}>{label}</Text><Text style={styles.chevron}>›</Text>
-              </Pressable>
-            ))}
-          </View>
+          <AccountPanel />
         </ScrollView>
       )}
     </View>
