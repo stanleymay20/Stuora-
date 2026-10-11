@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Image, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { StuoraMark } from '../ui/Brand';
 import { supabase } from '../backend/supabase';
 import { useAuth } from './AuthProvider';
 import { credentialsError, profileError } from './validation';
@@ -69,6 +70,7 @@ export default function AccountPanel() {
   );
   if (initializing) return <View style={styles.card}><ActivityIndicator /><Text>Restoring your session…</Text></View>;
   return <View style={styles.card}>
+    {!session ? <View style={styles.welcome}><Image source={require("../../assets/berlin-skyline.jpg")} style={[StyleSheet.absoluteFill, { width: "100%", height: "100%" }]} resizeMode="cover" /><View style={[StyleSheet.absoluteFill, { backgroundColor: "rgba(17,22,47,0.35)" }]} /><View style={{ zIndex: 1 }}><StuoraMark size={58} /></View><Text style={styles.welcomeTitle}>Stuora</Text><Text style={styles.welcomeSubtitle}>Student life, all in one place.</Text></View> : null}
     <Text accessibilityRole="header" style={styles.heading}>{session ? 'Your Stuora Passport' : signup ? 'Create your Stuora account' : 'Welcome to Stuora'}</Text>
     <Text style={styles.description}>{session ? 'Your profile is saved to your account and available across devices.' : 'Core student participation is free. No university connection is required.'}</Text>
     {(issue || error) ? <Text accessibilityRole="alert" style={styles.error}>{issue || error}</Text> : null}
@@ -100,6 +102,9 @@ export default function AccountPanel() {
   </View>;
 }
 const styles = StyleSheet.create({
+  welcome: { minHeight: 190, borderRadius: 16, overflow: "hidden", alignItems: "center", justifyContent: "center", gap: 8, backgroundColor: "#11162F" },
+  welcomeTitle: { color: "#FFFFFF", fontSize: 30, fontWeight: "900" },
+  welcomeSubtitle: { color: "#FFFFFF", fontSize: 14 },
   card: { padding: 24, backgroundColor: '#fff', borderRadius: 20, borderWidth: 1, borderColor: '#E9EAF1', gap: 12 },
   heading: { color: '#11162F', fontSize: 24, fontWeight: '800' },
   description: { color: '#747B91', fontSize: 13, lineHeight: 20 },

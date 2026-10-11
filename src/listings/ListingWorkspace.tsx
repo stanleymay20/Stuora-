@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
 import { useAuth } from '../account/AuthProvider';
 import { supabase } from '../backend/supabase';
+import { Icon } from '../ui/Brand';
 import type { Database } from '../backend/database.types';
 
 type Row = Database['public']['Tables']['listings']['Row'];
@@ -23,7 +24,7 @@ function Toggle({ label, value, onChange }: { label: string; value: boolean; onC
   return <View style={s.row}><Text>{label}</Text><Switch accessibilityLabel={label} value={value} onValueChange={onChange} /></View>;
 }
 
-export default function ListingWorkspace({ category, mode = 'browse', search = '', onAccount }: { category: 'Housing' | 'Marketplace'; mode?: 'browse' | 'create'; search?: string; onAccount: () => void }) {
+export default function ListingWorkspace({ category, mode = 'browse', search = '', preview = false, onAccount }: { category: 'Housing' | 'Marketplace'; mode?: 'browse' | 'create'; search?: string; preview?: boolean; onAccount: () => void }) {
   const { session, profile, profileLoading, initializing, error: profileError } = useAuth();
   const kind: Kind = category === 'Housing' ? 'housing' : 'marketplace';
   const userId = session?.user.id;
@@ -93,12 +94,12 @@ export default function ListingWorkspace({ category, mode = 'browse', search = '
   }
   const form = mode === 'create' || editing;
   return <View style={s.workspace}>
-    <Text style={s.hint}>{category} listings are saved to Stuora. No student posting or application fee.</Text>
+    {!preview ? <Text style={s.hint}>{category} listings are saved to Stuora. No student posting or application fee.</Text> : null}
     {notice ? <Text accessibilityLiveRegion="polite" style={s.notice}>{notice}</Text> : null}
     {actionError ? <Text accessibilityRole="alert" style={s.error}>{actionError}</Text> : null}
     {form ? initializing || profileLoading ? <ActivityIndicator accessibilityLabel="Loading account" /> : !session || !profile || profileError ? <View style={s.card}><Text style={s.text}>Sign in and complete your profile to publish a listing.</Text><Button title="Open account" onPress={onAccount} /></View> : <View style={s.card}>
       <Text style={s.title}>{editing ? 'Edit listing' : `Publish ${category.toLowerCase()} listing`}</Text>
-      <Text style={s.hint}>Text listing · photos and messaging are not available yet.</Text>
+      <Text style={s.hint}>Public text listing · photos and messaging are not available yet.</Text>
       <Field label="Listing title" value={draft.title} onChange={v => change('title', v)} />
       <Field label="Listing description" value={draft.description} onChange={v => change('description', v)} multiline />
       <Field label="Listing city" value={draft.city} onChange={v => change('city', v)} />
@@ -117,22 +118,22 @@ export default function ListingWorkspace({ category, mode = 'browse', search = '
       {selected.owner_id === userId && selected.status === 'active' ? <><Button title="Edit listing" onPress={() => edit(selected)} disabled={busy} />{confirmArchive ? <><Text>Archive this listing? It will disappear from public discovery.</Text><Button title="Confirm archive" onPress={() => void archive()} disabled={busy} /><Button title="Keep listing" onPress={() => setConfirmArchive(false)} disabled={busy} /></> : <Button title="Archive listing" onPress={() => setConfirmArchive(true)} disabled={busy} />}</> : null}
       <Button title="Back to listings" onPress={() => { setSelected(null); setConfirmArchive(false); setActionError(''); }} disabled={busy} />
     </View> : <>
-      <View style={s.wrap}><Button title="Refresh listings" onPress={() => setRevision(v => v + 1)} disabled={loading} />{session ? <Button title={own ? 'Browse public listings' : 'My listings'} onPress={() => setOwn(v => !v)} /> : null}</View>
+      {!preview ? <View style={s.wrap}><Button title="Refresh listings" onPress={() => setRevision(v => v + 1)} disabled={loading} />{session ? <Button title={own ? 'Browse public listings' : 'My listings'} onPress={() => setOwn(v => !v)} /> : null}</View> : null}
       <Text style={s.hint}>{own ? 'Your listings, including archived posts.' : 'Active listings from the community.'}{search ? ' Search matches titles.' : ''}</Text>
       {loading ? <ActivityIndicator accessibilityLabel="Loading listings" /> : error ? <View><Text accessibilityRole="alert" style={s.error}>{error}</Text><Button title="Retry listings" onPress={() => setRevision(v => v + 1)} /></View> : <>
         {!items.length ? <Text style={s.text}>No {category.toLowerCase()} listings found.</Text> : null}
-        <View style={s.grid}>{items.map(item => <Pressable key={item.id} accessibilityRole="button" accessibilityLabel={`View ${item.title}`} onPress={() => { setSelected(item); setNotice(''); }} style={s.listing}><View style={s.visual}><Text style={s.icon}>{kind === 'housing' ? '🏠' : '🛍️'}</Text><Text style={s.hint}>No photo</Text></View><Text style={s.title}>{item.title}</Text><Text style={s.price}>{money(item.price_cents)}{kind === 'housing' ? ' / month' : ''}</Text><Text>{item.city} · {item.status}</Text></Pressable>)}</View>
-        {more ? <Button title="Load more listings" onPress={() => setPages(v => v + 1)} /> : null}
+        <View style={s.grid}>{(preview ? items.slice(0, 4) : items).map(item => <Pressable key={item.id} accessibilityRole="button" accessibilityLabel={`View ${item.title}`} onPress={() => { setSelected(item); setNotice(''); }} style={s.listing}><View style={s.visual}><Icon name={kind === "housing" ? "housing" : "marketplace"} size={44} color="#7048FF" /><Text style={s.hint}>No photo</Text></View><Text style={s.title}>{item.title}</Text><Text style={s.price}>{money(item.price_cents)}{kind === 'housing' ? ' / month' : ''}</Text><Text>{item.city} · {item.status}</Text></Pressable>)}</View>
+        {more && !preview ? <Button title="Load more listings" onPress={() => setPages(v => v + 1)} /> : null}
       </>}
     </>}
   </View>;
 }
 const s = StyleSheet.create({
   workspace: { gap: 16, width: '100%' }, card: { backgroundColor: '#FFFFFF', padding: 20, borderRadius: 18, borderWidth: 1, borderColor: '#E9EAF1', gap: 14 },
-  title: { fontSize: 20, fontWeight: '700', color: '#11162F' }, text: { fontSize: 15, lineHeight: 23, color: '#252B4A' }, hint: { color: '#747B91', fontSize: 13, lineHeight: 20 },
+  title: { fontSize: 18, fontWeight: '700', color: '#11162F' }, text: { fontSize: 15, lineHeight: 23, color: '#252B4A' }, hint: { color: '#747B91', fontSize: 13, lineHeight: 20 },
   label: { fontSize: 14, fontWeight: '600', color: '#252B4A', marginBottom: 7 }, input: { borderWidth: 1, borderColor: '#D5D7E2', borderRadius: 12, padding: 12, fontSize: 16, color: '#11162F', backgroundColor: '#FFF' }, description: { minHeight: 100, textAlignVertical: 'top' },
   button: { paddingVertical: 12, paddingHorizontal: 18, borderRadius: 12, backgroundColor: '#7048FF', alignItems: 'center' }, buttonText: { color: '#FFF', fontWeight: '700', fontSize: 14 }, disabled: { opacity: 0.5 },
   row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }, wrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 }, choice: { padding: 10, borderRadius: 10, backgroundColor: '#F7F7FB', borderWidth: 1, borderColor: '#E9EAF1' }, chosen: { backgroundColor: '#EEE9FF', borderColor: '#7048FF' },
   notice: { color: '#116B49', padding: 12, backgroundColor: '#EAF9F2', borderRadius: 12 }, error: { color: '#B42318', padding: 12 }, price: { fontSize: 18, fontWeight: '700', color: '#7048FF' },
-  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 16 }, listing: { flexGrow: 1, flexBasis: 250, maxWidth: 450, padding: 16, gap: 10, borderRadius: 18, backgroundColor: '#FFF', borderColor: '#E9EAF1', borderWidth: 1 }, visual: { backgroundColor: '#EEE9FF', minHeight: 110, borderRadius: 12, alignItems: 'center', justifyContent: 'center' }, icon: { fontSize: 36 },
+  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 16 }, listing: { flexGrow: 1, flexBasis: 250, maxWidth: 520, padding: 16, gap: 10, borderRadius: 18, backgroundColor: '#FFF', borderColor: '#E9EAF1', borderWidth: 1 }, visual: { backgroundColor: '#EEE9FF', minHeight: 170, borderRadius: 12, alignItems: 'center', justifyContent: 'center' }, icon: { fontSize: 36 },
 });
