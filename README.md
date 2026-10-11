@@ -24,14 +24,15 @@ See `docs/STUDENT_FIRST_ECONOMICS.md` for the full policy.
 
 ## Current MVP shell
 
-The current app implements a functional local-state vertical slice with:
+The current app connects Auth, profiles, Housing and Marketplace to the dedicated Stuora backend. Other modules remain explicitly labeled demos. It includes:
 
-- Home and local Berlin discovery
+- Home demo previews and live Housing/Marketplace discovery
 - Explore by Housing, Marketplace, Trips, Jobs, Events, and People
 - Search and category switching
-- Create flow that publishes a new listing into the running app state
+- Persistent Housing/Marketplace create, read, edit and archive with owner authorization
+- Local demo creation for Trips, Jobs and Events
 - Contextual messages demo
-- Stuora Passport profile/reputation concept
+- Account signup/login/logout, session persistence and saved private/public profiles
 - Responsive web layout plus mobile navigation
 - One Expo codebase targeting web, iOS, and Android
 - Student Savings overlay with category filters, transparent normal-vs-student pricing, sponsor and eligibility disclosure, validity dates, and computed savings totals
@@ -63,14 +64,14 @@ The reviewed migrations are applied to the dedicated Stuora project `mljmifovcth
 - React Native 0.86
 - React Native Web 0.21
 - TypeScript 6
-- planned production backend: Supabase/Postgres
+- Supabase/Postgres for Auth, profiles and Housing/Marketplace
 
 ## Run locally
 
 Requirements: Node.js 22.13 or newer.
 
 ```bash
-npm install
+npm ci
 npm run web
 ```
 
@@ -99,3 +100,5 @@ Auth and profile editing now use the dedicated backend. Next, qualify real email
 Auth and profiles now use the dedicated backend. Hosted profile allow/deny tests pass and security advisors are clear. Desktop/mobile web account contract tests and iOS/Android bundle exports are in CI. See `docs/AUTH_PROFILES_CHECKPOINT.md` for verification scope and remaining release qualifications.
 
 The **You** tab supports account creation, sign-in, persisted sessions, profile creation/editing, discovery privacy and logout. Other content is explicitly labelled demo; publishing there remains local to the running app session.
+
+See `docs/LISTINGS_CHECKPOINT.md` for the current verification evidence and release limitations.

@@ -1,5 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import AccountPanel from './src/account/AccountPanel';
+import ListingWorkspace from './src/listings/ListingWorkspace';
+import { useAuth } from './src/account/AuthProvider';
 import {
   Platform,
   Pressable,
@@ -225,11 +227,12 @@ function SearchField({ value, onChangeText, placeholder, onSubmit }: { value: st
 }
 
 export default function App() {
+  const { session } = useAuth();
   const { width } = useWindowDimensions();
   const isDesktop = width >= 960;
   const [tab, setTab] = useState<Tab>('home');
   const [category, setCategory] = useState<Category>('Housing');
-  const [listings, setListings] = useState(seedListings);
+  const [listings, setListings] = useState(seedListings.filter(item => item.category !== 'Housing' && item.category !== 'Marketplace'));
   const [search, setSearch] = useState('');
   const [draftType, setDraftType] = useState<Category>('Marketplace');
   const [draftTitle, setDraftTitle] = useState('');
@@ -371,7 +374,7 @@ export default function App() {
           <View style={styles.pageHeadingRow}>
             <View>
               <Text style={styles.pageTitle}>{category}</Text>
-              <Text style={styles.pageSubtitle}>Demo listings in Berlin · local prototype.</Text>
+              <Text style={styles.pageSubtitle}>{category === 'Housing' || category === 'Marketplace' ? 'Live community listings · one shared backend.' : 'Demo listings in Berlin · local prototype.'}</Text>
             </View>
             {isDesktop ? <Pressable onPress={() => setTab('create')} style={styles.createTopButton}><Text style={styles.createTopButtonText}>＋ Create</Text></Pressable> : null}
           </View>
@@ -383,6 +386,7 @@ export default function App() {
               </Pressable>
             ))}
           </ScrollView>
+          {category === 'Housing' || category === 'Marketplace' ? <ListingWorkspace key={`${category}-${session?.user.id ?? 'public'}`} category={category} search={search} onAccount={() => setTab('profile')} /> : <>
           <View style={styles.resultHeader}>
             <Text style={styles.sectionTitle}>{filteredListings.length ? 'Recommended' : 'No matches'}</Text>
             <Text style={styles.resultCount}>{filteredListings.length} results</Text>
@@ -402,6 +406,7 @@ export default function App() {
               <Pressable onPress={() => setTab('create')} style={styles.secondaryButton}><Text style={styles.secondaryButtonText}>Create listing</Text></Pressable>
             </View>
           ) : null}
+          </>}
         </ScrollView>
       )}
 
@@ -412,7 +417,7 @@ export default function App() {
               <View style={styles.formIcon}><Text style={styles.formIconText}>＋</Text></View>
               <View style={styles.formHeaderCopy}>
                 <Text style={styles.pageTitle}>Create on Stuora</Text>
-                <Text style={styles.pageSubtitle}>Try a local demo post. It is not saved to your account yet.</Text>
+                <Text style={styles.pageSubtitle}>Housing and Marketplace posts are saved. Other categories are local demos.</Text>
               </View>
             </View>
             <Text style={styles.formLabel}>What are you posting?</Text>
@@ -423,6 +428,7 @@ export default function App() {
                 </Pressable>
               ))}
             </View>
+            {draftType === 'Housing' || draftType === 'Marketplace' ? <ListingWorkspace key={`${draftType}-${session?.user.id ?? 'public'}`} category={draftType} mode="create" onAccount={() => setTab('profile')} /> : <>
             <Text style={styles.formLabel}>Title</Text>
             <TextInput value={draftTitle} onChangeText={setDraftTitle} placeholder="e.g. Desk for sale" placeholderTextColor="#A2A8B8" style={styles.field} />
             <Text style={styles.formLabel}>Location or short description</Text>
@@ -432,6 +438,7 @@ export default function App() {
             <Pressable onPress={publish} disabled={!draftTitle.trim() || !draftSubtitle.trim()} style={({ pressed }) => [styles.primaryButton, (!draftTitle.trim() || !draftSubtitle.trim()) && styles.primaryButtonDisabled, pressed && styles.pressed]}>
               <Text style={styles.primaryButtonText}>Publish local demo listing</Text>
             </Pressable>
+            </>}
             <View style={styles.noteCard}>
               <Text style={styles.noteTitle}>Stuora quality rule</Text>
               <Text style={styles.noteText}>If a feature appears in the product, it must work end-to-end. Payments, production verification and media upload stay hidden until their backend flows are ready.</Text>
@@ -500,7 +507,7 @@ export default function App() {
                   </Pressable>
                 ))}
               </View>
-              <Pressable onPress={() => setTab('create')} style={styles.sidebarCreate}><Text style={styles.sidebarCreateText}>＋ Create</Text></Pressable>
+              <Pressable accessibilityRole="button" accessibilityLabel="Create listing" onPress={() => setTab('create')} style={styles.sidebarCreate}><Text style={styles.sidebarCreateText}>＋ Create</Text></Pressable>
               <View style={styles.sidebarFooter}><View style={styles.miniAvatar}><Text style={styles.miniAvatarText}>S</Text></View><View><Text style={styles.sidebarUser}>Student profile</Text><Text style={styles.sidebarUserSub}>Berlin</Text></View></View>
             </View>
             <View style={styles.desktopMain}>
@@ -519,7 +526,7 @@ export default function App() {
               {bottomNav.map((item) => {
                 const isCreate = item.key === 'create';
                 return (
-                  <Pressable key={item.key} onPress={() => setTab(item.key)} style={styles.navButton}>
+                  <Pressable key={item.key} accessibilityRole="button" accessibilityLabel={isCreate ? "Create listing" : item.label} onPress={() => setTab(item.key)} style={styles.navButton}>
                     <View style={[styles.navIconWrap, isCreate && styles.navIconCreate, tab === item.key && !isCreate && styles.navIconActive]}><Text style={[styles.navIcon, isCreate && styles.navIconCreateText]}>{item.icon}</Text></View>
                     {!isCreate ? <Text style={[styles.navLabel, tab === item.key && styles.navLabelActive]}>{item.label}</Text> : null}
                   </Pressable>
