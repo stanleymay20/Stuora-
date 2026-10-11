@@ -43,14 +43,14 @@ function api() {
 async function explore(page: Page, category: string) {
   if (await page.getByText('Explore', { exact: true }).count()) await page.getByText('Explore', { exact: true }).click();
   else await page.getByText(category, { exact: true }).first().click();
-  await page.getByText(new RegExp(`^(🏠|🛍️) ${category}$`)).click();
+  await page.getByRole('button', { name: `Browse ${category}`, exact: true }).click();
 }
 for (const category of ['Housing', 'Marketplace']) {
   test(`${category}: publish, second-client read, reload, edit and archive`, async ({ page, browser }) => {
     const data = api(); await data.install(page); await account(page); await signin(page);
     await expect(page.getByLabel('Display name')).toHaveValue('Alice Student');
     await page.getByRole('button', { name: 'Create listing', exact: true }).click();
-    await page.getByText(new RegExp(`^(🏠|🛍️) ${category}$`)).click();
+    await page.getByRole('button', { name: `Post ${category}`, exact: true }).click();
     await page.getByLabel('Listing title').fill(`${category} from Alice`);
     await page.getByLabel('Listing description').fill('A real persistent student listing');
     await page.getByLabel(category === 'Housing' ? 'Monthly rent (EUR)' : 'Price (EUR)').fill(category === 'Housing' ? '650.25' : '0');
@@ -130,7 +130,7 @@ test('public pagination loads beyond the first page', async ({ page }) => {
 test('Trips retain clearly labeled session-only demo publishing', async ({ page }) => {
   await api().install(page); await page.goto('/');
   await page.getByRole('button', { name: 'Create listing', exact: true }).click();
-  await page.getByText('🧳 Trips', { exact: true }).click();
+  await page.getByRole('button', { name: 'Post Trips', exact: true }).click();
   await page.getByPlaceholder('e.g. Desk for sale').fill('Demo trip from Alice');
   await page.getByPlaceholder('e.g. Neukölln · pickup only').fill('Prague weekend');
   await page.getByText('Publish local demo listing', { exact: true }).click();
@@ -139,6 +139,6 @@ test('Trips retain clearly labeled session-only demo publishing', async ({ page 
   await page.reload();
   if (await page.getByText('Explore', { exact: true }).count()) await page.getByText('Explore', { exact: true }).click();
   else await page.getByText('Trips', { exact: true }).first().click();
-  await page.getByText('🧳 Trips', { exact: true }).click();
+  await page.getByRole('button', { name: 'Browse Trips', exact: true }).click();
   await expect(page.getByText('Demo trip from Alice', { exact: true })).toHaveCount(0);
 });
