@@ -24,7 +24,7 @@ function Toggle({ label, value, onChange }: { label: string; value: boolean; onC
   return <View style={s.row}><Text>{label}</Text><Switch accessibilityLabel={label} value={value} onValueChange={onChange} /></View>;
 }
 
-export default function ListingWorkspace({ category, mode = 'browse', search = '', preview = false, onAccount }: { category: 'Housing' | 'Marketplace'; mode?: 'browse' | 'create'; search?: string; preview?: boolean; onAccount: () => void }) {
+export default function ListingWorkspace({ category, mode = 'browse', search = '', preview = false, onAccount, onMessage }: { category: 'Housing' | 'Marketplace'; mode?: 'browse' | 'create'; search?: string; preview?: boolean; onAccount: () => void; onMessage?: () => void }) {
   const { session, profile, profileLoading, initializing, error: profileError } = useAuth();
   const kind: Kind = category === 'Housing' ? 'housing' : 'marketplace';
   const userId = session?.user.id;
@@ -97,6 +97,21 @@ export default function ListingWorkspace({ category, mode = 'browse', search = '
     } catch { setActionError('Could not archive. Refresh to check its status, then retry.'); }
     finally { setBusy(false); }
   }
+  async function messageOwner() {
+    if (!selected) return;
+    setActionError(''); setNotice('');
+    if (!session || !profile || profileError) { onAccount(); return; }
+    if (selected.owner_id === userId || selected.status !== 'active') return;
+    setBusy(true);
+    try {
+      const { error: issue } = await (supabase.rpc as any)('start_listing_conversation', { p_listing_id: selected.id });
+      if (issue) throw issue;
+      setNotice('Conversation ready. Opening Messages…');
+      onMessage?.();
+    } catch {
+      setActionError('Could not start a secure conversation. Check that the listing is still active, then retry.');
+    } finally { setBusy(false); }
+  }
   const form = mode === 'create' || editing;
   return <View style={s.workspace}>
     {!preview ? <Text style={s.hint}>{category} listings are saved to Stuora. No student posting or application fee.</Text> : null}
@@ -104,7 +119,7 @@ export default function ListingWorkspace({ category, mode = 'browse', search = '
     {actionError ? <Text accessibilityRole="alert" style={s.error}>{actionError}</Text> : null}
     {form ? initializing || profileLoading ? <ActivityIndicator accessibilityLabel="Loading account" /> : !session || !profile || profileError ? <View style={s.card}><Text style={s.text}>Sign in and complete your profile to publish a listing.</Text><Button title="Open account" onPress={onAccount} /></View> : <View style={s.card}>
       <Text style={s.title}>{editing ? 'Edit listing' : `Publish ${category.toLowerCase()} listing`}</Text>
-      <Text style={s.hint}>Public text listing · photos and messaging are not available yet.</Text>
+      <Text style={s.hint}>Persistent public listing. Photos are not available yet.</Text>
       <Field label="Listing title" value={draft.title} onChange={v => change('title', v)} />
       <Field label="Listing description" value={draft.description} onChange={v => change('description', v)} multiline />
       <Field label="Listing city" value={draft.city} onChange={v => change('city', v)} />
@@ -119,15 +134,16 @@ export default function ListingWorkspace({ category, mode = 'browse', search = '
       <Text style={s.text}>{selected.description || 'No description provided.'}</Text>
       {selected.housing_details ? <Text>{selected.housing_details.housing_type} · {selected.housing_details.furnished ? 'Furnished' : 'Unfurnished'} · {selected.housing_details.bills_included ? 'Bills included' : 'Bills extra'}</Text> : null}
       {selected.marketplace_details ? <Text>Condition: {selected.marketplace_details.item_condition.replace('_', ' ')} · pickup only</Text> : null}
-      <Text style={s.hint}>Photos and messaging are not available yet.</Text>
-      {selected.owner_id === userId && selected.status === 'active' ? <><Button title="Edit listing" onPress={() => edit(selected)} disabled={busy} />{confirmArchive ? <><Text>Archive this listing? It will disappear from public discovery.</Text><Button title="Confirm archive" onPress={() => void archive()} disabled={busy} /><Button title="Keep listing" onPress={() => setConfirmArchive(false)} disabled={busy} /></> : <Button title="Archive listing" onPress={() => setConfirmArchive(true)} disabled={busy} />}</> : null}
+      <Text style={s.hint}>Photos are not available yet. Secure messaging is available for active listings.</Text>
+      {selected.owner_id !== userId && selected.status === 'active' ? <Button title={session && profile ? 'Message owner' : 'Sign in to message owner'} onPress={() => void messageOwner()} disabled={busy} /> : null}
+      {selected.owner_id === userId && selected.status === 'active' ? <><Button title="Edit listing" onPress={() => edit(selected)} disabled={busy} />{confirmArchive ? <><Text>Archive this listing? It will disappear from public discovery.</Text><Button title="Confirm archive" onPress={() => void archive()} disabled={busy} /><Button title="Keep listing" onPress={() => setConfirmArchive(false)} disabled={busy} /> </> : <Button title="Archive listing" onPress={() => setConfirmArchive(true)} disabled={busy} />}</> : null}
       <Button title="Back to listings" onPress={() => { setSelected(null); setConfirmArchive(false); setActionError(''); }} disabled={busy} />
     </View> : <>
       {!preview ? <View style={s.wrap}><Button title="Refresh listings" onPress={() => setRevision(v => v + 1)} disabled={loading} />{session ? <Button title={own ? 'Browse public listings' : 'My listings'} onPress={() => setOwn(v => !v)} /> : null}</View> : null}
       <Text style={s.hint}>{own ? 'Your listings, including archived posts.' : 'Active listings from the community.'}{search ? ' Search matches titles.' : ''}</Text>
       {loading ? <ActivityIndicator accessibilityLabel="Loading listings" /> : error ? <View><Text accessibilityRole="alert" style={s.error}>{error}</Text><Button title="Retry listings" onPress={() => setRevision(v => v + 1)} /></View> : <>
         {!items.length ? <Text style={s.text}>No {category.toLowerCase()} listings found.</Text> : null}
-        <View style={s.grid}>{(preview ? items.slice(0, 4) : items).map(item => <Pressable key={item.id} accessibilityRole="button" accessibilityLabel={`View ${item.title}`} onPress={() => { setSelected(item); setNotice(''); }} style={s.listing}><View style={s.visual}><Icon name={kind === "housing" ? "housing" : "marketplace"} size={44} color="#7048FF" /><Text style={s.hint}>No photo</Text></View><Text style={s.title}>{item.title}</Text><Text style={s.price}>{money(item.price_cents)}{kind === 'housing' ? ' / month' : ''}</Text><Text>{item.city} · {item.status}</Text></Pressable>)}</View>
+        <View style={s.grid}>{(preview ? items.slice(0, 4) : items).map(item => <Pressable key={item.id} accessibilityRole="button" accessibilityLabel={`View ${item.title}`} onPress={() => { setSelected(item); setNotice(''); }} style={s.listing}><View style={s.visual}><Icon name={kind === 'housing' ? 'housing' : 'marketplace'} size={44} color="#7048FF" /><Text style={s.hint}>No photo</Text></View><Text style={s.title}>{item.title}</Text><Text style={s.price}>{money(item.price_cents)}{kind === 'housing' ? ' / month' : ''}</Text><Text>{item.city} · {item.status}</Text></Pressable>)}</View>
         {more && !preview ? <Button title="Load more listings" onPress={() => setPages(v => v + 1)} /> : null}
       </>}
     </>}
