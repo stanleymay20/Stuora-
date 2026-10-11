@@ -76,14 +76,13 @@ test('signed-in student can start and persist a listing conversation', async ({ 
   await page.getByRole('button', { name: 'Message owner' }).click();
 
   await expect(page.getByText('Listing: Room near campus', { exact: true }).first()).toBeVisible();
-  await page.getByLabel('Message').fill('Hi, is this room still available?');
-  await page.getByRole('button', { name: 'Send message' }).click();
+  await page.getByRole('textbox', { name: 'Message', exact: true }).fill('Hi, is this room still available?');
+  await page.getByRole('button', { name: 'Send message', exact: true }).click();
   await expect(page.getByText('Hi, is this room still available?', { exact: true })).toBeVisible();
-  expect(messagesPersisted(page)).resolves.toBeTruthy();
+  await messagesPersisted(page);
 });
 
 async function messagesPersisted(page: Page) {
-  await page.getByRole('button', { name: 'Refresh messages' }).click();
+  await page.getByRole('button', { name: 'Refresh messages', exact: true }).click();
   await expect(page.getByText('Hi, is this room still available?', { exact: true })).toBeVisible();
-  return true;
 }
