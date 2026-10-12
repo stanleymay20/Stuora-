@@ -14,6 +14,7 @@ export default function AccountPanel() {
   const { session, initializing, profile, profileLoading, error, recoveryMode, reloadProfile, requestPasswordReset, completePasswordRecovery, cancelPasswordRecovery } = useAuth();
   const [signup, setSignup] = useState(false);
   const [forgot, setForgot] = useState(false);
+  const [recoveryComplete, setRecoveryComplete] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -32,7 +33,7 @@ export default function AccountPanel() {
     setPassword(''); setConfirmPassword(''); setNotice(''); setIssue('');
   }, [session?.user.id]);
   useEffect(() => {
-    if (recoveryMode) { setForgot(false); setSignup(false); setPassword(''); setConfirmPassword(''); setNotice(''); setIssue(''); }
+    if (recoveryMode) { setForgot(false); setSignup(false); setRecoveryComplete(false); setPassword(''); setConfirmPassword(''); setNotice(''); setIssue(''); }
   }, [recoveryMode]);
 
   async function authenticate() {
@@ -70,7 +71,8 @@ export default function AccountPanel() {
     const result = await completePasswordRecovery(password);
     if (result) setIssue(result);
     else {
-      setPassword(''); setConfirmPassword(''); setNotice('Password updated. Sign in with your new password.');
+      setPassword(''); setConfirmPassword(''); setRecoveryComplete(true);
+      setNotice('Your password has been updated and the recovery session was signed out.');
     }
     setBusy(false);
   }
@@ -104,6 +106,13 @@ export default function AccountPanel() {
     <Pressable accessibilityRole="button" accessibilityLabel={label} disabled={busy || disabled} onPress={action} style={[styles.button, (busy || disabled) && styles.disabled]}><Text style={styles.buttonText}>{busy ? 'Please wait…' : label}</Text></Pressable>
   );
   if (initializing && !recoveryMode) return <View style={styles.card}><ActivityIndicator /><Text>Restoring your session…</Text></View>;
+
+  if (recoveryMode && recoveryComplete) return <View style={styles.card}>
+    <Text accessibilityRole="header" style={styles.heading}>Password updated</Text>
+    <Text accessibilityRole="alert" style={styles.notice}>{notice}</Text>
+    <Text style={styles.description}>For security, the temporary recovery session has ended. Return to sign in with your new password.</Text>
+    {button('Return to sign in', () => void cancelPasswordRecovery())}
+  </View>;
 
   if (recoveryMode) return <View style={styles.card}>
     <Text accessibilityRole="header" style={styles.heading}>Choose a new password</Text>
