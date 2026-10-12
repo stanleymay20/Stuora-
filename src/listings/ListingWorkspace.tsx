@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
+import { ActivityIndicator, Image, Platform, Pressable, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
 import { useAuth } from '../account/AuthProvider';
 import { supabase } from '../backend/supabase';
 import { Icon } from '../ui/Brand';
@@ -8,12 +9,40 @@ import type { Database } from '../backend/database.types';
 type Row = Database['public']['Tables']['listings']['Row'];
 type Housing = Database['public']['Tables']['housing_details']['Row'];
 type Market = Database['public']['Tables']['marketplace_details']['Row'];
-type Item = Row & { housing_details: Housing | null; marketplace_details: Market | null };
+type Media = { id: string; listing_id: string; object_path: string; sort_order: number; created_at: string };
+type Item = Row & { housing_details: Housing | null; marketplace_details: Market | null; listing_media: Media[] };
 type Kind = 'housing' | 'marketplace';
 type Condition = Database['public']['Enums']['marketplace_condition'];
 type Draft = { title: string; description: string; city: string; price: string; housingType: string; furnished: boolean; bills: boolean; condition: Condition };
+
+const PAGE_SIZE = 24;
+const MAX_PHOTOS = 6;
+const MAX_PHOTO_BYTES = 5 * 1024 * 1024;
+const ALLOWED_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
 const blank = (): Draft => ({ title: '', description: '', city: 'Berlin', price: '', housingType: 'room', furnished: false, bills: false, condition: 'good' });
 const money = (cents: number | null) => `€${((cents ?? 0) / 100).toFixed(2)}`;
+
+function normalizeItem(raw: unknown): Item {
+  const item = raw as Item;
+  return { ...item, listing_media: [...(item.listing_media ?? [])].sort((a, b) => a.sort_order - b.sort_order || a.created_at.localeCompare(b.created_at)) };
+}
+function mediaUrl(path: string) {
+  return supabase.storage.from('listing-media').getPublicUrl(path).data.publicUrl;
+}
+function imageMime(asset: ImagePicker.ImagePickerAsset, responseType: string | null) {
+  const direct = asset.mimeType?.toLowerCase();
+  if (direct) return direct;
+  const header = responseType?.split(';')[0]?.trim().toLowerCase();
+  if (header) return header;
+  const name = (asset.fileName ?? asset.uri).toLowerCase();
+  if (/\.jpe?g($|\?)/.test(name)) return 'image/jpeg';
+  if (/\.png($|\?)/.test(name)) return 'image/png';
+  if (/\.webp($|\?)/.test(name)) return 'image/webp';
+  return '';
+}
+function extensionFor(mime: string) {
+  return mime === 'image/png' ? 'png' : mime === 'image/webp' ? 'webp' : 'jpg';
+}
 function Button({ title, onPress, disabled = false }: { title: string; onPress: () => void; disabled?: boolean }) {
   return <Pressable accessibilityRole="button" accessibilityLabel={title} disabled={disabled} onPress={onPress} style={[s.button, disabled && s.disabled]}><Text style={s.buttonText}>{title}</Text></Pressable>;
 }
@@ -22,6 +51,12 @@ function Field({ label, value, onChange, multiline = false }: { label: string; v
 }
 function Toggle({ label, value, onChange }: { label: string; value: boolean; onChange: (v: boolean) => void }) {
   return <View style={s.row}><Text>{label}</Text><Switch accessibilityLabel={label} value={value} onValueChange={onChange} /></View>;
+}
+function Photo({ media, title, index, removable, disabled, onRemove }: { media: Media; title: string; index: number; removable?: boolean; disabled?: boolean; onRemove?: () => void }) {
+  return <View style={s.photoWrap}>
+    <Image source={{ uri: mediaUrl(media.object_path) }} accessibilityLabel={`${title} photo ${index + 1}`} style={s.photo} resizeMode="cover" />
+    {removable && onRemove ? <Pressable accessibilityRole="button" accessibilityLabel={`Remove photo ${index + 1}`} disabled={disabled} onPress={onRemove} style={[s.removePhoto, disabled && s.disabled]}><Text style={s.removePhotoText}>Remove</Text></Pressable> : null}
+  </View>;
 }
 
 export default function ListingWorkspace({ category, mode = 'browse', search = '', preview = false, onAccount, onMessage }: { category: 'Housing' | 'Marketplace'; mode?: 'browse' | 'create'; search?: string; preview?: boolean; onAccount: () => void; onMessage?: () => void }) {
@@ -42,9 +77,11 @@ export default function ListingWorkspace({ category, mode = 'browse', search = '
   const [notice, setNotice] = useState('');
   const [confirmArchive, setConfirmArchive] = useState(false);
   const [actionError, setActionError] = useState('');
+
   useEffect(() => {
     setPages(1); setSelected(null); setEditing(false); setDraft(blank()); setNotice(''); setActionError(''); setConfirmArchive(false);
   }, [kind, mode, userId, own, search]);
+
   useEffect(() => {
     if (mode === 'create') { setLoading(false); return; }
     const ac = new AbortController();
@@ -54,23 +91,48 @@ export default function ListingWorkspace({ category, mode = 'browse', search = '
       setLoading(false);
       ac.abort();
     }, 15000);
-    let query = supabase.from('listings').select('*,housing_details(*),marketplace_details(*)').eq('kind', kind).order('created_at', { ascending: false }).order('id').range(0, pages * 24).abortSignal(ac.signal);
+    let query = (supabase.from('listings') as any)
+      .select('*,housing_details(*),marketplace_details(*),listing_media(id,listing_id,object_path,sort_order,created_at)')
+      .eq('kind', kind)
+      .order('created_at', { ascending: false })
+      .order('id')
+      .range(0, pages * PAGE_SIZE)
+      .abortSignal(ac.signal);
     query = own && userId ? query.eq('owner_id', userId) : query.eq('status', 'active');
-    // Search only titles; escape LIKE wildcards so user input remains literal.
     if (search.trim()) query = query.ilike('title', `%${search.trim().replace(/[\\%_]/g, '\\$&')}%`);
-    void Promise.resolve(query).then(({ data, error: issue }) => {
+    void Promise.resolve(query).then((result: any) => {
       if (ac.signal.aborted) return;
-      if (issue) setError('Could not load listings. Check your connection and retry.');
-      else { setItems((data ?? []).slice(0, pages * 24)); setMore((data?.length ?? 0) > pages * 24); }
+      if (result.error) setError('Could not load listings. Check your connection and retry.');
+      else {
+        const rows = (result.data ?? []).map(normalizeItem);
+        setItems(rows.slice(0, pages * PAGE_SIZE));
+        setMore(rows.length > pages * PAGE_SIZE);
+      }
       setLoading(false);
-    }).catch(() => { if (!ac.signal.aborted) { setError('Could not load listings. Check your connection and retry.'); setLoading(false); } }).finally(() => { clearTimeout(timeout); });
+    }).catch(() => {
+      if (!ac.signal.aborted) { setError('Could not load listings. Check your connection and retry.'); setLoading(false); }
+    }).finally(() => clearTimeout(timeout));
     return () => { clearTimeout(timeout); ac.abort(); };
   }, [kind, userId, own, revision, pages, search, mode]);
+
   const change = <K extends keyof Draft>(key: K, value: Draft[K]) => setDraft(d => ({ ...d, [key]: value }));
+  function replaceItem(item: Item) {
+    setSelected(item);
+    setItems(rows => rows.map(row => row.id === item.id ? item : row));
+  }
+  async function fetchItem(id: string) {
+    const { data, error: issue } = await (supabase.from('listings') as any)
+      .select('*,housing_details(*),marketplace_details(*),listing_media(id,listing_id,object_path,sort_order,created_at)')
+      .eq('id', id)
+      .single();
+    if (issue || !data) throw issue ?? new Error('Listing not found');
+    return normalizeItem(data);
+  }
   function edit(item: Item) {
     setDraft({ title: item.title, description: item.description, city: item.city, price: ((item.price_cents ?? 0) / 100).toFixed(2), housingType: item.housing_details?.housing_type ?? 'room', furnished: item.housing_details?.furnished ?? false, bills: item.housing_details?.bills_included ?? false, condition: item.marketplace_details?.item_condition ?? 'good' });
     setEditing(true); setActionError(''); setNotice('');
   }
+
   async function save() {
     setActionError(''); setNotice('');
     if (draft.title.trim().length < 3 || draft.title.trim().length > 140) return setActionError('Title must be between 3 and 140 characters.');
@@ -80,13 +142,79 @@ export default function ListingWorkspace({ category, mode = 'browse', search = '
     const cents = Math.round(Number(draft.price.trim()) * 100);
     setBusy(true);
     try {
-      const { error: issue } = await supabase.rpc('save_student_listing', { p_id: editing ? selected!.id : null, p_kind: kind, p_title: draft.title.trim(), p_description: draft.description.trim(), p_city: draft.city.trim(), p_price_cents: cents, p_housing_type: draft.housingType, p_furnished: draft.furnished, p_bills_included: draft.bills, p_condition: draft.condition });
-      if (issue) throw issue;
-      setNotice(editing ? 'Changes saved.' : 'Listing published and saved to your account.');
-      setDraft(blank()); setEditing(false); setSelected(null); setRevision(v => v + 1);
-    } catch { setActionError('Could not save. Your input is preserved. Check your connection and account, then retry.'); }
-    finally { setBusy(false); }
+      const { data: savedId, error: issue } = await supabase.rpc('save_student_listing', { p_id: editing ? selected!.id : null, p_kind: kind, p_title: draft.title.trim(), p_description: draft.description.trim(), p_city: draft.city.trim(), p_price_cents: cents, p_housing_type: draft.housingType, p_furnished: draft.furnished, p_bills_included: draft.bills, p_condition: draft.condition });
+      if (issue || !savedId) throw issue ?? new Error('Missing listing id');
+      setDraft(blank()); setEditing(false); setRevision(v => v + 1);
+      try {
+        const item = await fetchItem(savedId);
+        replaceItem(item);
+        setNotice('Listing saved. Add up to six real photos below.');
+      } catch {
+        setSelected(null);
+        setNotice('Listing saved. Refresh My listings to add photos.');
+      }
+    } catch {
+      setActionError('Could not save. Your input is preserved. Check your connection and account, then retry.');
+    } finally { setBusy(false); }
   }
+
+  async function addPhoto() {
+    if (!selected || !userId || selected.owner_id !== userId || selected.status !== 'active') return;
+    if (selected.listing_media.length >= MAX_PHOTOS) return setActionError(`A listing can have up to ${MAX_PHOTOS} photos.`);
+    setActionError(''); setNotice('');
+    try {
+      if (Platform.OS !== 'web') {
+        const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (!permission.granted) return setActionError('Photo-library permission is required to add a listing photo.');
+      }
+      const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], allowsMultipleSelection: false, quality: 0.85 });
+      if (result.canceled || !result.assets?.length) return;
+      const asset = result.assets[0];
+      if (asset.fileSize && asset.fileSize > MAX_PHOTO_BYTES) return setActionError('Choose an image no larger than 5 MB.');
+      setBusy(true);
+      const response = await fetch(asset.uri);
+      if (!response.ok && Platform.OS === 'web') throw new Error('Could not read selected image');
+      const bytes = await response.arrayBuffer();
+      if (bytes.byteLength > MAX_PHOTO_BYTES) return setActionError('Choose an image no larger than 5 MB.');
+      const mime = imageMime(asset, response.headers.get('content-type'));
+      if (!ALLOWED_IMAGE_TYPES.has(mime)) return setActionError('Choose a JPEG, PNG or WebP image.');
+      const token = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+      const path = `${userId}/${selected.id}/${token}.${extensionFor(mime)}`;
+      const { error: uploadIssue } = await supabase.storage.from('listing-media').upload(path, bytes, { contentType: mime, upsert: false, cacheControl: '3600' });
+      if (uploadIssue) throw uploadIssue;
+      const nextSort = selected.listing_media.reduce((max, media) => Math.max(max, media.sort_order), -1) + 1;
+      const { data: inserted, error: metadataIssue } = await (supabase.from('listing_media') as any)
+        .insert({ listing_id: selected.id, object_path: path, sort_order: nextSort })
+        .select('id,listing_id,object_path,sort_order,created_at')
+        .single();
+      if (metadataIssue || !inserted) {
+        await supabase.storage.from('listing-media').remove([path]);
+        throw metadataIssue ?? new Error('Could not save photo metadata');
+      }
+      const updated = normalizeItem({ ...selected, listing_media: [...selected.listing_media, inserted] });
+      replaceItem(updated);
+      setNotice('Photo uploaded and attached to this listing.');
+    } catch {
+      setActionError('Could not upload the photo. Your listing was not changed. Check the image and connection, then retry.');
+    } finally { setBusy(false); }
+  }
+
+  async function removePhoto(media: Media) {
+    if (!selected || !userId || selected.owner_id !== userId) return;
+    setBusy(true); setActionError(''); setNotice('');
+    try {
+      const { error: metadataIssue } = await (supabase.from('listing_media') as any).delete().eq('id', media.id).eq('listing_id', selected.id);
+      if (metadataIssue) throw metadataIssue;
+      const { error: storageIssue } = await supabase.storage.from('listing-media').remove([media.object_path]);
+      const updated = { ...selected, listing_media: selected.listing_media.filter(item => item.id !== media.id) };
+      replaceItem(updated);
+      if (storageIssue) setNotice('Photo removed from the listing. Storage cleanup needs a later retry.');
+      else setNotice('Photo removed.');
+    } catch {
+      setActionError('Could not remove the photo. Refresh and retry.');
+    } finally { setBusy(false); }
+  }
+
   async function archive() {
     if (!selected || !userId) return;
     setBusy(true); setActionError('');
@@ -97,6 +225,7 @@ export default function ListingWorkspace({ category, mode = 'browse', search = '
     } catch { setActionError('Could not archive. Refresh to check its status, then retry.'); }
     finally { setBusy(false); }
   }
+
   async function messageOwner() {
     if (!selected) return;
     setActionError(''); setNotice('');
@@ -112,14 +241,16 @@ export default function ListingWorkspace({ category, mode = 'browse', search = '
       setActionError('Could not start a secure conversation. Check that the listing is still active, then retry.');
     } finally { setBusy(false); }
   }
-  const form = mode === 'create' || editing;
+
+  const form = (mode === 'create' && !selected) || editing;
   return <View style={s.workspace}>
     {!preview ? <Text style={s.hint}>{category} listings are saved to Stuora. No student posting or application fee.</Text> : null}
     {notice ? <Text accessibilityLiveRegion="polite" style={s.notice}>{notice}</Text> : null}
     {actionError ? <Text accessibilityRole="alert" style={s.error}>{actionError}</Text> : null}
+
     {form ? initializing || profileLoading ? <ActivityIndicator accessibilityLabel="Loading account" /> : !session || !profile || profileError ? <View style={s.card}><Text style={s.text}>Sign in and complete your profile to publish a listing.</Text><Button title="Open account" onPress={onAccount} /></View> : <View style={s.card}>
       <Text style={s.title}>{editing ? 'Edit listing' : `Publish ${category.toLowerCase()} listing`}</Text>
-      <Text style={s.hint}>Persistent public listing. Photos are not available yet.</Text>
+      <Text style={s.hint}>Publish the listing first, then attach up to six JPEG, PNG or WebP photos (5 MB each).</Text>
       <Field label="Listing title" value={draft.title} onChange={v => change('title', v)} />
       <Field label="Listing description" value={draft.description} onChange={v => change('description', v)} multiline />
       <Field label="Listing city" value={draft.city} onChange={v => change('city', v)} />
@@ -130,31 +261,62 @@ export default function ListingWorkspace({ category, mode = 'browse', search = '
       <Button title={busy ? 'Saving listing…' : editing ? 'Save listing changes' : 'Publish listing'} onPress={() => void save()} disabled={busy} />
       {editing ? <Button title="Cancel editing" onPress={() => { setEditing(false); setActionError(''); }} disabled={busy} /> : null}
     </View> : selected ? <View style={s.card}>
-      <Text style={s.title}>{selected.title}</Text><Text style={s.price}>{money(selected.price_cents)}{kind === 'housing' ? ' / month' : ''}</Text><Text>{selected.city} · {selected.status}</Text>
+      <Text style={s.title}>{selected.title}</Text>
+      <View style={s.photoGrid}>{selected.listing_media.map((media, index) => <Photo key={media.id} media={media} title={selected.title} index={index} removable={selected.owner_id === userId} disabled={busy} onRemove={() => void removePhoto(media)} />)}</View>
+      {!selected.listing_media.length ? <View style={s.detailPlaceholder}><Icon name={kind === 'housing' ? 'housing' : 'marketplace'} size={48} color="#7048FF" /><Text style={s.hint}>No photos yet</Text></View> : null}
+      <Text style={s.price}>{money(selected.price_cents)}{kind === 'housing' ? ' / month' : ''}</Text><Text>{selected.city} · {selected.status}</Text>
       <Text style={s.text}>{selected.description || 'No description provided.'}</Text>
       {selected.housing_details ? <Text>{selected.housing_details.housing_type} · {selected.housing_details.furnished ? 'Furnished' : 'Unfurnished'} · {selected.housing_details.bills_included ? 'Bills included' : 'Bills extra'}</Text> : null}
       {selected.marketplace_details ? <Text>Condition: {selected.marketplace_details.item_condition.replace('_', ' ')} · pickup only</Text> : null}
-      <Text style={s.hint}>Photos are not available yet. Secure messaging is available for active listings.</Text>
+      {selected.owner_id === userId && selected.status === 'active' ? <Button title={busy ? 'Working…' : `Add photo (${selected.listing_media.length}/${MAX_PHOTOS})`} onPress={() => void addPhoto()} disabled={busy || selected.listing_media.length >= MAX_PHOTOS} /> : null}
       {selected.owner_id !== userId && selected.status === 'active' ? <Button title={session && profile ? 'Message owner' : 'Sign in to message owner'} onPress={() => void messageOwner()} disabled={busy} /> : null}
-      {selected.owner_id === userId && selected.status === 'active' ? <><Button title="Edit listing" onPress={() => edit(selected)} disabled={busy} />{confirmArchive ? <><Text>Archive this listing? It will disappear from public discovery.</Text><Button title="Confirm archive" onPress={() => void archive()} disabled={busy} /><Button title="Keep listing" onPress={() => setConfirmArchive(false)} disabled={busy} /> </> : <Button title="Archive listing" onPress={() => setConfirmArchive(true)} disabled={busy} />}</> : null}
-      <Button title="Back to listings" onPress={() => { setSelected(null); setConfirmArchive(false); setActionError(''); }} disabled={busy} />
+      {selected.owner_id === userId && selected.status === 'active' ? <><Button title="Edit listing" onPress={() => edit(selected)} disabled={busy} />{confirmArchive ? <><Text>Archive this listing? It will disappear from public discovery.</Text><Button title="Confirm archive" onPress={() => void archive()} disabled={busy} /><Button title="Keep listing" onPress={() => setConfirmArchive(false)} disabled={busy} /></> : <Button title="Archive listing" onPress={() => setConfirmArchive(true)} disabled={busy} />}</> : null}
+      <Button title={mode === 'create' ? 'Create another listing' : 'Back to listings'} onPress={() => { setSelected(null); setConfirmArchive(false); setActionError(''); setNotice(''); }} disabled={busy} />
     </View> : <>
       {!preview ? <View style={s.wrap}><Button title="Refresh listings" onPress={() => setRevision(v => v + 1)} disabled={loading} />{session ? <Button title={own ? 'Browse public listings' : 'My listings'} onPress={() => setOwn(v => !v)} /> : null}</View> : null}
       <Text style={s.hint}>{own ? 'Your listings, including archived posts.' : 'Active listings from the community.'}{search ? ' Search matches titles.' : ''}</Text>
       {loading ? <ActivityIndicator accessibilityLabel="Loading listings" /> : error ? <View><Text accessibilityRole="alert" style={s.error}>{error}</Text><Button title="Retry listings" onPress={() => setRevision(v => v + 1)} /></View> : <>
         {!items.length ? <Text style={s.text}>No {category.toLowerCase()} listings found.</Text> : null}
-        <View style={s.grid}>{(preview ? items.slice(0, 4) : items).map(item => <Pressable key={item.id} accessibilityRole="button" accessibilityLabel={`View ${item.title}`} onPress={() => { setSelected(item); setNotice(''); }} style={s.listing}><View style={s.visual}><Icon name={kind === 'housing' ? 'housing' : 'marketplace'} size={44} color="#7048FF" /><Text style={s.hint}>No photo</Text></View><Text style={s.title}>{item.title}</Text><Text style={s.price}>{money(item.price_cents)}{kind === 'housing' ? ' / month' : ''}</Text><Text>{item.city} · {item.status}</Text></Pressable>)}</View>
+        <View style={s.grid}>{(preview ? items.slice(0, 4) : items).map(item => {
+          const cover = item.listing_media[0];
+          return <Pressable key={item.id} accessibilityRole="button" accessibilityLabel={`View ${item.title}`} onPress={() => { setSelected(item); setNotice(''); setActionError(''); }} style={s.listing}>
+            {cover ? <Image source={{ uri: mediaUrl(cover.object_path) }} accessibilityLabel={`${item.title} cover photo`} style={s.cardImage} resizeMode="cover" /> : <View style={s.visual}><Icon name={kind === 'housing' ? 'housing' : 'marketplace'} size={44} color="#7048FF" /><Text style={s.hint}>No photo</Text></View>}
+            <Text style={s.title}>{item.title}</Text><Text style={s.price}>{money(item.price_cents)}{kind === 'housing' ? ' / month' : ''}</Text><Text>{item.city} · {item.status}</Text>
+          </Pressable>;
+        })}</View>
         {more && !preview ? <Button title="Load more listings" onPress={() => setPages(v => v + 1)} /> : null}
       </>}
     </>}
   </View>;
 }
+
 const s = StyleSheet.create({
-  workspace: { gap: 16, width: '100%' }, card: { backgroundColor: '#FFFFFF', padding: 20, borderRadius: 18, borderWidth: 1, borderColor: '#E9EAF1', gap: 14 },
-  title: { fontSize: 18, fontWeight: '700', color: '#11162F' }, text: { fontSize: 15, lineHeight: 23, color: '#252B4A' }, hint: { color: '#747B91', fontSize: 13, lineHeight: 20 },
-  label: { fontSize: 14, fontWeight: '600', color: '#252B4A', marginBottom: 7 }, input: { borderWidth: 1, borderColor: '#D5D7E2', borderRadius: 12, padding: 12, fontSize: 16, color: '#11162F', backgroundColor: '#FFF' }, description: { minHeight: 100, textAlignVertical: 'top' },
-  button: { paddingVertical: 12, paddingHorizontal: 18, borderRadius: 12, backgroundColor: '#7048FF', alignItems: 'center' }, buttonText: { color: '#FFF', fontWeight: '700', fontSize: 14 }, disabled: { opacity: 0.5 },
-  row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }, wrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 }, choice: { padding: 10, borderRadius: 10, backgroundColor: '#F7F7FB', borderWidth: 1, borderColor: '#E9EAF1' }, chosen: { backgroundColor: '#EEE9FF', borderColor: '#7048FF' },
-  notice: { color: '#116B49', padding: 12, backgroundColor: '#EAF9F2', borderRadius: 12 }, error: { color: '#B42318', padding: 12 }, price: { fontSize: 18, fontWeight: '700', color: '#7048FF' },
-  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 16 }, listing: { flexGrow: 1, flexBasis: 250, maxWidth: 520, padding: 16, gap: 10, borderRadius: 18, backgroundColor: '#FFF', borderColor: '#E9EAF1', borderWidth: 1 }, visual: { backgroundColor: '#EEE9FF', minHeight: 170, borderRadius: 12, alignItems: 'center', justifyContent: 'center' }, icon: { fontSize: 36 },
+  workspace: { gap: 16, width: '100%' },
+  card: { backgroundColor: '#FFFFFF', padding: 20, borderRadius: 18, borderWidth: 1, borderColor: '#E9EAF1', gap: 14 },
+  title: { fontSize: 18, fontWeight: '700', color: '#11162F' },
+  text: { fontSize: 15, lineHeight: 23, color: '#252B4A' },
+  hint: { color: '#747B91', fontSize: 13, lineHeight: 20 },
+  label: { fontSize: 14, fontWeight: '600', color: '#252B4A', marginBottom: 7 },
+  input: { borderWidth: 1, borderColor: '#D5D7E2', borderRadius: 12, padding: 12, fontSize: 16, color: '#11162F', backgroundColor: '#FFF' },
+  description: { minHeight: 100, textAlignVertical: 'top' },
+  button: { paddingVertical: 12, paddingHorizontal: 16, borderRadius: 12, backgroundColor: '#7048FF', alignItems: 'center', justifyContent: 'center' },
+  buttonText: { color: '#FFFFFF', fontWeight: '700' },
+  disabled: { opacity: 0.48 },
+  row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
+  wrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, alignItems: 'center' },
+  choice: { paddingVertical: 9, paddingHorizontal: 12, borderRadius: 999, borderWidth: 1, borderColor: '#D5D7E2', backgroundColor: '#FFFFFF' },
+  chosen: { borderColor: '#7048FF', backgroundColor: '#F1EDFF' },
+  notice: { backgroundColor: '#EDFFF4', color: '#136B3A', padding: 12, borderRadius: 10 },
+  error: { backgroundColor: '#FFF0F0', color: '#9C2D2D', padding: 12, borderRadius: 10 },
+  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 14 },
+  listing: { backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E9EAF1', borderRadius: 16, padding: 12, gap: 8, minWidth: 220, flexGrow: 1, flexBasis: 220, maxWidth: 420 },
+  visual: { height: 150, borderRadius: 12, backgroundColor: '#F4F1FF', alignItems: 'center', justifyContent: 'center', gap: 8 },
+  cardImage: { width: '100%', height: 170, borderRadius: 12, backgroundColor: '#F4F1FF' },
+  price: { fontWeight: '800', color: '#11162F', fontSize: 17 },
+  photoGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+  photoWrap: { width: 160, gap: 6 },
+  photo: { width: 160, height: 130, borderRadius: 12, backgroundColor: '#F4F1FF' },
+  removePhoto: { alignSelf: 'flex-start', paddingVertical: 7, paddingHorizontal: 10, borderRadius: 8, backgroundColor: '#F2F3F7' },
+  removePhotoText: { color: '#9C2D2D', fontWeight: '700', fontSize: 12 },
+  detailPlaceholder: { minHeight: 160, borderRadius: 14, backgroundColor: '#F4F1FF', alignItems: 'center', justifyContent: 'center', gap: 8 },
 });
