@@ -44,7 +44,7 @@ function clearRecoveryLocation() {
   const next = new URL(window.location.href);
   next.hash = '';
   next.searchParams.delete('recovery');
-  window.history.replaceState({}, '', `${next.pathname}${next.search}${next.hash}` || '/');
+  window.history.replaceState({}, '', `${next.pathname}${next.search}` || '/');
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -180,7 +180,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const { error: issue } = await supabase.auth.updateUser({ password });
       if (issue) return issue.message || 'Could not update your password. Request a new link and retry.';
       clearRecoveryLocation();
-      setRecoveryMode(false);
       setError('');
       await supabase.auth.signOut({ scope: 'local' });
       return null;
