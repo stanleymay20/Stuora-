@@ -16,8 +16,39 @@ async function database(inheritedGrants) {
     create table auth.users (id uuid primary key);
     create function auth.uid() returns uuid language sql stable as
       $$ select nullif(current_setting('request.jwt.claim.sub', true), '')::uuid $$;
-    grant usage on schema public, auth to anon, authenticated;
+
+    -- Supabase Storage is platform-managed in hosted projects. Model only the
+    -- contract our migrations depend on so PGlite exercises the real policies.
+    create schema storage;
+    create table storage.buckets (
+      id text primary key,
+      name text not null,
+      public boolean not null default false,
+      file_size_limit bigint,
+      allowed_mime_types text[]
+    );
+    create table storage.objects (
+      id uuid primary key default gen_random_uuid(),
+      bucket_id text not null,
+      name text not null,
+      unique (bucket_id, name)
+    );
+    alter table storage.objects enable row level security;
+    create function storage.foldername(name text) returns text[] language sql immutable as $$
+      select case
+        when array_length(string_to_array(name, '/'), 1) > 1
+          then (string_to_array(name, '/'))[1:array_length(string_to_array(name, '/'), 1) - 1]
+        else array[]::text[]
+      end
+    $$;
+    create function storage.filename(name text) returns text language sql immutable as $$
+      select (string_to_array(name, '/'))[array_length(string_to_array(name, '/'), 1)]
+    $$;
+
+    grant usage on schema public, auth, storage to anon, authenticated;
     grant execute on function auth.uid() to anon, authenticated;
+    grant execute on function storage.foldername(text), storage.filename(text) to anon, authenticated;
+    grant select, insert, update, delete on storage.objects to authenticated;
     ${inheritedGrants ? 'alter default privileges in schema public grant all on tables to anon, authenticated;' : ''}
   `);
   const files = readdirSync(new URL('../supabase/migrations/', import.meta.url)).filter(f => f.endsWith('.sql')).sort();
@@ -125,6 +156,27 @@ for (const inheritedGrants of [false, true]) {
       await deny(a, `insert into public.reports (reporter_id, reported_user_id, reason) values ('${b}', '${c}', 'spam')`);
       await count('authenticated', a, `insert into public.reports (reporter_id, reported_user_id, reason) values ('${a}', '${c}', 'spam') returning *`, 1);
       await count('authenticated', b, 'select * from public.reports', 0);
+
+      -- Media metadata follows listing visibility and ownership.
+      await count('authenticated', a, `insert into public.listing_media (listing_id, object_path, sort_order) values ('${house}', '${a}/${house}/room.jpg', 0) returning *`, 1);
+      await count('anon', null, `select * from public.listing_media where listing_id = '${house}'`, 1);
+      await deny(b, `insert into public.listing_media (listing_id, object_path) values ('${house}', '${b}/${house}/attack.jpg')`);
+      await deny(a, `insert into public.listing_media (listing_id, object_path) values ('${house}', '${a}/${job}/wrong-listing.jpg')`);
+      await count('authenticated', a, `insert into public.listing_media (listing_id, object_path) values ('${draft}', '${a}/${draft}/draft.jpg') returning *`, 1);
+      await count('anon', null, `select * from public.listing_media where listing_id = '${draft}'`, 0);
+      await count('authenticated', a, `select * from public.listing_media where listing_id = '${draft}'`, 1);
+      await count('authenticated', b, `delete from public.listing_media where listing_id = '${house}' returning *`, 0);
+
+      -- Hosted Supabase owns these tables; the harness grants authenticated CRUD
+      -- so the same storage.objects policies can be exercised locally.
+      await count('authenticated', a, `insert into storage.objects (bucket_id, name) values ('listing-media', '${a}/${house}/room.jpg') returning *`, 1);
+      await deny(b, `insert into storage.objects (bucket_id, name) values ('listing-media', '${b}/${house}/attack.jpg')`);
+      await deny(a, `insert into storage.objects (bucket_id, name) values ('listing-media', '${a}/${job}/job.jpg')`);
+      await count('authenticated', a, `insert into storage.objects (bucket_id, name) values ('avatars', '${a}/avatar') returning *`, 1);
+      await deny(b, `insert into storage.objects (bucket_id, name) values ('avatars', '${a}/avatar-2')`);
+      await count('authenticated', b, `select * from storage.objects where bucket_id = 'avatars'`, 0);
+      await count('authenticated', a, `select * from storage.objects where bucket_id = 'avatars'`, 1);
+
       const save = (listingId, kind, title, price = 3500, housingType = 'room', condition = 'good') => `select public.save_student_listing(${listingId ? `'${listingId}'` : 'null'}, '${kind}', '${title}', 'Student listing', 'Berlin', ${price}, '${housingType}', true, true, '${condition}') as id`;
       const { rows: created } = await as('authenticated', a, save(null, 'housing', 'Persistent room', 65000));
       const liveHouse = created[0].id;
