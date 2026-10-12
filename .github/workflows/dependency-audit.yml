@@ -1,0 +1,42 @@
+name: Dependency security audit
+
+on:
+  push:
+    branches:
+      - audit/dependencies-2026-10-12
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.13.0
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - name: Full dependency audit
+        shell: bash
+        run: |
+          npm audit --json > full-audit.json || true
+          node - <<'NODE'
+          const fs = require('fs');
+          const a = JSON.parse(fs.readFileSync('full-audit.json','utf8'));
+          const rows = Object.entries(a.vulnerabilities ?? {}).map(([name,v]) => ({name,severity:v.severity,isDirect:v.isDirect,range:v.range,fixAvailable:v.fixAvailable,via:(v.via ?? []).map(x => typeof x === 'string' ? x : {source:x.source,name:x.name,severity:x.severity,title:x.title,range:x.range,url:x.url}),effects:v.effects ?? []}));
+          console.log('FULL_AUDIT_COUNTS', JSON.stringify(a.metadata?.vulnerabilities ?? {}));
+          console.log('FULL_AUDIT_ROWS', JSON.stringify(rows));
+          NODE
+      - name: Production dependency audit
+        shell: bash
+        run: |
+          npm audit --omit=dev --json > prod-audit.json || true
+          node - <<'NODE'
+          const fs = require('fs');
+          const a = JSON.parse(fs.readFileSync('prod-audit.json','utf8'));
+          const rows = Object.entries(a.vulnerabilities ?? {}).map(([name,v]) => ({name,severity:v.severity,isDirect:v.isDirect,range:v.range,fixAvailable:v.fixAvailable,via:(v.via ?? []).map(x => typeof x === 'string' ? x : {source:x.source,name:x.name,severity:x.severity,title:x.title,range:x.range,url:x.url}),effects:v.effects ?? []}));
+          console.log('PROD_AUDIT_COUNTS', JSON.stringify(a.metadata?.vulnerabilities ?? {}));
+          console.log('PROD_AUDIT_ROWS', JSON.stringify(rows));
+          NODE
