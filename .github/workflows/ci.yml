@@ -12,6 +12,7 @@ jobs:
     timeout-minutes: 15
     env:
       EXPO_PUBLIC_STUORA_ENV: test
+      EXPO_PUBLIC_STUORA_COMPLETE_POSTING: 'true'
       EXPO_PUBLIC_SUPABASE_URL: https://stuora-test.invalid
       EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY: sb_publishable_test_fixture
     steps:

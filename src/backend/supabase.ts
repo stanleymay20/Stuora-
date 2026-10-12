@@ -2,7 +2,7 @@ import 'react-native-url-polyfill/auto';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
 import { createClient, processLock } from '@supabase/supabase-js';
-import type { Database } from './database.types';
+import type { PostingDatabase } from './posting.contract';
 import { validateBackendConfig } from './config';
 
 // Public project identifiers only. Authorization comes from Auth + RLS.
@@ -13,7 +13,7 @@ const { url, key } = validateBackendConfig({
   key: process.env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY,
   webOrigin: process.env.EXPO_PUBLIC_STUORA_WEB_ORIGIN,
 }, Platform.OS === 'web' && typeof window !== 'undefined' ? window.location.origin : undefined);
-export const supabase = createClient<Database>(url, key, {
+export const supabase = createClient<PostingDatabase>(url, key, {
   auth: {
     storage: AsyncStorage,
     autoRefreshToken: true,

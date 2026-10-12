@@ -14,6 +14,8 @@ function api() {
     install: async (page: Page) => {
       await page.route('https://stuora-test.invalid/**', async route => {
         const req = route.request(), url = new URL(req.url());
+        if (url.pathname.endsWith('/user_blocks')) return route.fulfill({ json: null, contentType: 'application/vnd.pgrst.object+json' });
+        if (url.pathname.endsWith('/publisher_requests')) return route.fulfill({ json: null, contentType: 'application/vnd.pgrst.object+json' });
         if (url.pathname.endsWith('/token')) return route.fulfill({ json: session() });
         if (url.pathname.endsWith('/logout')) return route.fulfill({ status: 204 });
         if (url.pathname.endsWith('/profiles')) return route.fulfill({ json: { id: userId, display_name: 'Alice Student', city: 'Berlin', bio: '', student_status: 'unverified', is_discoverable: true }, contentType: 'application/vnd.pgrst.object+json' });
@@ -186,10 +188,10 @@ test('public pagination loads beyond the first page', async ({ page }) => {
   await expect(page.getByRole('button', { name: 'Load more listings' })).toHaveCount(0);
 });
 
-test('unsupported categories cannot publish session-only data', async ({ page }) => {
+test('enabled categories expose real posting and never session-only demos', async ({ page }) => {
   await api().install(page); await page.goto('/');
   await page.getByRole('button', { name: 'Create listing', exact: true }).click();
-  await expect(page.getByRole('button', { name: 'Post Trips', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Post Trips', exact: true })).toBeVisible();
   await expect(page.getByText('Publish local demo listing', { exact: true })).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Post Housing', exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Post Marketplace', exact: true })).toBeVisible();

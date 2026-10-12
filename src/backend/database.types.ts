@@ -720,7 +720,13 @@ export type Database = {
       account_kind: "student" | "employer" | "partner"
       application_status: "submitted" | "reviewing" | "accepted" | "rejected"
       benefit_type: "discount" | "subsidy" | "freebie" | "cashback"
-      listing_kind: "housing" | "marketplace" | "trip" | "job" | "event"
+      listing_kind:
+        | "housing"
+        | "marketplace"
+        | "trip"
+        | "job"
+        | "event"
+        | "post"
       listing_status: "draft" | "active" | "reserved" | "closed"
       marketplace_condition: "new" | "like_new" | "good" | "fair"
       report_reason:
@@ -866,7 +872,7 @@ export const Constants = {
       account_kind: ["student", "employer", "partner"],
       application_status: ["submitted", "reviewing", "accepted", "rejected"],
       benefit_type: ["discount", "subsidy", "freebie", "cashback"],
-      listing_kind: ["housing", "marketplace", "trip", "job", "event"],
+      listing_kind: ["housing", "marketplace", "trip", "job", "event", "post"],
       listing_status: ["draft", "active", "reserved", "closed"],
       marketplace_condition: ["new", "like_new", "good", "fair"],
       report_reason: [

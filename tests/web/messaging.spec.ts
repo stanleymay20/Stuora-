@@ -35,6 +35,7 @@ async function messagingBackend(page: Page) {
   await page.route('https://stuora-test.invalid/**', async route => {
     const request = route.request();
     const url = new URL(request.url());
+    if (url.pathname.endsWith('/user_blocks')) return route.fulfill({ json: null, contentType: 'application/vnd.pgrst.object+json' });
     if (url.pathname.endsWith('/token')) return route.fulfill({ json: authSession() });
     if (url.pathname.endsWith('/logout')) return route.fulfill({ status: 204 });
     if (url.pathname.endsWith('/profiles') && request.method() === 'GET') return route.fulfill({ json: profile, contentType: 'application/vnd.pgrst.object+json' });

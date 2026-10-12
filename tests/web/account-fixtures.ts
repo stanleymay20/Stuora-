@@ -16,6 +16,7 @@ export async function backend(page: Page, failProfile = false) {
   await page.route('https://stuora-test.invalid/**', async route => {
     const req = route.request();
     const url = new URL(req.url());
+    if (url.pathname.endsWith('/user_blocks')) return route.fulfill({ json: null, contentType: 'application/vnd.pgrst.object+json' });
     if (url.pathname.endsWith('/listings') && req.method() === 'GET') return route.fulfill({ json: [] });
     if (url.pathname.endsWith('/student_benefits') && req.method() === 'GET') return route.fulfill({ json: [] });
     if (url.pathname.endsWith('/signup')) return route.fulfill({ json: { user: session().user, session: null } });
