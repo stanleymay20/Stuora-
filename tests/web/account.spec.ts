@@ -32,7 +32,7 @@ test('confirmation-required signup never shows a signed-in account', async ({ pa
   await page.getByLabel('Email', { exact: true }).fill('new@example.invalid');
   await page.getByLabel('Password', { exact: true }).fill('signup-password');
   await page.getByRole('button', { name: 'Create account', exact: true }).click();
-  await expect(page.getByText('Check your email and confirm your account, then return here to sign in.')).toBeVisible();
+  await expect(page.getByText('Check your email and confirm your account, then return to Stuora.')).toBeVisible();
   await expect(page.getByLabel('Display name')).toHaveCount(0);
 });
 
