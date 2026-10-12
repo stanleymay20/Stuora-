@@ -73,8 +73,9 @@ export default function MessageWorkspace({ onAccount }: { onAccount: () => void 
       if (error) throw error;
       setDraft('');
       setRevision(value => value + 1);
-    } catch {
-      setMessageIssue('Could not send your message. Your text is preserved; check your connection and retry.');
+    } catch (issue) {
+      const limited = !!issue && typeof issue === 'object' && 'code' in issue && issue.code === 'P0001';
+      setMessageIssue(limited ? 'Message limit reached. Your text is preserved; try again later.' : 'Could not send your message. Your text is preserved; check your connection and retry.');
     } finally { setSending(false); }
   }
 

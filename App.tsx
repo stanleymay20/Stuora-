@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import AccountPanel from './src/account/AccountPanel';
 import ListingWorkspace from './src/listings/ListingWorkspace';
+import type { PostingCategory } from './src/backend/posting.contract';
+import { completePosting } from './src/backend/features';
 import MessageWorkspace from './src/messages/MessageWorkspace';
 import PeopleDirectory from './src/people/PeopleDirectory';
 import { useAuth } from './src/account/AuthProvider';
@@ -20,7 +22,7 @@ import {
 } from 'react-native';
 
 type Tab = 'home' | 'explore' | 'create' | 'messages' | 'profile';
-type Category = 'Housing' | 'Marketplace' | 'Trips' | 'Jobs' | 'Events' | 'People';
+type Category = PostingCategory | 'People';
 
 const BRAND = {
   ink: '#11162F',
@@ -43,6 +45,7 @@ const categories: { name: Category; emoji: string; tint: string }[] = [
   { name: 'Trips', emoji: '🧳', tint: '#E9F7FF' },
   { name: 'Jobs', emoji: '💼', tint: '#FFF4E8' },
   { name: 'Events', emoji: '🎟️', tint: '#FFF0F5' },
+  { name: 'Posts', emoji: '💬', tint: '#F1EEFF' },
   { name: 'People', emoji: '👥', tint: '#F1EEFF' },
 ];
 
@@ -98,7 +101,7 @@ export default function App() {
   const [tab, setTab] = useState<Tab>('home');
   const [category, setCategory] = useState<Category>('Housing');
   const [search, setSearch] = useState('');
-  const [draftType, setDraftType] = useState<'Housing' | 'Marketplace'>('Marketplace');
+  const [draftType, setDraftType] = useState<PostingCategory>('Marketplace');
 
   const goToCategory = (next: Category) => {
     setCategory(next);
@@ -163,8 +166,11 @@ export default function App() {
             <Text style={styles.sectionHint}>Everything outside the classroom</Text>
           </View>
           <View style={styles.categoryGrid}>
-            {categories.map((item) => <CategoryTile key={item.name} item={item} onPress={() => goToCategory(item.name)} />)}
+            {categories.filter(item=>completePosting || item.name!=='Posts').map((item) => <CategoryTile key={item.name} item={item} onPress={() => goToCategory(item.name)} />)}
           </View>
+
+          {completePosting ? <><View style={styles.sectionHeaderInline}><Text style={styles.sectionTitle}>Community posts</Text><Pressable accessibilityRole="button" accessibilityLabel="See all posts" onPress={()=>goToCategory('Posts')}><Text style={styles.linkText}>See all</Text></Pressable></View>
+          <ListingWorkspace key={`home-posts-${session?.user.id ?? 'public'}`} category="Posts" preview onAccount={()=>setTab('profile')} onMessage={()=>setTab('messages')} /></> : null}
 
           <View style={styles.sectionHeaderInline}><Text style={styles.sectionTitle}>Community housing</Text><Pressable accessibilityRole="button" accessibilityLabel="See all housing" onPress={() => goToCategory('Housing')}><Text style={styles.linkText}>See all</Text></Pressable></View>
           <ListingWorkspace key={`home-${session?.user.id ?? 'public'}`} category="Housing" preview onAccount={() => setTab('profile')} onMessage={() => setTab('messages')} />
@@ -179,19 +185,19 @@ export default function App() {
           <View style={styles.pageHeadingRow}>
             <View>
               <Text style={styles.pageTitle}>{category}</Text>
-              <Text style={styles.pageSubtitle}>{category === 'Housing' || category === 'Marketplace' ? 'Live community listings · one shared backend.' : category === 'People' ? 'Discoverable profiles from Stuora.' : 'This category is not available yet.'}</Text>
+              <Text style={styles.pageSubtitle}>{category === 'People' ? 'Discoverable profiles from Stuora.' : 'Community listings saved to Stuora.'}</Text>
             </View>
-            {isDesktop && (category === 'Housing' || category === 'Marketplace') ? <Pressable accessibilityRole="button" accessibilityLabel="Create in this category" onPress={() => { setDraftType(category); setTab('create'); }} style={styles.createTopButton}><Text style={styles.createTopButtonText}>Create</Text></Pressable> : null}
+            {isDesktop && (category === 'Housing' || category === 'Marketplace' || (completePosting && category !== 'People')) ? <Pressable accessibilityRole="button" accessibilityLabel="Create in this category" onPress={() => { setDraftType(category); setTab('create'); }} style={styles.createTopButton}><Text style={styles.createTopButtonText}>Create</Text></Pressable> : null}
           </View>
-          {category === 'Housing' || category === 'Marketplace' || category === 'People' ? <SearchField value={search} onChangeText={setSearch} placeholder={`Search ${category.toLowerCase()}…`} /> : null}
+          {<SearchField value={search} onChangeText={setSearch} placeholder={`Search ${category.toLowerCase()}…`} />}
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipsRow}>
-            {categories.map((item) => (
+            {categories.filter(item=>completePosting || item.name!=='Posts').map((item) => (
               <Pressable accessibilityRole="button" accessibilityLabel={`Browse ${item.name}`} key={item.name} onPress={() => { setCategory(item.name); setSearch(''); }}>
                 <Pill active={category === item.name}>{item.name}</Pill>
               </Pressable>
             ))}
           </ScrollView>
-          {category === 'Housing' || category === 'Marketplace' ? <ListingWorkspace key={`${category}-${session?.user.id ?? 'public'}`} category={category} search={search} onAccount={() => setTab('profile')} onMessage={() => setTab('messages')} /> : category === 'People' ? <PeopleDirectory key={session?.user.id ?? 'public'} search={search} onAccount={() => setTab('profile')} /> : <View style={styles.emptyState}><Icon name={category} size={40} color={BRAND.purple} /><Text style={styles.emptyTitle}>{category} is not available yet</Text><Text style={styles.emptyText}>Posting and participation will open after persistence and permissions are verified. No sample offers are displayed.</Text></View>}
+          {category === 'Housing' || category === 'Marketplace' || (completePosting && category !== 'People') ? <ListingWorkspace key={`${category}-${session?.user.id ?? 'public'}`} category={category as PostingCategory} search={search} onAccount={() => setTab('profile')} onMessage={() => setTab('messages')} /> : category === 'People' ? <PeopleDirectory key={session?.user.id ?? 'public'} search={search} onAccount={() => setTab('profile')} /> : <View style={styles.emptyState}><Icon name={category} size={40} color={BRAND.purple} /><Text style={styles.emptyTitle}>{category} is not available yet</Text><Text style={styles.emptyText}>Posting and participation will open after persistence and permissions are verified. No sample offers are displayed.</Text></View>}
         </ScrollView>
       )}
 
@@ -202,13 +208,13 @@ export default function App() {
               <View style={styles.formIcon}><Icon name="plus" color={BRAND.purple} size={26} /></View>
               <View style={styles.formHeaderCopy}>
                 <Text style={styles.pageTitle}>Create on Stuora</Text>
-                <Text style={styles.pageSubtitle}>Create a Housing or Marketplace listing saved to your account.</Text>
+                <Text style={styles.pageSubtitle}>{completePosting ? 'Share a community post, listing, trip, event or job opportunity.' : 'Create a Housing or Marketplace listing saved to your account.'}</Text>
               </View>
             </View>
             <Text style={styles.formLabel}>What are you posting?</Text>
             <View style={styles.wrapRow}>
-              {categories.filter((item) => item.name === 'Housing' || item.name === 'Marketplace').map((item) => (
-                <Pressable accessibilityRole="button" accessibilityLabel={`Post ${item.name}`} key={item.name} onPress={() => { if (item.name === 'Housing' || item.name === 'Marketplace') setDraftType(item.name); }}>
+              {categories.filter((item) => item.name !== 'People' && (completePosting || item.name === 'Housing' || item.name === 'Marketplace')).map((item) => (
+                <Pressable accessibilityRole="button" accessibilityLabel={`Post ${item.name}`} key={item.name} onPress={() => { if (item.name !== 'People') setDraftType(item.name); }}>
                   <Pill active={draftType === item.name}>{item.name}</Pill>
                 </Pressable>
               ))}
@@ -216,7 +222,7 @@ export default function App() {
             <ListingWorkspace key={`${draftType}-${session?.user.id ?? 'public'}`} category={draftType} mode="create" onAccount={() => setTab('profile')} onMessage={() => setTab('messages')} />
             <View style={styles.noteCard}>
               <Text style={styles.noteTitle}>Stuora quality rule</Text>
-              <Text style={styles.noteText}>If a feature appears in the product, it must work end-to-end. Payments, production verification and media upload stay hidden until their backend flows are ready.</Text>
+              <Text style={styles.noteText}>If a feature appears in the product, it must work end-to-end. Posts and listings persist in Stuora. Participation does not process payments. Job publishing requires approved publisher access.</Text>
             </View>
           </View>
         </ScrollView>
