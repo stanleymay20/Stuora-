@@ -18,7 +18,7 @@ No Supabase, Auth, Storage, application-domain or payment package appears as an 
 
 A normal `npm audit fix --package-lock-only` makes no dependency change. npm only offers `--force` resolutions that downgrade the supported stack to Expo 44 and React Native 0.72. Those changes are incompatible with the current Expo SDK 57 / React Native 0.86 application and are therefore rejected.
 
-At audit time, the repository resolves `braces` 3.0.3 and `node-forge` 1.4.0; those are the latest upstream stable releases available from their packages. `uuid` has a patched 11.1.1 line, but the current `xcode` package declares `uuid ^7.0.3`; forcing 11.x would violate the parent's declared dependency contract. No unsupported override is accepted without upstream compatibility evidence plus the full Stuora verification gate.
+At audit time, the repository resolves `braces` 3.0.3 and `node-forge` 1.4.0; the earlier registry investigation recorded these as the latest stable releases; this is a dated observation, not a continuing guarantee. `uuid` has a patched 11.1.1 line, but the current `xcode` package declares `uuid ^7.0.3`; forcing 11.x would violate the parent's declared dependency contract. No unsupported override is accepted without upstream compatibility evidence plus the full Stuora verification gate.
 
 ## Compensating controls
 
@@ -32,3 +32,7 @@ At audit time, the repository resolves `braces` 3.0.3 and `node-forge` 1.4.0; th
 ## Release decision
 
 These three upstream build-tool advisories are a documented temporary risk acceptance, not a claim that the packages are vulnerability-free. Commercial GA remains blocked if a new application/runtime vulnerability appears, if a critical advisory is reported, or if upstream publishes a compatible fix that has not yet been evaluated. The baseline should be revisited on every Expo SDK update and whenever npm reports a new advisory root.
+
+## Gate validation
+
+`security/production-audit-baseline.json` records the observed npm audit v2 report as an upper bound. The checker rejects process/registry errors, missing data, inconsistent counts, critical or increased per-package severity, higher advisory CVSS, new advisory identity, changed direct exposure, new vulnerable installation paths, changed package-to-advisory edges and dangling/unrooted chains. Package, path and advisory removals and severity reductions are accepted. Changed advisory affected ranges require review. Failure-path regression tests run before the live audit. No baseline is regenerated automatically. CI checks out the exact PR head; all existing Expo, database, TypeScript, browser and native gates remain mandatory.

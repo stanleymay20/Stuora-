@@ -1,72 +1,83 @@
 import { spawnSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
+import { pathToFileURL } from 'node:url';
 
-const allowedPackages = new Set([
-  '@expo/cli',
-  '@expo/code-signing-certificates',
-  '@expo/config',
-  '@expo/config-plugins',
-  '@expo/inline-modules',
-  '@expo/local-build-cache-provider',
-  '@expo/metro',
-  '@expo/metro-config',
-  '@expo/prebuild-config',
-  '@react-native/community-cli-plugin',
-  '@react-native/virtualized-lists',
-  'braces',
-  'expo',
-  'metro',
-  'metro-config',
-  'metro-file-map',
-  'metro-transform-worker',
-  'micromatch',
-  'node-forge',
-  'react-native',
-  'uuid',
-  'xcode',
-]);
+const baseline = JSON.parse(readFileSync(new URL('../security/production-audit-baseline.json', import.meta.url), 'utf8'));
+const severities = ['info', 'low', 'moderate', 'high', 'critical'];
+const object = value => value !== null && typeof value === 'object' && !Array.isArray(value);
+const requireValid = (condition, message) => { if (!condition) throw new Error(message); };
+const rank = value => severities.indexOf(value);
 
-const allowedAdvisories = new Set([
-  'https://github.com/advisories/GHSA-vfj7-8cjw-p6xm',
-  'https://github.com/advisories/GHSA-86w9-cpqp-85rv',
-  'https://github.com/advisories/GHSA-w5hq-g745-h8pq',
-]);
-
-const run = spawnSync('npm', ['audit', '--omit=dev', '--json'], { encoding: 'utf8' });
-if (!run.stdout) {
-  console.error(run.stderr || 'npm audit produced no JSON output.');
-  process.exit(1);
-}
-
-let report;
-try {
-  report = JSON.parse(run.stdout);
-} catch (error) {
-  console.error('Could not parse npm audit JSON.', error);
-  process.exit(1);
-}
-
-const vulnerabilities = report.vulnerabilities ?? {};
-const names = Object.keys(vulnerabilities);
-const unexpectedPackages = names.filter(name => !allowedPackages.has(name));
-const advisoryUrls = new Set();
-for (const value of Object.values(vulnerabilities)) {
-  for (const via of value.via ?? []) {
-    if (typeof via === 'object' && via?.url) advisoryUrls.add(via.url);
+// Exported for failure-path regression tests. CI always obtains a fresh audit itself.
+export function validateAudit(report, status) {
+  requireValid(status === 0 || status === 1, 'npm audit failed to execute successfully.');
+  requireValid(object(report) && !report.error && report.auditReportVersion === 2,
+    'Missing, errored or unsupported audit report.');
+  requireValid(object(report.vulnerabilities) && object(report.metadata?.vulnerabilities),
+    'Missing vulnerability data or metadata.');
+  const entries = Object.entries(report.vulnerabilities);
+  const counts = Object.fromEntries(severities.map(level => [level, 0]));
+  for (const [name, value] of entries) {
+    const accepted = baseline.vulnerabilities[name];
+    requireValid(Object.hasOwn(baseline.vulnerabilities, name), `New vulnerable package: ${name}`);
+    requireValid(object(value) && value.name === name && rank(value.severity) >= 0,
+      `Malformed package: ${name}`);
+    requireValid(value.severity !== 'critical' && rank(value.severity) <= rank(accepted.severity),
+      `Severity increased: ${name}`);
+    requireValid(typeof value.isDirect === 'boolean' && value.isDirect === accepted.isDirect,
+      `Dependency exposure changed: ${name}`);
+    requireValid(Array.isArray(value.nodes) && value.nodes.length > 0 &&
+      new Set(value.nodes).size === value.nodes.length &&
+      value.nodes.every(node => typeof node === 'string' && accepted.nodes.includes(node)),
+      `New or malformed vulnerable installation path: ${name}`);
+    requireValid(Array.isArray(value.via) && value.via.length > 0, `Missing advisory chain: ${name}`);
+    for (const via of value.via) {
+      if (typeof via === 'string') {
+        requireValid(accepted.via.includes(via) && Object.hasOwn(report.vulnerabilities, via),
+          `New or dangling advisory chain: ${name} -> ${via}`);
+      } else {
+        requireValid(object(via), `Malformed advisory: ${name}`);
+        const known = accepted.via.find(item => object(item) && item.url === via.url && item.source === via.source);
+        requireValid(known && via.name === known.name && via.dependency === known.dependency &&
+          typeof via.range === 'string' && via.range === known.range && rank(via.severity) >= 0 &&
+          via.severity !== 'critical' && rank(via.severity) <= rank(known.severity) &&
+          object(via.cvss) && typeof via.cvss.score === 'number' && Number.isFinite(via.cvss.score) &&
+          via.cvss.score >= 0 && via.cvss.score <= known.cvss.score,
+          `New, malformed or worsened advisory: ${name}`);
+      }
+    }
+    counts[value.severity]++;
   }
+  // Metro and React Native contain cycles; each package must still reach a real advisory.
+  function reachesRoot(name, seen = new Set()) {
+    if (seen.has(name)) return false;
+    const next = new Set(seen).add(name);
+    return report.vulnerabilities[name].via.some(via => object(via) || reachesRoot(via, next));
+  }
+  for (const [name] of entries) requireValid(reachesRoot(name), `Unrooted advisory chain: ${name}`);
+  const metadata = report.metadata.vulnerabilities;
+  for (const level of severities) {
+    requireValid(Number.isSafeInteger(metadata[level]) && metadata[level] === counts[level],
+      `Inconsistent ${level} vulnerability count.`);
+  }
+  requireValid(Number.isSafeInteger(metadata.total) && metadata.total === entries.length &&
+    metadata.total <= baseline.metadata.vulnerabilities.total, 'Inconsistent or increased vulnerability total.');
+  requireValid(status === (entries.length ? 1 : 0), 'Audit exit status disagrees with findings.');
+  return entries.length;
 }
-const unexpectedAdvisories = [...advisoryUrls].filter(url => !allowedAdvisories.has(url));
-const critical = report.metadata?.vulnerabilities?.critical ?? 0;
-const total = report.metadata?.vulnerabilities?.total ?? names.length;
 
-console.log(`Production dependency audit: ${total} inherited findings, ${critical} critical.`);
-console.log(`Known upstream advisory URLs: ${[...advisoryUrls].sort().join(', ') || 'none'}`);
-
-if (critical > 0 || unexpectedPackages.length || unexpectedAdvisories.length || total > allowedPackages.size) {
-  if (unexpectedPackages.length) console.error(`Unexpected vulnerable packages: ${unexpectedPackages.join(', ')}`);
-  if (unexpectedAdvisories.length) console.error(`Unexpected advisories: ${unexpectedAdvisories.join(', ')}`);
-  if (critical > 0) console.error('Critical production dependency findings are never accepted by the baseline.');
-  if (total > allowedPackages.size) console.error(`Audit finding count ${total} exceeds controlled baseline ${allowedPackages.size}.`);
-  process.exit(1);
+export function auditProduction(runAudit = spawnSync) {
+  const run = runAudit('npm', ['audit', '--omit=dev', '--json'], {
+    encoding: 'utf8', timeout: 120_000, maxBuffer: 8 * 1024 * 1024,
+  });
+  requireValid(!run.error && !run.signal && typeof run.stdout === 'string' && run.stdout.trim(),
+    'npm audit failed, timed out or produced no JSON.');
+  const count = validateAudit(JSON.parse(run.stdout), run.status);
+  console.log(`Production dependency audit: ${count} known findings (upper bound 22), no increased risk.`);
+  return count;
 }
 
-console.log('No new production dependency advisory exceeds the controlled Expo/Metro build-tool baseline.');
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  try { auditProduction(); }
+  catch (error) { console.error(`Dependency security gate failed: ${error.message}`); process.exitCode = 1; }
+}
