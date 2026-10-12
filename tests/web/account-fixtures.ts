@@ -11,12 +11,27 @@ export async function backend(page: Page, failProfile = false) {
   let profile: Record<string, unknown> | null = null;
   let writes = 0;
   let reads = 0;
+  let recoveries = 0;
+  let passwordUpdates = 0;
   await page.route('https://mljmifovcthvtuquvyzf.supabase.co/**', async route => {
     const req = route.request();
     const url = new URL(req.url());
     if (url.pathname.endsWith('/listings') && req.method() === 'GET') return route.fulfill({ json: [] });
     if (url.pathname.endsWith('/student_benefits') && req.method() === 'GET') return route.fulfill({ json: [] });
     if (url.pathname.endsWith('/signup')) return route.fulfill({ json: { user: session().user, session: null } });
+    if (url.pathname.endsWith('/recover')) {
+      recoveries++;
+      expect(req.postDataJSON()?.email).toBeTruthy();
+      expect(url.searchParams.get('redirect_to')).toBeTruthy();
+      return route.fulfill({ json: {} });
+    }
+    if (url.pathname.endsWith('/user')) {
+      if (req.method() === 'PUT') {
+        passwordUpdates++;
+        expect(req.postDataJSON()?.password).toBeTruthy();
+      }
+      return route.fulfill({ json: session().user });
+    }
     if (url.pathname.endsWith('/token')) {
       if (req.postDataJSON()?.password === 'bad-password') return route.fulfill({ status: 400, json: { error_code: 'invalid_credentials', msg: 'Invalid login credentials' } });
       return route.fulfill({ json: session() });
@@ -37,9 +52,9 @@ export async function backend(page: Page, failProfile = false) {
       profile = { ...profile, id: userId, ...values, student_status: 'unverified', account_kind: 'student', avatar_path: null, created_at: new Date().toISOString(), updated_at: new Date().toISOString() };
       return route.fulfill({ json: profile, contentType: 'application/vnd.pgrst.object+json' });
     }
-    return route.fulfill({ status: 404, json: { message: 'Unexpected endpoint in test' } });
+    return route.fulfill({ status: 404, json: { message: `Unexpected endpoint in test: ${url.pathname}` } });
   });
-  return { writes: () => writes };
+  return { writes: () => writes, recoveries: () => recoveries, passwordUpdates: () => passwordUpdates };
 }
 export async function account(page: Page) {
   await page.goto('/');
@@ -51,4 +66,3 @@ export async function signin(page: Page, password = 'correct-password') {
   await page.getByLabel('Password', { exact: true }).fill(password);
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
 }
-
