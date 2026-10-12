@@ -91,18 +91,21 @@ export type Database = {
           created_at: string
           creator_id: string
           id: string
+          listing_id: string | null
           title: string
         }
         Insert: {
           created_at?: string
           creator_id: string
           id?: string
+          listing_id?: string | null
           title?: string
         }
         Update: {
           created_at?: string
           creator_id?: string
           id?: string
+          listing_id?: string | null
           title?: string
         }
         Relationships: [
@@ -111,6 +114,13 @@ export type Database = {
             columns: ["creator_id"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "conversations_listing_id_fkey"
+            columns: ["listing_id"]
+            isOneToOne: false
+            referencedRelation: "listings"
             referencedColumns: ["id"]
           },
         ]
@@ -269,6 +279,38 @@ export type Database = {
             foreignKeyName: "job_details_listing_id_fkey"
             columns: ["listing_id"]
             isOneToOne: true
+            referencedRelation: "listings"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      listing_media: {
+        Row: {
+          created_at: string
+          id: string
+          listing_id: string
+          object_path: string
+          sort_order: number
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          listing_id: string
+          object_path: string
+          sort_order?: number
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          listing_id?: string
+          object_path?: string
+          sort_order?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "listing_media_listing_id_fkey"
+            columns: ["listing_id"]
+            isOneToOne: false
             referencedRelation: "listings"
             referencedColumns: ["id"]
           },
@@ -662,11 +704,15 @@ export type Database = {
           p_description: string
           p_furnished: boolean
           p_housing_type: string
-          p_id: string | null // SQL accepts NULL to create a new listing.
+          p_id: string | null
           p_kind: Database["public"]["Enums"]["listing_kind"]
           p_price_cents: number
           p_title: string
         }
+        Returns: string
+      }
+      start_listing_conversation: {
+        Args: { p_listing_id: string }
         Returns: string
       }
     }
@@ -841,4 +887,3 @@ export const Constants = {
     },
   },
 } as const
-
