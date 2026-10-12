@@ -32,19 +32,19 @@ test('web recovery callback creates a recovery session and updates password', as
   await page.getByText('You', { exact: true }).click();
   await expect(page.getByText('Choose a new password', { exact: true })).toBeVisible();
 
-  await page.getByLabel('New password').fill('short');
-  await page.getByLabel('Confirm new password').fill('short');
+  await page.getByLabel('New password', { exact: true }).fill('short');
+  await page.getByLabel('Confirm new password', { exact: true }).fill('short');
   await page.getByRole('button', { name: 'Update password' }).click();
   await expect(page.getByText('Use at least 8 characters for your new password.')).toBeVisible();
   expect(api.passwordUpdates()).toBe(0);
 
-  await page.getByLabel('New password').fill('new-password-123');
-  await page.getByLabel('Confirm new password').fill('different-password');
+  await page.getByLabel('New password', { exact: true }).fill('new-password-123');
+  await page.getByLabel('Confirm new password', { exact: true }).fill('different-password');
   await page.getByRole('button', { name: 'Update password' }).click();
   await expect(page.getByText('Passwords do not match.')).toBeVisible();
   expect(api.passwordUpdates()).toBe(0);
 
-  await page.getByLabel('Confirm new password').fill('new-password-123');
+  await page.getByLabel('Confirm new password', { exact: true }).fill('new-password-123');
   await page.getByRole('button', { name: 'Update password' }).click();
   await expect(page.getByText('Password updated successfully. Your Stuora account is ready.')).toBeVisible();
   expect(api.passwordUpdates()).toBe(1);
