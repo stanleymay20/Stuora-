@@ -32,7 +32,7 @@ async function messagingBackend(page: Page) {
     housing_details: { listing_id: listingId, housing_type: 'room', rent_cents: 62000, deposit_cents: null, available_from: null, available_until: null, furnished: true, bills_included: true, room_size_sqm: null },
     marketplace_details: null,
   };
-  await page.route('https://mljmifovcthvtuquvyzf.supabase.co/**', async route => {
+  await page.route('https://stuora-test.invalid/**', async route => {
     const request = route.request();
     const url = new URL(request.url());
     if (url.pathname.endsWith('/token')) return route.fulfill({ json: authSession() });

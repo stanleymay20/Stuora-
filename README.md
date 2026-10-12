@@ -72,6 +72,7 @@ Requirements: Node.js 22.13 or newer.
 
 ```bash
 npm ci
+# Configure .env.local for a local or separate staging backend; see .env.example.
 npm run web
 ```
 
@@ -102,3 +103,7 @@ Auth and profiles now use the dedicated backend. Hosted profile allow/deny tests
 The **You** tab supports account creation, sign-in, persisted sessions, profile creation/editing, discovery privacy and logout. Other content is explicitly labelled demo; publishing there remains local to the running app session.
 
 See `docs/LISTINGS_CHECKPOINT.md` for the current verification evidence and release limitations.
+
+## Environment isolation
+
+Backend configuration is mandatory. Development uses local Supabase; staging uses a separate hosted project; production uses the controlled Stuora project and an exact approved HTTPS web origin. No development, preview or test build defaults to production. CI browser contracts use `https://stuora-test.invalid`, intercepted by Playwright. See `docs/ENVIRONMENT_ISOLATION.md` for build settings and qualification limits.

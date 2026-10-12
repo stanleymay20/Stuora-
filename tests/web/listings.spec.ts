@@ -12,7 +12,7 @@ function api() {
   return {
     rows, fail: (endpoint: string) => { failure = endpoint; },
     install: async (page: Page) => {
-      await page.route('https://mljmifovcthvtuquvyzf.supabase.co/**', async route => {
+      await page.route('https://stuora-test.invalid/**', async route => {
         const req = route.request(), url = new URL(req.url());
         if (url.pathname.endsWith('/token')) return route.fulfill({ json: session() });
         if (url.pathname.endsWith('/logout')) return route.fulfill({ status: 204 });

@@ -13,7 +13,7 @@ export async function backend(page: Page, failProfile = false) {
   let reads = 0;
   let recoveries = 0;
   let passwordUpdates = 0;
-  await page.route('https://mljmifovcthvtuquvyzf.supabase.co/**', async route => {
+  await page.route('https://stuora-test.invalid/**', async route => {
     const req = route.request();
     const url = new URL(req.url());
     if (url.pathname.endsWith('/listings') && req.method() === 'GET') return route.fulfill({ json: [] });

@@ -14,7 +14,13 @@
     "typecheck": "tsc --noEmit",
     "export:web": "expo export --platform web --output-dir dist",
     "test:database": "node --test tests/database.test.mjs",
-    "test:web": "playwright test"
+    "test:web": "playwright test",
+    "check:environment": "node scripts/check-environment.mjs",
+    "prestart": "npm run check:environment",
+    "preweb": "npm run check:environment",
+    "preios": "npm run check:environment",
+    "preandroid": "npm run check:environment",
+    "preexport:web": "npm run check:environment -- production"
   },
   "dependencies": {
     "@expo/metro-runtime": "~57.0.16",
