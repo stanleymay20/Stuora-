@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { AppState, Platform } from 'react-native';
+import { AppState, Linking, Platform } from 'react-native';
 import type { Session } from '@supabase/supabase-js';
 import { supabase } from '../backend/supabase';
 import type { Database } from '../backend/database.types';
@@ -10,8 +10,10 @@ type AuthState = {
   initializing: boolean;
   profile: Profile | null;
   profileLoading: boolean;
+  recoveryMode: boolean;
   error: string;
   reloadProfile: () => void;
+  finishRecovery: () => void;
 };
 const AuthContext = createContext<AuthState | null>(null);
 
@@ -21,17 +23,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loadedUser, setLoadedUser] = useState<string | undefined>(undefined);
   const [profileLoading, setProfileLoading] = useState(false);
+  const [recoveryMode, setRecoveryMode] = useState(false);
   const [error, setError] = useState('');
   const [revision, setRevision] = useState(0);
+
   useEffect(() => {
     let active = true;
     let authEvent = false;
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, next) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, next) => {
       if (!active) return;
       authEvent = true;
+      if (event === 'PASSWORD_RECOVERY') setRecoveryMode(true);
+      if (event === 'SIGNED_OUT') setRecoveryMode(false);
       setSession(next);
       setInitializing(false);
     });
+
     // Keep auth callbacks synchronous: querying inside one can deadlock locks.
     void supabase.auth.getSession().then(({ data, error: issue }) => {
       if (!active || authEvent) return;
@@ -43,6 +50,33 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setError('Could not restore your session. Check your connection.');
       setInitializing(false);
     });
+
+    async function handleNativeAuthUrl(raw: string | null) {
+      if (!active || Platform.OS === 'web' || !raw) return;
+      try {
+        const parsed = new URL(raw);
+        const hash = parsed.hash.startsWith('#') ? parsed.hash.slice(1) : '';
+        const query = parsed.search.startsWith('?') ? parsed.search.slice(1) : '';
+        const params = new URLSearchParams(hash || query);
+        if (params.get('type') !== 'recovery') return;
+        const accessToken = params.get('access_token');
+        const refreshToken = params.get('refresh_token');
+        if (!accessToken || !refreshToken) return;
+        const { error: issue } = await supabase.auth.setSession({ access_token: accessToken, refresh_token: refreshToken });
+        if (!active) return;
+        if (issue) setError('This recovery link could not be used. Request a new one.');
+        else setRecoveryMode(true);
+      } catch {
+        if (active) setError('This recovery link could not be read. Request a new one.');
+      }
+    }
+
+    let linkSubscription: { remove: () => void } | null = null;
+    if (Platform.OS !== 'web') {
+      void Linking.getInitialURL().then(handleNativeAuthUrl);
+      linkSubscription = Linking.addEventListener('url', event => { void handleNativeAuthUrl(event.url); });
+    }
+
     const refresh = () => {
       if (AppState.currentState === 'active') supabase.auth.startAutoRefresh();
       else supabase.auth.stopAutoRefresh();
@@ -52,6 +86,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => {
       active = false;
       subscription.unsubscribe();
+      linkSubscription?.remove();
       appState?.remove();
       if (Platform.OS !== 'web') supabase.auth.stopAutoRefresh();
     };
@@ -87,8 +122,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => { clearTimeout(timeout); ac.abort(); };
   }, [userId, revision]);
 
-  return <AuthContext.Provider value={{ session, initializing, profile: profile?.id === userId ? profile : null, profileLoading: profileLoading || (!!userId && loadedUser !== userId), error, reloadProfile: () => setRevision(v => v + 1) }}>{children}</AuthContext.Provider>;
+  return <AuthContext.Provider value={{
+    session,
+    initializing,
+    profile: profile?.id === userId ? profile : null,
+    profileLoading: profileLoading || (!!userId && loadedUser !== userId),
+    recoveryMode,
+    error,
+    reloadProfile: () => setRevision(v => v + 1),
+    finishRecovery: () => setRecoveryMode(false),
+  }}>{children}</AuthContext.Provider>;
 }
+
 export function useAuth() {
   const value = useContext(AuthContext);
   if (!value) throw new Error('AuthProvider is required');
