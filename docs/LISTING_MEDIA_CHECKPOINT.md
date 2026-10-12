@@ -22,6 +22,8 @@ The listing-messaging RPC remains a public `SECURITY INVOKER` wrapper around a p
 
 Web uploads are initiated directly from the user action so the browser file chooser remains within the user-activation requirement. Native clients request media-library permission before opening the picker.
 
+The database TypeScript contract is regenerated from the hosted schema. One semantic override is intentionally retained for `save_student_listing.p_id`: the generated routine type cannot express argument nullability, while the migration explicitly treats SQL `NULL` as the create-listing sentinel (`if p_id is null then ...`). The committed type therefore records `p_id: string | null` rather than hiding the contract with an `any` cast at the call site.
+
 ## Verification gate
 
 This document does not declare the slice released. PR #13 must pass the unchanged Stuora CI gate on its exact current head before merge: dependency install, Expo compatibility, Postgres authorization tests, strict TypeScript, production web export, desktop/mobile-web browser contracts, and iOS/Android bundle exports. After merge, the resulting `main` commit must pass the same gate again before the slice becomes the controlled baseline.
