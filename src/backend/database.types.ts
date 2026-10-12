@@ -704,7 +704,7 @@ export type Database = {
           p_description: string
           p_furnished: boolean
           p_housing_type: string
-          p_id: string
+          p_id: string | null
           p_kind: Database["public"]["Enums"]["listing_kind"]
           p_price_cents: number
           p_title: string
