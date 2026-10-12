@@ -157,7 +157,7 @@ for (const inheritedGrants of [false, true]) {
       await count('authenticated', a, `insert into public.reports (reporter_id, reported_user_id, reason) values ('${a}', '${c}', 'spam') returning *`, 1);
       await count('authenticated', b, 'select * from public.reports', 0);
 
-      -- Media metadata follows listing visibility and ownership.
+      // Media metadata follows listing visibility and ownership.
       await count('authenticated', a, `insert into public.listing_media (listing_id, object_path, sort_order) values ('${house}', '${a}/${house}/room.jpg', 0) returning *`, 1);
       await count('anon', null, `select * from public.listing_media where listing_id = '${house}'`, 1);
       await deny(b, `insert into public.listing_media (listing_id, object_path) values ('${house}', '${b}/${house}/attack.jpg')`);
@@ -167,8 +167,8 @@ for (const inheritedGrants of [false, true]) {
       await count('authenticated', a, `select * from public.listing_media where listing_id = '${draft}'`, 1);
       await count('authenticated', b, `delete from public.listing_media where listing_id = '${house}' returning *`, 0);
 
-      -- Hosted Supabase owns these tables; the harness grants authenticated CRUD
-      -- so the same storage.objects policies can be exercised locally.
+      // Hosted Supabase owns these tables; the harness grants authenticated CRUD
+      // so the same storage.objects policies can be exercised locally.
       await count('authenticated', a, `insert into storage.objects (bucket_id, name) values ('listing-media', '${a}/${house}/room.jpg') returning *`, 1);
       await deny(b, `insert into storage.objects (bucket_id, name) values ('listing-media', '${b}/${house}/attack.jpg')`);
       await deny(a, `insert into storage.objects (bucket_id, name) values ('listing-media', '${a}/${job}/job.jpg')`);
