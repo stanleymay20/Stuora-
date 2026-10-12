@@ -58,16 +58,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const hash = parsed.hash.startsWith('#') ? parsed.hash.slice(1) : '';
         const query = parsed.search.startsWith('?') ? parsed.search.slice(1) : '';
         const params = new URLSearchParams(hash || query);
-        if (params.get('type') !== 'recovery') return;
         const accessToken = params.get('access_token');
         const refreshToken = params.get('refresh_token');
         if (!accessToken || !refreshToken) return;
         const { error: issue } = await supabase.auth.setSession({ access_token: accessToken, refresh_token: refreshToken });
         if (!active) return;
-        if (issue) setError('This recovery link could not be used. Request a new one.');
-        else setRecoveryMode(true);
+        if (issue) {
+          setError('This sign-in link could not be used. Request a new one.');
+          return;
+        }
+        setError('');
+        if (params.get('type') === 'recovery') setRecoveryMode(true);
       } catch {
-        if (active) setError('This recovery link could not be read. Request a new one.');
+        if (active) setError('This sign-in link could not be read. Request a new one.');
       }
     }
 
