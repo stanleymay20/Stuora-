@@ -38,3 +38,11 @@ Status: Phase 1 candidate (NOT GA; unmerged, requires exact-head CI + hosted acc
 - Finish real Trips/Jobs/Events/People and new features only via their own reviewed end-to-end vertical slices.
 - Store compliance, monitoring/alerting, backup restore exercises, abuse/reporting controls, moderation, privacy documents and terms.
 - Leave GA flag off until all required evidence is captured.
+## Phase 2 candidate — discovery to genuine first listing
+- Reuse the existing authenticated `save_student_listing` RPC and `ListingWorkspace` create mode; do not make a parallel posting system.
+- Home and Explore empty-result surfaces now provide category-specific posting buttons that navigate to the existing secure create gate.
+- Filtered search zero-results display a Clear search action, not a misleading “no community listings” state. It resets the actual Supabase title filter.
+- Mobile Home reuses the actual Berlin image as a responsive hero instead of a plain placeholder while preserving functional search, categories and accessibility.
+- Preserve no-listings copy in both desktop and mobile existing tests, plus assert unauthenticated Create goes through login/profile gating.
+- Real database content remains empty in staging until actual student-created listings or isolated QA fixtures arrive; do not seed production with mock marketplace inventory.
+- Phase 2 acceptance: exact-head CI green, deploy preview only, verify old approved branch-domain mapping safely, compare 390 px mobile and 1280 px desktop screenshots. No merge or GA claim without full evidence.
