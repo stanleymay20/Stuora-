@@ -45,6 +45,8 @@ test('desktop reference navigation preserves real browse, messaging and account 
   await expect(page.getByText('Sign in to use secure messaging', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Open your profile' }).click();
   await expect(page.getByRole('button', { name: 'Sign in', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Create listing' }).click();
+  await expect(page.getByText('Sign in and complete your profile to publish a listing.')).toBeVisible();
   await page.getByRole('button', { name: 'Open Home' }).click();
   await expect(page.getByText('Community housing', { exact: true })).toBeVisible();
 });
