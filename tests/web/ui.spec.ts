@@ -103,3 +103,29 @@ test('homepage scroll container is viewport-bounded and responds to wheel on des
   await expect.poll(async () => viewport.evaluate(element => element.scrollTop)).toBeGreaterThan(40);
   await expect(page.getByText('Marketplace', { exact: true }).first()).toBeAttached();
 });
+
+test('illustrated discovery tiles remain real category actions and hero search works by click', async ({ page }) => {
+  await backend(page);
+  await page.goto('/');
+  await expect(page.getByRole('button', { name: 'Search housing listings' })).toBeVisible();
+  await page.getByPlaceholder('Search housing listings…').fill('Kreuzberg');
+  await page.getByRole('button', { name: 'Search housing listings' }).click();
+  await expect(page.getByText('Housing', { exact: true }).first()).toBeVisible();
+  await expect(page.getByPlaceholder('Search housing…')).toHaveValue('Kreuzberg');
+  await expect(page.getByText('No housing listings found.', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Clear search' }).click();
+  await expect(page.getByPlaceholder('Search housing…')).toHaveValue('');
+  await page.getByRole('button', { name: 'Browse Marketplace', exact: true }).click();
+  await expect(page.getByText('Make more of student life with local, secondhand essentials.', { exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Post marketplace listing' })).toBeVisible();
+});
+
+test('unavailable illustrated categories do not imply real posts and offer a working safe path', async ({ page }) => {
+  await backend(page);
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Browse Trips', exact: true }).click();
+  await expect(page.getByText('Trips is not available yet', { exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Browse Housing instead' })).toBeVisible();
+  await page.getByRole('button', { name: 'Browse Housing instead' }).click();
+  await expect(page.getByRole('button', { name: 'Refresh listings' })).toBeVisible();
+});
