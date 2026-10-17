@@ -59,7 +59,7 @@ function Photo({ media, title, index, removable, disabled, onRemove }: { media: 
   </View>;
 }
 
-export default function ListingWorkspace({ category, mode = 'browse', search = '', preview = false, onAccount, onMessage }: { category: 'Housing' | 'Marketplace'; mode?: 'browse' | 'create'; search?: string; preview?: boolean; onAccount: () => void; onMessage?: () => void }) {
+export default function ListingWorkspace({ category, mode = 'browse', search = '', preview = false, onAccount, onMessage, onCreate, onClearSearch }: { category: 'Housing' | 'Marketplace'; mode?: 'browse' | 'create'; search?: string; preview?: boolean; onAccount: () => void; onMessage?: () => void; onCreate?: () => void; onClearSearch?: () => void }) {
   const { session, profile, profileLoading, initializing, error: profileError } = useAuth();
   const kind: Kind = category === 'Housing' ? 'housing' : 'marketplace';
   const userId = session?.user.id;
@@ -279,7 +279,11 @@ export default function ListingWorkspace({ category, mode = 'browse', search = '
         {!items.length ? <View style={s.emptyListings}>
           <View style={s.emptyIcon}><Icon name={kind === 'housing' ? 'housing' : 'marketplace'} size={30} color="#7048FF" /></View>
           <Text style={s.emptyTitle}>No {category.toLowerCase()} listings found.</Text>
-          <Text style={s.emptyCaption}>New verified community listings will appear here when students publish them. We don't show invented offers.</Text>
+          <Text style={s.emptyCaption}>{search.trim()
+            ? 'No listing titles match that search. Try a different term or clear the search.'
+            : own ? 'You have not posted a listing in this category yet.'
+            : 'Be among the first students to share a real listing. Only published community listings appear here.'}</Text>
+          {search.trim() && onClearSearch ? <Button title="Clear search" onPress={onClearSearch} /> : !search.trim() && onCreate ? <Button title={`Post ${category.toLowerCase()} listing`} onPress={onCreate} /> : null}
         </View> : null}
         <View style={s.grid}>{(preview ? items.slice(0, 4) : items).map(item => {
           const cover = item.listing_media[0];
