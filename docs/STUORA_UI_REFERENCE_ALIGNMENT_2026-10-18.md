@@ -46,3 +46,13 @@ Status: Phase 1 candidate (NOT GA; unmerged, requires exact-head CI + hosted acc
 - Preserve no-listings copy in both desktop and mobile existing tests, plus assert unauthenticated Create goes through login/profile gating.
 - Real database content remains empty in staging until actual student-created listings or isolated QA fixtures arrive; do not seed production with mock marketplace inventory.
 - Phase 2 acceptance: exact-head CI green, deploy preview only, verify old approved branch-domain mapping safely, compare 390 px mobile and 1280 px desktop screenshots. No merge or GA claim without full evidence.
+
+## Phase 3 candidate — branded visual discovery (2026-10-18)
+- Generated a private conversation asset kit `Stuora_UI_Visual_Asset_Kit_2026-10-18.zip` (10 original subjects, optimized to 480/960px WebP).
+- The ZIP is **not** committed to GitHub; do not point application code at temporary sandbox paths, and do not claim photographic images are deployed.
+- Add these assets only after verified repository upload via the existing protected review workflow; prefer static Expo `require()`, accessible alternative copy and tested responsive crops.
+- Safe image slots: welcome/community header, category editorial banners, authenticated account welcome, empty Housing/Search/Messages illustrations. Never display them as actual offers, actual students, ratings, jobs, events or trips.
+- Meanwhile, `src/ui/CategoryArtwork.tsx` provides original vector graphics using the installed `react-native-svg` dependency, so all six category tiles and headings work on web, iOS and Android without new binaries or external hosts.
+- `App.tsx` now shows more descriptive category banners, an explicit search action as well as Enter-key submit, and a functional path to Housing from unavailable categories.
+- `ListingWorkspace.tsx` empty screens use safe category illustrations. Real listings still render uploaded listing media exclusively.
+- Required qualification: exact-head CI (including new Playwright navigation/search assertions), responsive visual comparison and auth/data smoke checks in Vercel staging; physical native acceptance outstanding.
