@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Image, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { StuoraMark } from '../ui/Brand';
 import { supabase } from '../backend/supabase';
@@ -24,14 +24,18 @@ export default function AccountPanel() {
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState('');
   const [issue, setIssue] = useState('');
+  // Preserve the password-reset confirmation across the forced SIGNED_OUT event.
+  const preserveRecoveryNotice = useRef(false);
 
   useEffect(() => {
     setName(profile?.display_name ?? ''); setCity(profile?.city ?? 'Berlin');
     setBio(profile?.bio ?? ''); setDiscoverable(profile?.is_discoverable ?? true);
   }, [profile]);
   useEffect(() => {
-    setPassword(''); setNewPassword(''); setConfirmPassword(''); setNotice(''); setIssue('');
-    if (session) setForgot(false);
+    setPassword(''); setNewPassword(''); setConfirmPassword('');
+    if (!preserveRecoveryNotice.current) setNotice('');
+    setIssue('');
+    if (session) { setForgot(false); preserveRecoveryNotice.current = false; }
   }, [session?.user.id]);
 
   async function authenticate() {
@@ -79,8 +83,19 @@ export default function AccountPanel() {
         return;
       }
       setNewPassword(''); setConfirmPassword('');
+      // Recovery grants a temporary authenticated session. Revoke it so a
+      // copied or unattended recovery link cannot leave the account signed in.
+      preserveRecoveryNotice.current = true;
       finishRecovery();
-      setNotice('Password updated successfully. Your Stuora account is ready.');
+      const { error: signOutError } = await supabase.auth.signOut({ scope: 'local' });
+      if (signOutError) {
+        setIssue('Password changed, but this device could not sign out. Please sign out manually.');
+        return;
+      }
+      if (Platform.OS === 'web' && typeof window !== 'undefined' && window.location.hash) {
+        window.history.replaceState({}, '', window.location.pathname + window.location.search);
+      }
+      setNotice('Password updated successfully. Sign in again with your new password.');
     } catch { setIssue('Unable to connect. Your password was not changed.'); }
     finally { setBusy(false); }
   }
