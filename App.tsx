@@ -129,7 +129,7 @@ export default function App() {
   const content = (
     <View style={styles.contentFrame}>
       {tab === 'home' && (
-        <ScrollView testID="home-scroll" style={styles.pageScroll} contentContainerStyle={[styles.page, isDesktop && styles.pageDesktop]} showsVerticalScrollIndicator={false}>
+        <ScrollView testID="home-scroll" style={styles.pageScroll} contentContainerStyle={[styles.page, isDesktop && styles.pageDesktop]} showsVerticalScrollIndicator={true}>
           <View style={[styles.hero, isDesktop ? styles.heroDesktop : styles.heroMobile]}>
             <Image source={require('./assets/berlin-skyline.jpg')} resizeMode="cover" style={[StyleSheet.absoluteFill, { width: '100%', height: '100%' }]} accessibilityLabel="Berlin skyline at sunset" />
             <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(17,22,47,0.56)' }]} />
@@ -160,7 +160,7 @@ export default function App() {
       )}
 
       {tab === 'explore' && (
-        <ScrollView testID="explore-scroll" style={styles.pageScroll} contentContainerStyle={[styles.page, isDesktop && styles.pageDesktop]} showsVerticalScrollIndicator={false}>
+        <ScrollView testID="explore-scroll" style={styles.pageScroll} contentContainerStyle={[styles.page, isDesktop && styles.pageDesktop]} showsVerticalScrollIndicator={true}>
           <View style={styles.pageHeadingRow}>
             <View>
               <Text style={styles.pageTitle}>{category}</Text>
@@ -210,7 +210,7 @@ export default function App() {
       {tab === 'messages' && <MessageWorkspace onAccount={() => setTab('profile')} />}
 
       {tab === 'profile' && (
-        <ScrollView testID="profile-scroll" style={styles.pageScroll} contentContainerStyle={[styles.page, styles.profilePage]} showsVerticalScrollIndicator={false}>
+        <ScrollView testID="profile-scroll" style={styles.pageScroll} contentContainerStyle={[styles.page, styles.profilePage]} showsVerticalScrollIndicator={true}>
           <AccountPanel />
         </ScrollView>
       )}
