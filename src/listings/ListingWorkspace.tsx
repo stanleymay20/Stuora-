@@ -4,6 +4,7 @@ import { ActivityIndicator, Image, Platform, Pressable, StyleSheet, Switch, Text
 import { useAuth } from '../account/AuthProvider';
 import { supabase } from '../backend/supabase';
 import { Icon } from '../ui/Brand';
+import { CategoryArtwork } from '../ui/CategoryArtwork';
 import type { Database } from '../backend/database.types';
 
 type Row = Database['public']['Tables']['listings']['Row'];
@@ -277,7 +278,7 @@ export default function ListingWorkspace({ category, mode = 'browse', search = '
       <Text style={s.hint}>{own ? 'Your listings, including archived posts.' : 'Active listings from the community.'}{search ? ' Search matches titles.' : ''}</Text>
       {loading ? <ActivityIndicator accessibilityLabel="Loading listings" /> : error ? <View><Text accessibilityRole="alert" style={s.error}>{error}</Text><Button title="Retry listings" onPress={() => setRevision(v => v + 1)} /></View> : <>
         {!items.length ? <View style={s.emptyListings}>
-          <View style={s.emptyIcon}><Icon name={kind === 'housing' ? 'housing' : 'marketplace'} size={30} color="#7048FF" /></View>
+          <CategoryArtwork category={category} width={206} height={103} />
           <Text style={s.emptyTitle}>No {category.toLowerCase()} listings found.</Text>
           <Text style={s.emptyCaption}>{search.trim()
             ? 'No listing titles match that search. Try a different term or clear the search.'
@@ -331,7 +332,7 @@ const s = StyleSheet.create({
   visual: { height: 174, backgroundColor: '#F4F1FF', alignItems: 'center', justifyContent: 'center', gap: 8 },
   cardImage: { width: '100%', height: 174, backgroundColor: '#F4F1FF' },
   price: { fontWeight: '900', color: '#11162F', fontSize: 18 },
-  emptyListings: { borderRadius: 20, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E9EAF1', paddingVertical: 30, paddingHorizontal: 24, alignItems: 'center', gap: 10 },
+  emptyListings: { borderRadius: 20, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E9EAF1', paddingVertical: 27, paddingHorizontal: 22, alignItems: 'center', gap: 12 },
   emptyIcon: { width: 64, height: 64, borderRadius: 21, backgroundColor: '#F1EDFF', justifyContent: 'center', alignItems: 'center' },
   emptyTitle: { color: '#11162F', fontSize: 16, fontWeight: '800', textAlign: 'center' },
   emptyCaption: { color: '#747B91', fontSize: 12, lineHeight: 18, textAlign: 'center', maxWidth: 420 },
