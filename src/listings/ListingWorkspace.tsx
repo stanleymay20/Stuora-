@@ -276,12 +276,22 @@ export default function ListingWorkspace({ category, mode = 'browse', search = '
       {!preview ? <View style={s.wrap}><Button title="Refresh listings" onPress={() => setRevision(v => v + 1)} disabled={loading} />{session ? <Button title={own ? 'Browse public listings' : 'My listings'} onPress={() => setOwn(v => !v)} /> : null}</View> : null}
       <Text style={s.hint}>{own ? 'Your listings, including archived posts.' : 'Active listings from the community.'}{search ? ' Search matches titles.' : ''}</Text>
       {loading ? <ActivityIndicator accessibilityLabel="Loading listings" /> : error ? <View><Text accessibilityRole="alert" style={s.error}>{error}</Text><Button title="Retry listings" onPress={() => setRevision(v => v + 1)} /></View> : <>
-        {!items.length ? <Text style={s.text}>No {category.toLowerCase()} listings found.</Text> : null}
+        {!items.length ? <View style={s.emptyListings}>
+          <View style={s.emptyIcon}><Icon name={kind === 'housing' ? 'housing' : 'marketplace'} size={30} color="#7048FF" /></View>
+          <Text style={s.emptyTitle}>No {category.toLowerCase()} listings found.</Text>
+          <Text style={s.emptyCaption}>New verified community listings will appear here when students publish them. We don't show invented offers.</Text>
+        </View> : null}
         <View style={s.grid}>{(preview ? items.slice(0, 4) : items).map(item => {
           const cover = item.listing_media[0];
           return <Pressable key={item.id} accessibilityRole="button" accessibilityLabel={`View ${item.title}`} onPress={() => { setSelected(item); setNotice(''); setActionError(''); }} style={s.listing}>
-            {cover ? <Image source={{ uri: mediaUrl(cover.object_path) }} accessibilityLabel={`${item.title} cover photo`} style={s.cardImage} resizeMode="cover" /> : <View style={s.visual}><Icon name={kind === 'housing' ? 'housing' : 'marketplace'} size={44} color="#7048FF" /><Text style={s.hint}>No photo</Text></View>}
-            <Text style={s.title}>{item.title}</Text><Text style={s.price}>{money(item.price_cents)}{kind === 'housing' ? ' / month' : ''}</Text><Text>{item.city} · {item.status}</Text>
+            <View style={s.coverWrap}>
+              {cover ? <Image source={{ uri: mediaUrl(cover.object_path) }} accessibilityLabel={`${item.title} cover photo`} style={s.cardImage} resizeMode="cover" /> : <View style={s.visual}><Icon name={kind === 'housing' ? 'housing' : 'marketplace'} size={44} color="#7048FF" /><Text style={s.hint}>Photo not added yet</Text></View>}
+            </View>
+            <View style={s.listingDetails}>
+              <Text style={s.title} numberOfLines={2}>{item.title}</Text>
+              <Text style={s.price}>{money(item.price_cents)}{kind === 'housing' ? ' / month' : ''}</Text>
+              <View style={s.listingMeta}><Icon name="location" size={15} color="#747B91" /><Text style={s.metaText}>{item.city} · {item.status}</Text></View>
+            </View>
           </Pressable>;
         })}</View>
         {more && !preview ? <Button title="Load more listings" onPress={() => setPages(v => v + 1)} /> : null}
@@ -309,10 +319,18 @@ const s = StyleSheet.create({
   notice: { backgroundColor: '#EDFFF4', color: '#136B3A', padding: 12, borderRadius: 10 },
   error: { backgroundColor: '#FFF0F0', color: '#9C2D2D', padding: 12, borderRadius: 10 },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 14 },
-  listing: { backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E9EAF1', borderRadius: 16, padding: 12, gap: 8, minWidth: 220, flexGrow: 1, flexBasis: 220, maxWidth: 420 },
-  visual: { height: 150, borderRadius: 12, backgroundColor: '#F4F1FF', alignItems: 'center', justifyContent: 'center', gap: 8 },
-  cardImage: { width: '100%', height: 170, borderRadius: 12, backgroundColor: '#F4F1FF' },
-  price: { fontWeight: '800', color: '#11162F', fontSize: 17 },
+  listing: { backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E9EAF1', borderRadius: 19, overflow: 'hidden', minWidth: 220, flexGrow: 1, flexBasis: 220, maxWidth: 390, shadowColor: '#11162F', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.06, shadowRadius: 14, elevation: 2 },
+  coverWrap: { backgroundColor: '#F4F1FF' },
+  listingDetails: { padding: 16, gap: 8 },
+  listingMeta: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  metaText: { fontSize: 12, color: '#747B91', flexShrink: 1 },
+  visual: { height: 174, backgroundColor: '#F4F1FF', alignItems: 'center', justifyContent: 'center', gap: 8 },
+  cardImage: { width: '100%', height: 174, backgroundColor: '#F4F1FF' },
+  price: { fontWeight: '900', color: '#11162F', fontSize: 18 },
+  emptyListings: { borderRadius: 20, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E9EAF1', paddingVertical: 30, paddingHorizontal: 24, alignItems: 'center', gap: 10 },
+  emptyIcon: { width: 64, height: 64, borderRadius: 21, backgroundColor: '#F1EDFF', justifyContent: 'center', alignItems: 'center' },
+  emptyTitle: { color: '#11162F', fontSize: 16, fontWeight: '800', textAlign: 'center' },
+  emptyCaption: { color: '#747B91', fontSize: 12, lineHeight: 18, textAlign: 'center', maxWidth: 420 },
   photoGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   photoWrap: { width: 160, gap: 6 },
   photo: { width: 160, height: 130, borderRadius: 12, backgroundColor: '#F4F1FF' },
