@@ -96,7 +96,7 @@ function SearchField({ value, onChangeText, placeholder, onSubmit }: { value: st
   );
 }
 
-export default function App() {
+export default function App({ onOpenSavings }: { onOpenSavings: () => void }) {
   const { session, profile } = useAuth();
   const { width, height } = useWindowDimensions();
   const isDesktop = width >= 960;
@@ -263,6 +263,10 @@ export default function App() {
               </View>
               <View style={styles.desktopTopActions}>
                 <View style={styles.locationChip}><Text style={styles.locationChipText}>{profile?.city || 'Berlin'}</Text></View>
+                <Pressable accessibilityRole="button" accessibilityLabel="Open Student Savings" onPress={onOpenSavings} style={({ pressed }) => [styles.savingsNav, pressed && styles.pressed]}>
+                  <Text style={styles.savingsNavIcon}>€</Text>
+                  <Text style={styles.savingsNavText}>Student Savings</Text>
+                </Pressable>
                 <Pressable accessibilityRole="button" accessibilityLabel="Create listing" onPress={() => setTab('create')} style={[styles.desktopCreate, tab === 'create' && styles.desktopCreateActive]}>
                   <Icon name="plus" size={18} color={BRAND.white} />
                   <Text style={styles.desktopCreateText}>Create</Text>
@@ -273,7 +277,7 @@ export default function App() {
           </View>
         ) : (
           <>
-            <View style={styles.mobileTopBar}><BrandMark /><View style={styles.mobileTopActions}><Pressable accessibilityRole="button" accessibilityLabel="Open your account" onPress={() => setTab('profile')} style={styles.miniAvatar}><Icon name="profile" color="#FFFFFF" size={22} /></Pressable></View></View>
+            <View style={styles.mobileTopBar}><BrandMark /><View style={styles.mobileTopActions}><Pressable accessibilityRole="button" accessibilityLabel="Open Student Savings" onPress={onOpenSavings} style={({ pressed }) => [styles.mobileSavings, pressed && styles.pressed]}><Text style={styles.mobileSavingsText}>€ Savings</Text></Pressable><Pressable accessibilityRole="button" accessibilityLabel="Open your account" onPress={() => setTab('profile')} style={styles.miniAvatar}><Icon name="profile" color="#FFFFFF" size={22} /></Pressable></View></View>
             {content}
             <View style={styles.bottomNav}>
               {bottomNav.map((item) => {
@@ -325,7 +329,12 @@ const styles = StyleSheet.create({
   desktopTopBar: { minHeight: 72, backgroundColor: BRAND.white, borderBottomWidth: 1, borderBottomColor: BRAND.line, paddingHorizontal: 28, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   desktopTopTitle: { color: BRAND.ink, fontSize: 17, fontWeight: '900' },
   desktopTopSub: { color: BRAND.subtle, fontSize: 11, marginTop: 2 },
-  desktopTopActions: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  desktopTopActions: { flexDirection: 'row', alignItems: 'center', gap: 9 },
+  savingsNav: { borderRadius: 12, backgroundColor: BRAND.purpleSoft, flexDirection: 'row', gap: 5, paddingVertical: 11, paddingHorizontal: 12, alignItems: 'center' },
+  savingsNavIcon: { fontWeight: '900', color: BRAND.purple, fontSize: 15 },
+  savingsNavText: { fontWeight: '800', color: BRAND.purple, fontSize: 12 },
+  mobileSavings: { borderRadius: 11, backgroundColor: BRAND.purpleSoft, paddingHorizontal: 11, paddingVertical: 10 },
+  mobileSavingsText: { color: BRAND.purple, fontSize: 12, fontWeight: '800' },
   mobileTopBar: { minHeight: 64, paddingHorizontal: 16, paddingVertical: 10, backgroundColor: BRAND.white, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: BRAND.line, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   mobileTopActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   contentFrame: { flex: 1, minHeight: 0 },
