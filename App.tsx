@@ -106,6 +106,11 @@ export default function App() {
     setTab('explore');
   };
 
+  const startListing = (next: 'Housing' | 'Marketplace') => {
+    setDraftType(next);
+    setTab('create');
+  };
+
   const bottomNav: { key: Tab; label: string; icon: string }[] = [
     { key: 'home', label: 'Home', icon: '⌂' },
     { key: 'explore', label: 'Explore', icon: '⌕' },
@@ -125,33 +130,18 @@ export default function App() {
     <View style={styles.contentFrame}>
       {tab === 'home' && (
         <ScrollView contentContainerStyle={[styles.page, isDesktop && styles.pageDesktop]} showsVerticalScrollIndicator={false}>
-          {!isDesktop ? (
-            <View style={styles.mobileWelcomeRow}>
-              <View>
-                <Text style={styles.greeting}>Welcome to Stuora</Text>
-                <Text style={styles.mobileHeading}>Home</Text>
-              </View>
-              <View style={styles.locationChip}><Text style={styles.locationChipText}>Berlin</Text></View>
-            </View>
-          ) : null}
-
-          {isDesktop ? <View style={[styles.hero, styles.heroDesktop]}>
+          <View style={[styles.hero, isDesktop ? styles.heroDesktop : styles.heroMobile]}>
             <Image source={require('./assets/berlin-skyline.jpg')} resizeMode="cover" style={[StyleSheet.absoluteFill, { width: '100%', height: '100%' }]} accessibilityLabel="Berlin skyline at sunset" />
-            <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(17,22,47,0.48)' }]} />
-
+            <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(17,22,47,0.56)' }]} />
             <View style={styles.heroCopy}>
               <Text style={styles.eyebrow}>STUDENT LIFE, CONNECTED</Text>
-              <Text style={[styles.heroTitle, isDesktop && styles.heroTitleDesktop]}>Find your people.{"\n"}Find your place.{"\n"}Make the most of student life.</Text>
+              <Text style={[styles.heroTitle, isDesktop ? styles.heroTitleDesktop : styles.heroTitleMobile]}>Find your people.{"\n"}Find your place.{"\n"}Make the most of student life.</Text>
               <Text style={styles.heroText}>Housing, things, trips, jobs and student communities — all in one trusted local network.</Text>
-              {isDesktop ? (
-                <View style={styles.heroSearchWrap}>
-                  <SearchField value={search} onChangeText={setSearch} placeholder="Search housing listings…" onSubmit={() => { setCategory('Housing'); setTab('explore'); }} />
-                </View>
-              ) : null}
+              <View style={styles.heroSearchWrap}>
+                <SearchField value={search} onChangeText={setSearch} placeholder="Search housing listings…" onSubmit={() => { setCategory('Housing'); setTab('explore'); }} />
+              </View>
             </View>
-          </View> : null}
-
-          {!isDesktop ? <SearchField value={search} onChangeText={setSearch} placeholder="Search housing listings…" onSubmit={() => { setCategory('Housing'); setTab('explore'); }} /> : null}
+          </View>
 
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Browse by category</Text>
@@ -162,10 +152,10 @@ export default function App() {
           </View>
 
           <View style={styles.sectionHeaderInline}><Text style={styles.sectionTitle}>Community housing</Text><Pressable accessibilityRole="button" accessibilityLabel="See all housing" onPress={() => goToCategory('Housing')}><Text style={styles.linkText}>See all</Text></Pressable></View>
-          <ListingWorkspace key={`home-${session?.user.id ?? 'public'}`} category="Housing" preview onAccount={() => setTab('profile')} onMessage={() => setTab('messages')} />
+          <ListingWorkspace key={`home-${session?.user.id ?? 'public'}`} category="Housing" preview onAccount={() => setTab('profile')} onMessage={() => setTab('messages')} onCreate={() => startListing('Housing')} />
 
           <View style={styles.sectionHeaderInline}><Text style={styles.sectionTitle}>Marketplace</Text><Pressable accessibilityRole="button" accessibilityLabel="See all marketplace" onPress={() => goToCategory('Marketplace')}><Text style={styles.linkText}>See all</Text></Pressable></View>
-          <ListingWorkspace key={`home-market-${session?.user.id ?? 'public'}`} category="Marketplace" preview onAccount={() => setTab('profile')} onMessage={() => setTab('messages')} />
+          <ListingWorkspace key={`home-market-${session?.user.id ?? 'public'}`} category="Marketplace" preview onAccount={() => setTab('profile')} onMessage={() => setTab('messages')} onCreate={() => startListing('Marketplace')} />
         </ScrollView>
       )}
 
@@ -176,7 +166,7 @@ export default function App() {
               <Text style={styles.pageTitle}>{category}</Text>
               <Text style={styles.pageSubtitle}>{category === 'Housing' || category === 'Marketplace' ? 'Live community listings · one shared backend.' : category === 'People' ? 'Discoverable profiles from Stuora.' : 'This category is not available yet.'}</Text>
             </View>
-            {isDesktop && (category === 'Housing' || category === 'Marketplace') ? <Pressable accessibilityRole="button" accessibilityLabel="Create in this category" onPress={() => { setDraftType(category); setTab('create'); }} style={styles.createTopButton}><Text style={styles.createTopButtonText}>Create</Text></Pressable> : null}
+            {isDesktop && (category === 'Housing' || category === 'Marketplace') ? <Pressable accessibilityRole="button" accessibilityLabel="Create in this category" onPress={() => startListing(category)} style={styles.createTopButton}><Text style={styles.createTopButtonText}>Create</Text></Pressable> : null}
           </View>
           {category === 'Housing' || category === 'Marketplace' || category === 'People' ? <SearchField value={search} onChangeText={setSearch} placeholder={`Search ${category.toLowerCase()}…`} /> : null}
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipsRow}>
@@ -186,7 +176,7 @@ export default function App() {
               </Pressable>
             ))}
           </ScrollView>
-          {category === 'Housing' || category === 'Marketplace' ? <ListingWorkspace key={`${category}-${session?.user.id ?? 'public'}`} category={category} search={search} onAccount={() => setTab('profile')} onMessage={() => setTab('messages')} /> : category === 'People' ? <PeopleDirectory key={session?.user.id ?? 'public'} search={search} onAccount={() => setTab('profile')} /> : <View style={styles.emptyState}><Icon name={category} size={40} color={BRAND.purple} /><Text style={styles.emptyTitle}>{category} is not available yet</Text><Text style={styles.emptyText}>Posting and participation will open after persistence and permissions are verified. No sample offers are displayed.</Text></View>}
+          {category === 'Housing' || category === 'Marketplace' ? <ListingWorkspace key={`${category}-${session?.user.id ?? 'public'}`} category={category} search={search} onAccount={() => setTab('profile')} onMessage={() => setTab('messages')} onCreate={() => startListing(category)} onClearSearch={() => setSearch('')} /> : category === 'People' ? <PeopleDirectory key={session?.user.id ?? 'public'} search={search} onAccount={() => setTab('profile')} /> : <View style={styles.emptyState}><Icon name={category} size={40} color={BRAND.purple} /><Text style={styles.emptyTitle}>{category} is not available yet</Text><Text style={styles.emptyText}>Posting and participation will open after persistence and permissions are verified. No sample offers are displayed.</Text></View>}
         </ScrollView>
       )}
 
@@ -338,14 +328,16 @@ const styles = StyleSheet.create({
   mobileHeading: { color: BRAND.ink, fontSize: 23, lineHeight: 28, fontWeight: '900', letterSpacing: -0.7, maxWidth: 260, marginTop: 3 },
   hero: { backgroundColor: BRAND.ink, borderRadius: 24, padding: 22, overflow: 'hidden', minHeight: 190, justifyContent: 'space-between' },
   heroDesktop: { minHeight: 292, padding: 34, flexDirection: 'row', alignItems: 'center' },
+  heroMobile: { minHeight: 312, padding: 20, justifyContent: 'flex-end' },
   heroCopy: { flex: 1, maxWidth: 670, zIndex: 2 },
   heroOrbOne: { position: 'absolute', width: 260, height: 260, borderRadius: 130, backgroundColor: '#2B376D', right: -70, top: -120, opacity: 0.72 },
   heroOrbTwo: { position: 'absolute', width: 180, height: 180, borderRadius: 90, backgroundColor: '#4C2B8A', right: 120, bottom: -135, opacity: 0.55 },
   eyebrow: { color: '#B9AAFF', fontSize: 11, fontWeight: '900', letterSpacing: 1.3, marginBottom: 8 },
   heroTitle: { color: BRAND.white, fontSize: 31, lineHeight: 36, fontWeight: '900', letterSpacing: -1.2 },
   heroTitleDesktop: { fontSize: 34, lineHeight: 40 },
+  heroTitleMobile: { fontSize: 24, lineHeight: 29, letterSpacing: -0.6 },
   heroText: { color: '#D3D7E7', marginTop: 11, fontSize: 14, lineHeight: 21, maxWidth: 540 },
-  heroSearchWrap: { marginTop: 20, maxWidth: 570 },
+  heroSearchWrap: { marginTop: 18, width: '100%', maxWidth: 570 },
   heroCityCard: { alignSelf: 'flex-start', backgroundColor: '#202A55', borderWidth: 1, borderColor: '#34406F', borderRadius: 20, padding: 16, minWidth: 142, alignItems: 'center', zIndex: 2, marginTop: 18 },
   heroCityIcon: { fontSize: 34 },
   heroCityTitle: { color: BRAND.white, fontSize: 16, fontWeight: '900', marginTop: 7 },
