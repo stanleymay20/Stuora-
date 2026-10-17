@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import * as ImagePicker from 'expo-image-picker';
-import { ActivityIndicator, Image, Platform, Pressable, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Image, Platform, Pressable, StyleSheet, Switch, Text, TextInput, useWindowDimensions, View } from 'react-native';
 import { useAuth } from '../account/AuthProvider';
 import { supabase } from '../backend/supabase';
 import { Icon } from '../ui/Brand';
@@ -62,6 +62,8 @@ function Photo({ media, title, index, removable, disabled, onRemove }: { media: 
 
 export default function ListingWorkspace({ category, mode = 'browse', search = '', preview = false, onAccount, onMessage, onCreate, onClearSearch }: { category: 'Housing' | 'Marketplace'; mode?: 'browse' | 'create'; search?: string; preview?: boolean; onAccount: () => void; onMessage?: () => void; onCreate?: () => void; onClearSearch?: () => void }) {
   const { session, profile, profileLoading, initializing, error: profileError } = useAuth();
+  const { width } = useWindowDimensions();
+  const compactWideEmpty = preview && width >= 760;
   const kind: Kind = category === 'Housing' ? 'housing' : 'marketplace';
   const userId = session?.user.id;
   const [items, setItems] = useState<Item[]>([]);
@@ -277,14 +279,16 @@ export default function ListingWorkspace({ category, mode = 'browse', search = '
       {!preview ? <View style={s.wrap}><Button title="Refresh listings" onPress={() => setRevision(v => v + 1)} disabled={loading} />{session ? <Button title={own ? 'Browse public listings' : 'My listings'} onPress={() => setOwn(v => !v)} /> : null}</View> : null}
       <Text style={s.hint}>{own ? 'Your listings, including archived posts.' : 'Active listings from the community.'}{search ? ' Search matches titles.' : ''}</Text>
       {loading ? <ActivityIndicator accessibilityLabel="Loading listings" /> : error ? <View><Text accessibilityRole="alert" style={s.error}>{error}</Text><Button title="Retry listings" onPress={() => setRevision(v => v + 1)} /></View> : <>
-        {!items.length ? <View style={s.emptyListings}>
-          <CategoryArtwork category={category} width={206} height={103} />
-          <Text style={s.emptyTitle}>No {category.toLowerCase()} listings found.</Text>
-          <Text style={s.emptyCaption}>{search.trim()
-            ? 'No listing titles match that search. Try a different term or clear the search.'
-            : own ? 'You have not posted a listing in this category yet.'
-            : 'Be among the first students to share a real listing. Only published community listings appear here.'}</Text>
-          {search.trim() && onClearSearch ? <Button title="Clear search" onPress={onClearSearch} /> : !search.trim() && onCreate ? <Button title={`Post ${category.toLowerCase()} listing`} onPress={onCreate} /> : null}
+        {!items.length ? <View style={[s.emptyListings, preview && s.emptyPreview, compactWideEmpty && s.emptyPreviewWide]}>
+          <CategoryArtwork category={category} width={compactWideEmpty ? 155 : preview ? 130 : 206} height={compactWideEmpty ? 82 : preview ? 72 : 103} />
+          <View style={[s.emptyCopy, compactWideEmpty && s.emptyCopyWide]}>
+            <Text style={[s.emptyTitle, compactWideEmpty && s.emptyTitleWide]}>No {category.toLowerCase()} listings found.</Text>
+            <Text style={[s.emptyCaption, compactWideEmpty && s.emptyCaptionWide]}>{search.trim()
+              ? 'No listing titles match that search. Try a different term or clear the search.'
+              : own ? 'You have not posted a listing in this category yet.'
+              : 'Be among the first students to share a real listing. Only published community listings appear here.'}</Text>
+            {search.trim() && onClearSearch ? <Button title="Clear search" onPress={onClearSearch} /> : !search.trim() && onCreate ? <Button title={`Post ${category.toLowerCase()} listing`} onPress={onCreate} /> : null}
+          </View>
         </View> : null}
         <View style={s.grid}>{(preview ? items.slice(0, 4) : items).map(item => {
           const cover = item.listing_media[0];
@@ -333,6 +337,12 @@ const s = StyleSheet.create({
   cardImage: { width: '100%', height: 174, backgroundColor: '#F4F1FF' },
   price: { fontWeight: '900', color: '#11162F', fontSize: 18 },
   emptyListings: { borderRadius: 20, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E9EAF1', paddingVertical: 27, paddingHorizontal: 22, alignItems: 'center', gap: 12 },
+  emptyPreview: { paddingVertical: 14, paddingHorizontal: 16, gap: 8 },
+  emptyPreviewWide: { flexDirection: 'row', justifyContent: 'center', gap: 22, minHeight: 150 },
+  emptyCopy: { alignItems: 'center', gap: 8, flexShrink: 1 },
+  emptyCopyWide: { alignItems: 'flex-start', maxWidth: 500 },
+  emptyTitleWide: { textAlign: 'left' },
+  emptyCaptionWide: { textAlign: 'left' },
   emptyIcon: { width: 64, height: 64, borderRadius: 21, backgroundColor: '#F1EDFF', justifyContent: 'center', alignItems: 'center' },
   emptyTitle: { color: '#11162F', fontSize: 16, fontWeight: '800', textAlign: 'center' },
   emptyCaption: { color: '#747B91', fontSize: 12, lineHeight: 18, textAlign: 'center', maxWidth: 420 },
