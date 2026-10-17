@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 import App from '../App';
 import AccountPanel from './account/AccountPanel';
@@ -8,6 +8,7 @@ import StudentSavingsOverlay from './StudentSavingsOverlay';
 // A password-recovery session must not expose the rest of the app.
 function RootContent() {
   const { recoveryMode, recoveryComplete } = useAuth();
+  const [savingsOpen, setSavingsOpen] = useState(false);
   if (recoveryMode || recoveryComplete) {
     return (
       <ScrollView contentContainerStyle={styles.recovery} keyboardShouldPersistTaps="handled">
@@ -15,7 +16,7 @@ function RootContent() {
       </ScrollView>
     );
   }
-  return <View style={styles.root}><App /><StudentSavingsOverlay /></View>;
+  return <View style={styles.root}><App onOpenSavings={() => setSavingsOpen(true)} /><StudentSavingsOverlay open={savingsOpen} onOpenChange={setSavingsOpen} /></View>;
 }
 
 export default function Root() {
