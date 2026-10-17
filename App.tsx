@@ -114,16 +114,11 @@ export default function App() {
     { key: 'profile', label: 'You', icon: '○' },
   ];
 
-  const sidebarItems: { label: string; icon: string; action: () => void; active: boolean }[] = [
-    { label: 'Home', icon: '⌂', action: () => setTab('home'), active: tab === 'home' },
-    ...categories.map((item) => ({
-      label: item.name,
-      icon: item.emoji,
-      action: () => goToCategory(item.name),
-      active: tab === 'explore' && category === item.name,
-    })),
-    { label: 'Messages', icon: '◫', action: () => setTab('messages'), active: tab === 'messages' },
-    { label: 'You', icon: '○', action: () => setTab('profile'), active: tab === 'profile' },
+  const desktopNav: { key: Tab; label: string; icon: string }[] = [
+    { key: 'home', label: 'Home', icon: 'home' },
+    { key: 'explore', label: 'Explore', icon: 'search' },
+    { key: 'messages', label: 'Messages', icon: 'messages' },
+    { key: 'profile', label: 'You', icon: 'profile' },
   ];
 
   const content = (
@@ -159,7 +154,7 @@ export default function App() {
           {!isDesktop ? <SearchField value={search} onChangeText={setSearch} placeholder="Search housing listings…" onSubmit={() => { setCategory('Housing'); setTab('explore'); }} /> : null}
 
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Explore Stuora</Text>
+            <Text style={styles.sectionTitle}>Browse by category</Text>
             <Text style={styles.sectionHint}>Everything outside the classroom</Text>
           </View>
           <View style={styles.categoryGrid}>
@@ -238,27 +233,32 @@ export default function App() {
       <View style={styles.appShell}>
         {isDesktop ? (
           <View style={styles.desktopShell}>
-            <View style={styles.sidebar}>
+            <View style={styles.desktopNavigation}>
               <BrandMark />
-              <Text style={styles.sidebarTagline}>Student life, all in one place.</Text>
-              <View style={styles.sidebarMenu}>
-                {sidebarItems.map((item) => (
-                  <Pressable key={item.label} onPress={item.action} style={({ pressed }) => [styles.sidebarItem, item.active && styles.sidebarItemActive, pressed && styles.pressed]}>
-                    <Icon name={item.label === 'You' ? 'profile' : item.label} size={21} color={item.active ? BRAND.purple : BRAND.muted} />
-                    <Text style={[styles.sidebarLabel, item.active && styles.sidebarLabelActive]}>{item.label}</Text>
+              <View style={styles.desktopNavLinks}>
+                {desktopNav.map(item => (
+                  <Pressable
+                    key={item.key}
+                    accessibilityRole="button"
+                    accessibilityLabel={item.label === 'You' ? 'Open your profile' : `Open ${item.label}`}
+                    accessibilityState={{ selected: tab === item.key }}
+                    onPress={() => setTab(item.key)}
+                    style={({ pressed }) => [styles.desktopNavItem, tab === item.key && styles.desktopNavItemActive, pressed && styles.pressed]}
+                  >
+                    <Icon name={item.icon} size={19} color={tab === item.key ? BRAND.purple : BRAND.muted} />
+                    <Text style={[styles.desktopNavText, tab === item.key && styles.desktopNavTextActive]}>{item.label}</Text>
                   </Pressable>
                 ))}
               </View>
-              <Pressable accessibilityRole="button" accessibilityLabel="Create listing" onPress={() => setTab('create')} style={styles.sidebarCreate}><Icon name="plus" color={BRAND.white} size={18} /><Text style={styles.sidebarCreateText}>Create</Text></Pressable>
-              <View style={styles.sidebarFooter}><View style={styles.miniAvatar}><Text style={styles.miniAvatarText}>{profile?.display_name.charAt(0).toUpperCase() ?? 'S'}</Text></View><View><Text style={styles.sidebarUser}>{profile?.display_name ?? 'Your account'}</Text><Text style={styles.sidebarUserSub}>{profile?.city ?? 'Sign in to get started'}</Text></View></View>
-            </View>
-            <View style={styles.desktopMain}>
-              <View style={styles.desktopTopBar}>
-                <View><Text style={styles.desktopTopTitle}>{tab === 'home' ? 'Home' : tab === 'explore' ? category : tab === 'profile' ? 'Profile' : tab[0].toUpperCase() + tab.slice(1)}</Text><Text style={styles.desktopTopSub}>Berlin student network</Text></View>
-                <View style={styles.desktopTopActions}><View style={styles.locationChip}><Text style={styles.locationChipText}>Berlin</Text></View></View>
+              <View style={styles.desktopTopActions}>
+                <View style={styles.locationChip}><Text style={styles.locationChipText}>{profile?.city || 'Berlin'}</Text></View>
+                <Pressable accessibilityRole="button" accessibilityLabel="Create listing" onPress={() => setTab('create')} style={[styles.desktopCreate, tab === 'create' && styles.desktopCreateActive]}>
+                  <Icon name="plus" size={18} color={BRAND.white} />
+                  <Text style={styles.desktopCreateText}>Create</Text>
+                </Pressable>
               </View>
-              {content}
             </View>
+            <View style={styles.desktopMain}>{content}</View>
           </View>
         ) : (
           <>
@@ -287,8 +287,17 @@ const styles = StyleSheet.create({
   demoPanel: { width: '100%', maxWidth: 480, padding: 24, borderRadius: 24, backgroundColor: BRAND.white, gap: 18 },
   safeArea: { flex: 1, backgroundColor: BRAND.white },
   appShell: { flex: 1, backgroundColor: BRAND.soft },
-  desktopShell: { flex: 1, flexDirection: 'row' },
+  desktopShell: { flex: 1 },
   desktopMain: { flex: 1, backgroundColor: BRAND.soft },
+  desktopNavigation: { backgroundColor: BRAND.white, borderBottomWidth: 1, borderBottomColor: BRAND.line, paddingHorizontal: 28, minHeight: 74, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 22 },
+  desktopNavLinks: { flexDirection: 'row', alignItems: 'center', gap: 7, flex: 1, justifyContent: 'center' },
+  desktopNavItem: { minHeight: 43, paddingHorizontal: 15, borderRadius: 12, flexDirection: 'row', alignItems: 'center', gap: 8 },
+  desktopNavItemActive: { backgroundColor: BRAND.purpleSoft },
+  desktopNavText: { color: BRAND.muted, fontSize: 13, fontWeight: '700' },
+  desktopNavTextActive: { color: BRAND.purple, fontWeight: '900' },
+  desktopCreate: { backgroundColor: BRAND.purple, paddingVertical: 11, paddingHorizontal: 17, borderRadius: 12, flexDirection: 'row', alignItems: 'center', gap: 7 },
+  desktopCreateActive: { backgroundColor: '#5931E8' },
+  desktopCreateText: { color: BRAND.white, fontWeight: '900', fontSize: 13 },
   sidebar: { width: 230, backgroundColor: BRAND.white, borderRightWidth: 1, borderRightColor: BRAND.line, paddingHorizontal: 18, paddingTop: 22, paddingBottom: 18 },
   sidebarTagline: { color: BRAND.subtle, fontSize: 11, marginTop: 2, marginBottom: 22 },
   sidebarMenu: { gap: 5, flex: 1 },
@@ -328,7 +337,7 @@ const styles = StyleSheet.create({
   greeting: { color: BRAND.muted, fontSize: 12, fontWeight: '700' },
   mobileHeading: { color: BRAND.ink, fontSize: 23, lineHeight: 28, fontWeight: '900', letterSpacing: -0.7, maxWidth: 260, marginTop: 3 },
   hero: { backgroundColor: BRAND.ink, borderRadius: 24, padding: 22, overflow: 'hidden', minHeight: 190, justifyContent: 'space-between' },
-  heroDesktop: { minHeight: 280, padding: 34, flexDirection: 'row', alignItems: 'center' },
+  heroDesktop: { minHeight: 292, padding: 34, flexDirection: 'row', alignItems: 'center' },
   heroCopy: { flex: 1, maxWidth: 670, zIndex: 2 },
   heroOrbOne: { position: 'absolute', width: 260, height: 260, borderRadius: 130, backgroundColor: '#2B376D', right: -70, top: -120, opacity: 0.72 },
   heroOrbTwo: { position: 'absolute', width: 180, height: 180, borderRadius: 90, backgroundColor: '#4C2B8A', right: 120, bottom: -135, opacity: 0.55 },
@@ -350,7 +359,7 @@ const styles = StyleSheet.create({
   sectionHint: { color: BRAND.subtle, fontSize: 11, marginTop: 2 },
   categoryGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   categoryTile: { flexGrow: 0, flexBasis: '22%', backgroundColor: BRAND.white, borderWidth: 0, borderColor: BRAND.line, borderRadius: 16, paddingVertical: 13, paddingHorizontal: 10, alignItems: 'center', gap: 7, shadowColor: '#10162F', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.03, shadowRadius: 6, elevation: 1 },
-  categoryTileDesktop: { flexBasis: '15%' },
+  categoryTileDesktop: { flexBasis: '15%', minHeight: 118, paddingTop: 21, paddingBottom: 18, justifyContent: 'center' },
   categoryIcon: { width: 43, height: 43, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
   categoryEmoji: { fontSize: 21 },
   categoryName: { color: BRAND.ink, fontWeight: '800', fontSize: 11 },
