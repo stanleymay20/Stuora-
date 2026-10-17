@@ -93,6 +93,8 @@ test('homepage scroll container is viewport-bounded and responds to wheel on des
   await page.goto('/');
   const viewport = page.getByTestId('home-scroll');
   await expect(viewport).toBeVisible();
+  // Expose a draggable scrollbar as a fallback when device wheel gestures are unavailable.
+  expect(await viewport.evaluate(element => getComputedStyle(element).scrollbarWidth)).not.toBe('none');
   await expect.poll(async () => viewport.evaluate(element => element.scrollHeight - element.clientHeight)).toBeGreaterThan(100);
   const bounds = await viewport.boundingBox();
   expect(bounds).not.toBeNull();
