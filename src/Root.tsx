@@ -7,8 +7,8 @@ import StudentSavingsOverlay from './StudentSavingsOverlay';
 
 // A password-recovery session must not expose the rest of the app.
 function RootContent() {
-  const { recoveryMode } = useAuth();
-  if (recoveryMode) {
+  const { recoveryMode, recoveryComplete } = useAuth();
+  if (recoveryMode || recoveryComplete) {
     return (
       <ScrollView contentContainerStyle={styles.recovery} keyboardShouldPersistTaps="handled">
         <View style={styles.recoveryCard}><AccountPanel /></View>
