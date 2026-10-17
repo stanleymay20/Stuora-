@@ -81,6 +81,7 @@ export default function AccountPanel() {
       setNewPassword(''); setConfirmPassword('');
       // Recovery grants a temporary authenticated session. Revoke it so a
       // copied or unattended recovery link cannot leave the account signed in.
+      finishRecovery();
       const { error: signOutError } = await supabase.auth.signOut({ scope: 'local' });
       if (signOutError) {
         setIssue('Password changed, but this device could not sign out. Please sign out manually.');
@@ -89,7 +90,6 @@ export default function AccountPanel() {
       if (Platform.OS === 'web' && typeof window !== 'undefined' && window.location.hash) {
         window.history.replaceState({}, '', window.location.pathname + window.location.search);
       }
-      finishRecovery();
       setNotice('Password updated successfully. Sign in again with your new password.');
     } catch { setIssue('Unable to connect. Your password was not changed.'); }
     finally { setBusy(false); }
