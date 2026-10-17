@@ -93,7 +93,7 @@ function SearchField({ value, onChangeText, placeholder, onSubmit }: { value: st
 
 export default function App() {
   const { session, profile } = useAuth();
-  const { width } = useWindowDimensions();
+  const { width, height } = useWindowDimensions();
   const isDesktop = width >= 960;
   const [tab, setTab] = useState<Tab>('home');
   const [category, setCategory] = useState<Category>('Housing');
@@ -129,7 +129,7 @@ export default function App() {
   const content = (
     <View style={styles.contentFrame}>
       {tab === 'home' && (
-        <ScrollView contentContainerStyle={[styles.page, isDesktop && styles.pageDesktop]} showsVerticalScrollIndicator={false}>
+        <ScrollView testID="home-scroll" style={styles.pageScroll} contentContainerStyle={[styles.page, isDesktop && styles.pageDesktop]} showsVerticalScrollIndicator={false}>
           <View style={[styles.hero, isDesktop ? styles.heroDesktop : styles.heroMobile]}>
             <Image source={require('./assets/berlin-skyline.jpg')} resizeMode="cover" style={[StyleSheet.absoluteFill, { width: '100%', height: '100%' }]} accessibilityLabel="Berlin skyline at sunset" />
             <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(17,22,47,0.56)' }]} />
@@ -160,7 +160,7 @@ export default function App() {
       )}
 
       {tab === 'explore' && (
-        <ScrollView contentContainerStyle={[styles.page, isDesktop && styles.pageDesktop]} showsVerticalScrollIndicator={false}>
+        <ScrollView testID="explore-scroll" style={styles.pageScroll} contentContainerStyle={[styles.page, isDesktop && styles.pageDesktop]} showsVerticalScrollIndicator={false}>
           <View style={styles.pageHeadingRow}>
             <View>
               <Text style={styles.pageTitle}>{category}</Text>
@@ -181,7 +181,7 @@ export default function App() {
       )}
 
       {tab === 'create' && (
-        <ScrollView contentContainerStyle={[styles.page, styles.formPage]} keyboardShouldPersistTaps="handled">
+        <ScrollView testID="create-scroll" style={styles.pageScroll} contentContainerStyle={[styles.page, styles.formPage]} keyboardShouldPersistTaps="handled">
           <View style={styles.formCard}>
             <View style={styles.formHeader}>
               <View style={styles.formIcon}><Icon name="plus" color={BRAND.purple} size={26} /></View>
@@ -210,7 +210,7 @@ export default function App() {
       {tab === 'messages' && <MessageWorkspace onAccount={() => setTab('profile')} />}
 
       {tab === 'profile' && (
-        <ScrollView contentContainerStyle={[styles.page, styles.profilePage]} showsVerticalScrollIndicator={false}>
+        <ScrollView testID="profile-scroll" style={styles.pageScroll} contentContainerStyle={[styles.page, styles.profilePage]} showsVerticalScrollIndicator={false}>
           <AccountPanel />
         </ScrollView>
       )}
@@ -218,7 +218,7 @@ export default function App() {
   );
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView style={Platform.OS === 'web' ? [styles.safeArea, { height }] : styles.safeArea}>
       <StatusBar barStyle="dark-content" backgroundColor={BRAND.white} />
       <View style={styles.appShell}>
         {isDesktop ? (
@@ -276,9 +276,9 @@ const styles = StyleSheet.create({
   demoBackdrop: { flex: 1, backgroundColor: 'rgba(17,22,47,0.55)', padding: 24, alignItems: 'center', justifyContent: 'center' },
   demoPanel: { width: '100%', maxWidth: 480, padding: 24, borderRadius: 24, backgroundColor: BRAND.white, gap: 18 },
   safeArea: { flex: 1, backgroundColor: BRAND.white },
-  appShell: { flex: 1, backgroundColor: BRAND.soft },
-  desktopShell: { flex: 1 },
-  desktopMain: { flex: 1, backgroundColor: BRAND.soft },
+  appShell: { flex: 1, minHeight: 0, backgroundColor: BRAND.soft },
+  desktopShell: { flex: 1, minHeight: 0 },
+  desktopMain: { flex: 1, minHeight: 0, backgroundColor: BRAND.soft },
   desktopNavigation: { backgroundColor: BRAND.white, borderBottomWidth: 1, borderBottomColor: BRAND.line, paddingHorizontal: 28, minHeight: 74, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 22 },
   desktopNavLinks: { flexDirection: 'row', alignItems: 'center', gap: 7, flex: 1, justifyContent: 'center' },
   desktopNavItem: { minHeight: 43, paddingHorizontal: 15, borderRadius: 12, flexDirection: 'row', alignItems: 'center', gap: 8 },
@@ -307,7 +307,8 @@ const styles = StyleSheet.create({
   desktopTopActions: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   mobileTopBar: { minHeight: 64, paddingHorizontal: 16, paddingVertical: 10, backgroundColor: BRAND.white, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: BRAND.line, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   mobileTopActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  contentFrame: { flex: 1 },
+  contentFrame: { flex: 1, minHeight: 0 },
+  pageScroll: { flex: 1, minHeight: 0 },
   brandRow: { flexDirection: 'row', alignItems: 'center', gap: 9 },
   logoMark: { width: 38, height: 38, borderRadius: 12, backgroundColor: BRAND.purple, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
   logoMarkCompact: { width: 30, height: 30, borderRadius: 9 },
