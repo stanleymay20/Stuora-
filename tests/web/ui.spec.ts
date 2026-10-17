@@ -129,3 +129,33 @@ test('unavailable illustrated categories do not imply real posts and offer a wor
   await page.getByRole('button', { name: 'Browse Housing instead' }).click();
   await expect(page.getByRole('button', { name: 'Refresh listings' })).toBeVisible();
 });
+
+test('Student Savings is accessible from navigation without blocking the homepage', async ({ page }) => {
+  await backend(page);
+  await page.goto('/');
+  const savings = page.getByRole('button', { name: 'Open Student Savings' });
+  await expect(savings).toBeVisible();
+  const bounds = await savings.boundingBox();
+  expect(bounds).not.toBeNull();
+  expect(bounds!.y).toBeLessThan(90);
+  await savings.click();
+  await expect(page.getByText('Student life for less.', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Close Student Savings' }).click();
+  await expect(page.getByText('Community housing', { exact: true })).toBeVisible();
+});
+
+test('compact homepage listing previews keep their real first-post actions discoverable', async ({ page }) => {
+  await backend(page);
+  await page.goto('/');
+  const post = page.getByRole('button', { name: 'Post housing listing' });
+  await expect(post).toBeVisible();
+  await expect(page.getByText('No housing listings found.', { exact: true })).toBeVisible();
+  if (test.info().project.name === 'desktop') {
+    const emptyCard = page.getByText('No housing listings found.', { exact: true }).locator('..').locator('..');
+    const bounds = await emptyCard.boundingBox();
+    expect(bounds).not.toBeNull();
+    expect(bounds!.height).toBeLessThan(230);
+  }
+  await post.click();
+  await expect(page.getByText('Sign in and complete your profile to publish a listing.')).toBeVisible();
+});
