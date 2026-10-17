@@ -87,3 +87,17 @@ test('mobile homepage retains a genuine Berlin hero and four-up responsive disco
   await expect(page.getByPlaceholder('Search housing listings…')).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
 });
+
+test('homepage scroll container is viewport-bounded and responds to wheel on desktop and mobile web', async ({ page }) => {
+  await backend(page);
+  await page.goto('/');
+  const viewport = page.getByTestId('home-scroll');
+  await expect(viewport).toBeVisible();
+  await expect.poll(async () => viewport.evaluate(element => element.scrollHeight - element.clientHeight)).toBeGreaterThan(100);
+  const bounds = await viewport.boundingBox();
+  expect(bounds).not.toBeNull();
+  await page.mouse.move(bounds!.x + bounds!.width / 2, bounds!.y + Math.min(bounds!.height / 2, 250));
+  await page.mouse.wheel(0, 700);
+  await expect.poll(async () => viewport.evaluate(element => element.scrollTop)).toBeGreaterThan(40);
+  await expect(page.getByText('Marketplace', { exact: true }).first()).toBeAttached();
+});
