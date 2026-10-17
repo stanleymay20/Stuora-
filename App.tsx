@@ -5,6 +5,7 @@ import MessageWorkspace from './src/messages/MessageWorkspace';
 import PeopleDirectory from './src/people/PeopleDirectory';
 import { useAuth } from './src/account/AuthProvider';
 import { Icon, StuoraMark } from './src/ui/Brand';
+import { CategoryArtwork } from './src/ui/CategoryArtwork';
 import {
   Platform,
   Image,
@@ -67,9 +68,7 @@ function CategoryTile({ item, onPress }: { item: (typeof categories)[number]; on
   const { width } = useWindowDimensions();
   return (
     <Pressable accessibilityRole="button" accessibilityLabel={`Browse ${item.name}`} onPress={onPress} style={({ pressed }) => [styles.categoryTile, width >= 960 && styles.categoryTileDesktop, pressed && styles.pressed]}>
-      <View style={[styles.categoryIcon, { backgroundColor: item.tint }]}>
-        <Icon name={item.name} color={BRAND.purple} size={25} />
-      </View>
+      <View style={styles.categoryArtWrap}><CategoryArtwork category={item.name} width="100%" height={74} /></View>
       <Text style={styles.categoryName}>{item.name}</Text>
     </Pressable>
   );
@@ -85,8 +84,14 @@ function SearchField({ value, onChangeText, placeholder, onSubmit }: { value: st
         onSubmitEditing={onSubmit}
         placeholder={placeholder}
         placeholderTextColor="#A2A8B8"
+        returnKeyType="search"
         style={styles.searchInput}
       />
+      {onSubmit ? (
+        <Pressable accessibilityRole="button" accessibilityLabel="Search housing listings" onPress={onSubmit} style={({ pressed }) => [styles.searchSubmit, pressed && styles.pressed]}>
+          <Text style={styles.searchSubmitText}>Search</Text>
+        </Pressable>
+      ) : null}
     </View>
   );
 }
@@ -99,6 +104,15 @@ export default function App() {
   const [category, setCategory] = useState<Category>('Housing');
   const [search, setSearch] = useState('');
   const [draftType, setDraftType] = useState<'Housing' | 'Marketplace'>('Marketplace');
+
+  const categoryCopy: Record<Category, string> = {
+    Housing: 'Find shared spaces and student rooms posted by real members.',
+    Marketplace: 'Make more of student life with local, secondhand essentials.',
+    Trips: 'A place for student adventures once verified trip posting is ready.',
+    Jobs: 'Student-friendly opportunities when verified job posting is ready.',
+    Events: 'Discover student gatherings once real event publishing is ready.',
+    People: 'Meet students beyond your classroom through real public profiles.',
+  };
 
   const goToCategory = (next: Category) => {
     setCategory(next);
@@ -161,12 +175,19 @@ export default function App() {
 
       {tab === 'explore' && (
         <ScrollView testID="explore-scroll" style={styles.pageScroll} contentContainerStyle={[styles.page, isDesktop && styles.pageDesktop]} showsVerticalScrollIndicator={true}>
-          <View style={styles.pageHeadingRow}>
-            <View>
+          <View style={styles.categorySpotlight}>
+            <View style={styles.categorySpotlightText}>
+              <Text style={styles.spotlightEyebrow}>STUORA / {category.toUpperCase()}</Text>
               <Text style={styles.pageTitle}>{category}</Text>
-              <Text style={styles.pageSubtitle}>{category === 'Housing' || category === 'Marketplace' ? 'Live community listings · one shared backend.' : category === 'People' ? 'Discoverable profiles from Stuora.' : 'This category is not available yet.'}</Text>
+              <Text style={styles.pageSubtitle}>{categoryCopy[category]}</Text>
+              {(category === 'Housing' || category === 'Marketplace') ? (
+                <Pressable accessibilityRole="button" accessibilityLabel="Create in this category" onPress={() => startListing(category)} style={styles.spotlightCreate}>
+                  <Icon name="plus" color={BRAND.white} size={16} />
+                  <Text style={styles.spotlightCreateText}>Post a listing</Text>
+                </Pressable>
+              ) : null}
             </View>
-            {isDesktop && (category === 'Housing' || category === 'Marketplace') ? <Pressable accessibilityRole="button" accessibilityLabel="Create in this category" onPress={() => startListing(category)} style={styles.createTopButton}><Text style={styles.createTopButtonText}>Create</Text></Pressable> : null}
+            <CategoryArtwork category={category} width={isDesktop ? 225 : 115} height={isDesktop ? 125 : 105} />
           </View>
           {category === 'Housing' || category === 'Marketplace' || category === 'People' ? <SearchField value={search} onChangeText={setSearch} placeholder={`Search ${category.toLowerCase()}…`} /> : null}
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipsRow}>
@@ -176,7 +197,7 @@ export default function App() {
               </Pressable>
             ))}
           </ScrollView>
-          {category === 'Housing' || category === 'Marketplace' ? <ListingWorkspace key={`${category}-${session?.user.id ?? 'public'}`} category={category} search={search} onAccount={() => setTab('profile')} onMessage={() => setTab('messages')} onCreate={() => startListing(category)} onClearSearch={() => setSearch('')} /> : category === 'People' ? <PeopleDirectory key={session?.user.id ?? 'public'} search={search} onAccount={() => setTab('profile')} /> : <View style={styles.emptyState}><Icon name={category} size={40} color={BRAND.purple} /><Text style={styles.emptyTitle}>{category} is not available yet</Text><Text style={styles.emptyText}>Posting and participation will open after persistence and permissions are verified. No sample offers are displayed.</Text></View>}
+          {category === 'Housing' || category === 'Marketplace' ? <ListingWorkspace key={`${category}-${session?.user.id ?? 'public'}`} category={category} search={search} onAccount={() => setTab('profile')} onMessage={() => setTab('messages')} onCreate={() => startListing(category)} onClearSearch={() => setSearch('')} /> : category === 'People' ? <PeopleDirectory key={session?.user.id ?? 'public'} search={search} onAccount={() => setTab('profile')} /> : <View style={styles.emptyState}><CategoryArtwork category={category} width={240} height={120} /><Text style={styles.emptyTitle}>{category} is not available yet</Text><Text style={styles.emptyText}>Posting and participation will open after persistence and permissions are verified. No sample offers are displayed.</Text><Pressable accessibilityRole="button" accessibilityLabel="Browse Housing instead" onPress={() => goToCategory('Housing')} style={styles.secondaryButton}><Text style={styles.secondaryButtonText}>Browse Housing instead</Text></Pressable></View>}
         </ScrollView>
       )}
 
@@ -343,7 +364,9 @@ const styles = StyleSheet.create({
   heroCityIcon: { fontSize: 34 },
   heroCityTitle: { color: BRAND.white, fontSize: 16, fontWeight: '900', marginTop: 7 },
   heroCitySub: { color: '#B9C0DA', fontSize: 10, marginTop: 2 },
-  searchBox: { backgroundColor: BRAND.white, borderWidth: 1, borderColor: BRAND.line, borderRadius: 14, paddingHorizontal: 13, minHeight: 48, flexDirection: 'row', alignItems: 'center', gap: 9 },
+  searchBox: { backgroundColor: BRAND.white, borderWidth: 1, borderColor: BRAND.line, borderRadius: 14, paddingHorizontal: 11, minHeight: 50, flexDirection: 'row', alignItems: 'center', gap: 8 },
+  searchSubmit: { backgroundColor: BRAND.purple, borderRadius: 10, paddingHorizontal: 13, paddingVertical: 9, alignItems: 'center', justifyContent: 'center' },
+  searchSubmitText: { color: BRAND.white, fontWeight: '800', fontSize: 12 },
   searchIcon: { fontSize: 21, color: BRAND.muted },
   searchInput: { flex: 1, color: BRAND.ink, fontSize: 14, outlineStyle: Platform.OS === 'web' ? 'none' : undefined } as any,
   sectionHeader: { gap: 2 },
@@ -351,8 +374,9 @@ const styles = StyleSheet.create({
   sectionTitle: { color: BRAND.ink, fontSize: 19, fontWeight: '900', letterSpacing: -0.35 },
   sectionHint: { color: BRAND.subtle, fontSize: 11, marginTop: 2 },
   categoryGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
-  categoryTile: { flexGrow: 0, flexBasis: '22%', backgroundColor: BRAND.white, borderWidth: 0, borderColor: BRAND.line, borderRadius: 16, paddingVertical: 13, paddingHorizontal: 10, alignItems: 'center', gap: 7, shadowColor: '#10162F', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.03, shadowRadius: 6, elevation: 1 },
-  categoryTileDesktop: { flexBasis: '15%', minHeight: 118, paddingTop: 21, paddingBottom: 18, justifyContent: 'center' },
+  categoryTile: { flexGrow: 0, flexBasis: '22%', backgroundColor: BRAND.white, borderWidth: 1, borderColor: BRAND.line, borderRadius: 17, paddingBottom: 12, alignItems: 'center', gap: 8, overflow: 'hidden', shadowColor: '#10162F', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.04, shadowRadius: 8, elevation: 1 },
+  categoryTileDesktop: { flexBasis: '15%', minHeight: 121, justifyContent: 'flex-start' },
+  categoryArtWrap: { width: '100%', overflow: 'hidden', backgroundColor: '#F1EDFF' },
   categoryIcon: { width: 43, height: 43, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
   categoryEmoji: { fontSize: 21 },
   categoryName: { color: BRAND.ink, fontWeight: '800', fontSize: 11 },
@@ -386,6 +410,11 @@ const styles = StyleSheet.create({
   linkText: { color: BRAND.purple, fontWeight: '900', fontSize: 11 },
   chipsRow: { paddingVertical: 2 },
   pageHeadingRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
+  categorySpotlight: { backgroundColor: BRAND.white, borderRadius: 22, borderWidth: 1, borderColor: BRAND.line, padding: 17, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 7, overflow: 'hidden' },
+  categorySpotlightText: { flex: 1, gap: 5 },
+  spotlightEyebrow: { color: BRAND.purple, fontSize: 10, fontWeight: '900', letterSpacing: 1 },
+  spotlightCreate: { alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 10, borderRadius: 12, backgroundColor: BRAND.purple, paddingVertical: 10, paddingHorizontal: 13 },
+  spotlightCreateText: { color: BRAND.white, fontWeight: '800', fontSize: 12 },
   pageTitle: { color: BRAND.ink, fontSize: 29, fontWeight: '900', letterSpacing: -0.8 },
   pageSubtitle: { color: BRAND.muted, fontSize: 13, lineHeight: 19, marginTop: 2 },
   createTopButton: { backgroundColor: BRAND.purple, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 10 },
