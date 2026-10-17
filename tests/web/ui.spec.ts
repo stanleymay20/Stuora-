@@ -50,3 +50,40 @@ test('desktop reference navigation preserves real browse, messaging and account 
   await page.getByRole('button', { name: 'Open Home' }).click();
   await expect(page.getByText('Community housing', { exact: true })).toBeVisible();
 });
+
+test('first listing CTA uses existing protected publishing path on desktop and mobile', async ({ page }) => {
+  await backend(page);
+  await page.goto('/');
+  await expect(page.getByRole('button', { name: 'Post housing listing' })).toBeVisible();
+  await page.getByRole('button', { name: 'Post housing listing' }).click();
+  await expect(page.getByText('Sign in and complete your profile to publish a listing.')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Post Housing' })).toBeVisible();
+  await page.getByRole('button', { name: 'Open account' }).click();
+  await expect(page.getByText('Welcome to Stuora', { exact: true })).toBeVisible();
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Post marketplace listing' }).click();
+  await expect(page.getByText('Sign in and complete your profile to publish a listing.')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Post Marketplace' })).toBeVisible();
+});
+
+test('listing search with zero results offers clear-search instead of misleading post suggestion', async ({ page }) => {
+  await backend(page);
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Browse Housing', exact: true }).click();
+  await page.getByPlaceholder('Search housing…').fill('no-results-search');
+  await expect(page.getByRole('button', { name: 'Clear search' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Post housing listing' })).toHaveCount(0);
+  await page.getByRole('button', { name: 'Clear search' }).click();
+  await expect(page.getByPlaceholder('Search housing…')).toHaveValue('');
+  await expect(page.getByRole('button', { name: 'Post housing listing' })).toBeVisible();
+});
+
+test('mobile homepage retains a genuine Berlin hero and four-up responsive discovery', async ({ page }) => {
+  test.skip(test.info().project.name !== 'mobile-web', 'Mobile-only hero regression');
+  await backend(page);
+  await page.goto('/');
+  await expect(page.getByText('STUDENT LIFE, CONNECTED', { exact: true })).toBeVisible();
+  await expect(page.getByText('Browse by category', { exact: true })).toBeVisible();
+  await expect(page.getByPlaceholder('Search housing listings…')).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+});
