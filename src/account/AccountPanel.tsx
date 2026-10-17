@@ -151,7 +151,7 @@ export default function AccountPanel() {
       <View style={styles.passportAvatar}><Text style={styles.passportInitial}>{profile.display_name.charAt(0).toUpperCase()}</Text></View>
       <View style={styles.passportInfo}>
         <Text style={styles.passportName}>{profile.display_name}</Text>
-        <Text style={styles.passportMeta}>{profile.city} · Student status: {profile.student_status}</Text>
+        <Text style={styles.passportMeta}>{profile.city} · Verification: {profile.student_status}</Text>
         {profile.bio ? <Text style={styles.passportBio}>{profile.bio}</Text> : null}
       </View>
     </View> : null}
