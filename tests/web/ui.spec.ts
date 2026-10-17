@@ -32,3 +32,19 @@ test('styled email login and secure messaging gate expose no fake conversations'
   await expect(page.getByRole('button', { name: 'Send message' })).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Open account' })).toBeVisible();
 });
+
+test('desktop reference navigation preserves real browse, messaging and account gates', async ({ page }) => {
+  test.skip(test.info().project.name !== 'desktop', 'Desktop navigation differs from the mobile bottom bar');
+  await backend(page);
+  await page.goto('/');
+  await expect(page.getByRole('button', { name: 'Open Home' })).toBeVisible();
+  await expect(page.getByText('Browse by category', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Open Explore' }).click();
+  await expect(page.getByRole('button', { name: 'Refresh listings' })).toBeVisible();
+  await page.getByRole('button', { name: 'Open Messages' }).click();
+  await expect(page.getByText('Sign in to use secure messaging', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Open your profile' }).click();
+  await expect(page.getByRole('button', { name: 'Sign in', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Open Home' }).click();
+  await expect(page.getByText('Community housing', { exact: true })).toBeVisible();
+});
