@@ -105,8 +105,8 @@ export default function ListingWorkspace({ category, mode = 'browse', search = '
       .range(0, pages * PAGE_SIZE)
       .abortSignal(ac.signal);
     query = own && userId ? query.eq('owner_id', userId) : query.eq('status', 'active');
-    if (search.trim()) query = query.ilike('title', `%${search.trim().replace(/[\\%_]/g, '\\    if (search.trim()) query = query.ilike('title', `%${search.trim().replace(/[\\%_]/g, '\\$&')}%`);')}%`);
-    if (cityFilter.trim()) query = query.ilike('city', `%${cityFilter.trim().replace(/[\\%_]/g, '\\    if (search.trim()) query = query.ilike('title', `%${search.trim().replace(/[\\%_]/g, '\\$&')}%`);')}%`);
+    if (search.trim()) query = query.ilike('title', `%${search.trim().replace(/[\\%_]/g, '\\$&')}%`);
+    if (cityFilter.trim()) query = query.ilike('city', `%${cityFilter.trim().replace(/[\\%_]/g, '\\$&')}%`);
     if (maxPrice.trim()) query = query.lte('price_cents', Math.round(Number(maxPrice) * 100));
     void Promise.resolve(query).then((result: any) => {
       if (ac.signal.aborted) return;
