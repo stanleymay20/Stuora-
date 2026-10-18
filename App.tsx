@@ -205,7 +205,7 @@ export default function App({ onOpenSavings }: { onOpenSavings: () => void }) {
                 <Text style={styles.spotlightPostingNote}>Free to post · Real student listings only</Text>
               ) : null}
             </View>
-            <EditorialImage kind={category} style={[styles.categorySpotlightPhoto, !isDesktop && styles.categorySpotlightPhotoMobile]} label={`Stuora ${category} editorial illustration; actual posts come from the database`} />
+            <EditorialImage kind={category} style={[styles.categorySpotlightPhoto, !isDesktop && styles.categorySpotlightPhotoMobile]} label={`Stuora ${category} editorial image; actual posts come from the database`} />
           </View>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipsRow}>
             {categories.map((item) => (
