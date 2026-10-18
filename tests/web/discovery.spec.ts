@@ -45,3 +45,31 @@ test('Savings uses verified backend prices with errors, refresh and no invented 
   await expect(page.getByText(/42,80|Savings this month|Demo Partner/)).toHaveCount(0);
   await page.getByRole('button', { name: 'Close Student Savings' }).click();
 });
+
+test('People lets members view opt-in public profiles and filter by city without exposing secrets', async ({ page }) => {
+  await backend(page);
+  await account(page); await signin(page);
+  await page.route('**/rest/v1/profiles?*', async route => {
+    const params = new URL(route.request().url()).searchParams;
+    if (params.get('is_discoverable') !== 'eq.true') return route.fallback();
+    expect(params.get('select')).toBe('id,display_name,city,bio');
+    expect(params.get('email')).toBeNull();
+    const city = params.get('city');
+    const people = city ? [{ id:'member-1', display_name:'Public member', city:'Potsdam', bio:'Sharing a public academic bio' }]
+      : [{ id:'member-1', display_name:'Public member', city:'Potsdam', bio:'Sharing a public academic bio' }];
+    return route.fulfill({ json:people });
+  });
+  await page.getByRole('button', { name:'Browse People', exact:true }).click();
+  await expect(page.getByRole('button',{name:'View Public member profile'})).toBeVisible();
+  await page.getByRole('textbox',{name:'Filter people by city'}).fill('Potsdam');
+  await expect(page.getByRole('button',{name:'Clear city filter'})).toBeVisible();
+  await page.getByRole('button',{name:'View Public member profile'}).click();
+  await expect(page.getByText('Sharing a public academic bio',{exact:true})).toBeVisible();
+  await expect(page.getByText('Shared publicly with signed-in Stuora members')).toBeVisible();
+  await expect(page.getByText('Private conversations currently begin from real marketplace or housing listings.')).toBeVisible();
+  await expect(page.getByText(/@example|phone number|date of birth/i)).toHaveCount(0);
+  await page.getByRole('button',{name:'Back to people'}).click();
+  await expect(page.getByRole('button',{name:'View Public member profile'})).toBeVisible();
+  await page.getByRole('button',{name:'Clear city filter'}).click();
+  await expect(page.getByRole('textbox',{name:'Filter people by city'})).toHaveValue('');
+});
