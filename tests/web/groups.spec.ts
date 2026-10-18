@@ -99,7 +99,7 @@ test('a real saved group is discoverable, editable and discussed through its con
   await page.getByLabel('Group name').fill('Berlin Physics Study Group');
   await page.getByLabel('Group description').fill('Real students preparing for exams');
   await page.getByLabel('Group city').fill('Potsdam');
-  await page.getByRole('button', { name: 'Topic University' }).click();
+  await page.getByRole('button', { name: 'Topic University', exact: true }).click();
   await page.getByRole('button', { name: 'Publish group' }).click();
   await expect.poll(() => creation).toBe(1);
   await expect(page.getByText('Berlin Physics Study Group', { exact: true })).toBeVisible();
