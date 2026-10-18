@@ -288,3 +288,69 @@ test('user-selected photos replace original category thumbnails and remain bundl
   await expect.poll(() => banner.evaluate((image: HTMLImageElement) => image.naturalWidth)).toBeGreaterThan(0);
   await expect(page.getByText('No events listings found.', { exact: true })).toBeVisible();
 });
+
+test('all Stuora web destinations load from shareable URLs and retain their page identity on refresh', async ({ page }) => {
+  await backend(page);
+  for (const [slug, label] of [
+    ['housing', 'Housing'], ['marketplace', 'Marketplace'], ['trips', 'Trips'],
+    ['jobs', 'Jobs'], ['events', 'Events'], ['people', 'People'],
+  ] as const) {
+    await page.goto('/?utm_source=testing&stuora=' + slug);
+    await expect(page.getByText('STUORA / ' + label.toUpperCase(), { exact: true })).toBeVisible();
+    await expect.poll(() => new URL(page.url()).searchParams.get('stuora')).toBe(slug);
+    await expect.poll(() => new URL(page.url()).searchParams.get('utm_source')).toBe('testing');
+    await page.reload();
+    await expect(page.getByText('STUORA / ' + label.toUpperCase(), { exact: true })).toBeVisible();
+  }
+  await page.goto('/?stuora=messages');
+  await expect(page.getByText('Sign in to use secure messaging', { exact: true })).toBeVisible();
+  await page.goto('/?stuora=profile');
+  await expect(page.getByText('Welcome to Stuora', { exact: true })).toBeVisible();
+  for (const slug of ['create-housing', 'create-marketplace'] as const) {
+    await page.goto('/?stuora=' + slug);
+    await expect(page.getByText('Create on Stuora', { exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: slug === 'create-housing' ? 'Post Housing' : 'Post Marketplace' })).toBeVisible();
+  }
+});
+
+test('browser Back and Forward restore the correct category, without breaking query parameters', async ({ page }) => {
+  await backend(page);
+  await page.goto('/?utm_source=partner');
+  await expect(page.getByText('Browse by category', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Browse Trips', exact: true }).click();
+  await expect.poll(() => new URL(page.url()).searchParams.get('stuora')).toBe('trips');
+  await page.getByRole('button', { name: 'Browse Events', exact: true }).click();
+  await expect.poll(() => new URL(page.url()).searchParams.get('stuora')).toBe('events');
+  await page.goBack();
+  await expect(page.getByText('STUORA / TRIPS', { exact: true })).toBeVisible();
+  await expect.poll(() => new URL(page.url()).searchParams.get('stuora')).toBe('trips');
+  await page.goBack();
+  await expect(page.getByText('Browse by category', { exact: true })).toBeVisible();
+  await expect.poll(() => new URL(page.url()).searchParams.get('stuora')).toBe(null);
+  await page.goForward();
+  await expect(page.getByText('STUORA / TRIPS', { exact: true })).toBeVisible();
+  await expect.poll(() => new URL(page.url()).searchParams.get('utm_source')).toBe('partner');
+});
+
+test('desktop and mobile navigation buttons each reach the correct functional destination', async ({ page }) => {
+  await backend(page);
+  await page.goto('/');
+  const isMobile = test.info().project.name === 'mobile-web';
+  await page.getByRole('button', { name: isMobile ? 'Explore' : 'Open Explore', exact: true }).click();
+  await expect.poll(() => new URL(page.url()).searchParams.get('stuora')).toBe('housing');
+  await page.getByRole('button', { name: isMobile ? 'Messages' : 'Open Messages', exact: true }).click();
+  await expect(page.getByText('Sign in to use secure messaging', { exact: true })).toBeVisible();
+  await expect.poll(() => new URL(page.url()).searchParams.get('stuora')).toBe('messages');
+  await page.getByRole('button', { name: isMobile ? 'You' : 'Open your profile', exact: true }).click();
+  await expect(page.getByText('Welcome to Stuora', { exact: true })).toBeVisible();
+  await expect.poll(() => new URL(page.url()).searchParams.get('stuora')).toBe('profile');
+  await page.getByRole('button', { name: 'Create listing' }).click();
+  await expect(page.getByText('Create on Stuora', { exact: true })).toBeVisible();
+  await expect.poll(() => new URL(page.url()).searchParams.get('stuora')).toBe('create-marketplace');
+  await page.getByRole('button', { name: isMobile ? 'Home' : 'Open Home', exact: true }).click();
+  await expect(page.getByText('Browse by category', { exact: true })).toBeVisible();
+  await expect.poll(() => new URL(page.url()).searchParams.has('stuora')).toBe(false);
+  await page.getByRole('button', { name: 'Open Student Savings' }).click();
+  await expect(page.getByText('Student life for less.', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Close Student Savings' }).click();
+});
