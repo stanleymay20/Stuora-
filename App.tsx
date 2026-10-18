@@ -4,6 +4,7 @@ import ListingWorkspace from './src/listings/ListingWorkspace';
 import MessageWorkspace from './src/messages/MessageWorkspace';
 import PeopleDirectory from './src/people/PeopleDirectory';
 import CommunityCatalog from './src/community/CommunityCatalog';
+import GroupWorkspace from './src/groups/GroupWorkspace';
 import { useAuth } from './src/account/AuthProvider';
 import { Icon, StuoraMark } from './src/ui/Brand';
 import { EditorialImage } from './src/ui/EditorialImage';
@@ -22,13 +23,13 @@ import {
 } from 'react-native';
 
 type Tab = 'home' | 'explore' | 'create' | 'messages' | 'profile';
-type Category = 'Housing' | 'Marketplace' | 'Trips' | 'Jobs' | 'Events' | 'People';
+type Category = 'Housing' | 'Marketplace' | 'Trips' | 'Jobs' | 'Events' | 'People' | 'Groups';
 type PostCategory = 'Housing' | 'Marketplace';
 type Destination = { tab: Tab; category: Category; draftType: PostCategory };
 const WEB_ROUTE_KEY = 'stuora';
 const categoryRoutes: Record<string, Category> = {
   housing: 'Housing', marketplace: 'Marketplace', trips: 'Trips',
-  jobs: 'Jobs', events: 'Events', people: 'People',
+  jobs: 'Jobs', events: 'Events', people: 'People', groups: 'Groups',
 };
 function readWebDestination(): Destination {
   const fallback: Destination = { tab: 'home', category: 'Housing', draftType: 'Marketplace' };
@@ -71,6 +72,7 @@ const categories: { name: Category; emoji: string; tint: string }[] = [
   { name: 'Jobs', emoji: '💼', tint: '#FFF4E8' },
   { name: 'Events', emoji: '🎟️', tint: '#FFF0F5' },
   { name: 'People', emoji: '👥', tint: '#F1EEFF' },
+  { name: 'Groups', emoji: '🫂', tint: '#F1EEFF' },
 ];
 
 function BrandMark({ compact = false }: { compact?: boolean }) {
@@ -102,7 +104,7 @@ function CategoryTile({ item, onPress }: { item: (typeof categories)[number]; on
       style={({ pressed }) => [styles.categoryTile, width >= 960 && styles.categoryTileDesktop, pressed && styles.pressed]}
     >
       <View style={styles.categoryArtWrap}>
-        <EditorialImage kind={item.name} style={styles.categoryPhoto} label={`Stuora editorial image for ${item.name}`} />
+        <EditorialImage kind={item.name === 'Groups' ? 'Community' : item.name} style={styles.categoryPhoto} label={`Stuora editorial image for ${item.name}`} />
         {upcoming ? <View style={styles.categorySoonTag}><Text style={styles.categorySoonText}>Posting soon</Text></View> : null}
       </View>
       <Text style={styles.categoryName}>{item.name}</Text>
@@ -192,6 +194,7 @@ export default function App({ onOpenSavings }: { onOpenSavings: () => void }) {
     Jobs: 'Browse real student opportunities. Posting and applications are being qualified separately.',
     Events: 'Explore real community gatherings. Posting and RSVP are being qualified separately.',
     People: 'Meet students beyond your classroom through real public profiles.',
+    Groups: 'Start a study circle or local community, join groups and share member-only discussions.',
   };
 
   const goToCategory = (next: Category) => {
@@ -267,7 +270,7 @@ export default function App({ onOpenSavings }: { onOpenSavings: () => void }) {
                 <Text style={styles.spotlightPostingNote}>Free to post · Real student listings only</Text>
               ) : null}
             </View>
-            <EditorialImage kind={category} style={[styles.categorySpotlightPhoto, !isDesktop && styles.categorySpotlightPhotoMobile]} label={`Stuora ${category} editorial image; actual posts come from the database`} />
+            <EditorialImage kind={category === 'Groups' ? 'Community' : category} style={[styles.categorySpotlightPhoto, !isDesktop && styles.categorySpotlightPhotoMobile]} label={`Stuora ${category} editorial image; actual posts come from the database`} />
           </View>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipsRow}>
             {categories.map((item) => (
@@ -282,7 +285,7 @@ export default function App({ onOpenSavings }: { onOpenSavings: () => void }) {
               <SearchField value={search} onChangeText={setSearch} onClear={() => setSearch('')} clearLabel={`Clear ${category.toLowerCase()} search`} label={category === 'People' ? 'Search people by name' : `Search ${category.toLowerCase()} listings`} placeholder={`Search ${category.toLowerCase()}…`} />
             </View>
           ) : null}
-          {category === 'Housing' || category === 'Marketplace' ? <ListingWorkspace key={`${category}-${session?.user.id ?? 'public'}`} category={category} search={search} onAccount={() => setTab('profile')} onMessage={openListingConversation} onCreate={() => startListing(category)} onClearSearch={() => setSearch('')} /> : category === 'People' ? <PeopleDirectory key={session?.user.id ?? 'public'} search={search} onAccount={() => setTab('profile')} /> : <CommunityCatalog key={category} category={category} search={search} onHousing={() => goToCategory('Housing')} />}
+          {category === 'Housing' || category === 'Marketplace' ? <ListingWorkspace key={`${category}-${session?.user.id ?? 'public'}`} category={category} search={search} onAccount={() => setTab('profile')} onMessage={openListingConversation} onCreate={() => startListing(category)} onClearSearch={() => setSearch('')} /> : category === 'People' ? <PeopleDirectory key={session?.user.id ?? 'public'} search={search} onAccount={() => setTab('profile')} /> : category === 'Groups' ? <GroupWorkspace key={session?.user.id ?? 'public'} onAccount={() => setTab('profile')} /> : <CommunityCatalog key={category} category={category} search={search} onHousing={() => goToCategory('Housing')} />}
         </ScrollView>
       )}
 
@@ -474,7 +477,7 @@ const styles = StyleSheet.create({
   sectionHint: { color: BRAND.subtle, fontSize: 11, marginTop: 2 },
   categoryGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   categoryTile: { flexGrow: 0, flexBasis: '22%', backgroundColor: BRAND.white, borderWidth: 1, borderColor: BRAND.line, borderRadius: 17, paddingBottom: 12, alignItems: 'center', gap: 8, overflow: 'hidden', shadowColor: '#10162F', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.04, shadowRadius: 8, elevation: 1 },
-  categoryTileDesktop: { flexBasis: '15%', minHeight: 121, justifyContent: 'flex-start' },
+  categoryTileDesktop: { flexBasis: '13%', minHeight: 121, justifyContent: 'flex-start' },
   categoryArtWrap: { width: '100%', overflow: 'hidden', backgroundColor: '#F1EDFF', position: 'relative', height: 74 },
   categoryPhoto: { width: '100%', height: 74, backgroundColor: '#F4F1FF' },
   categorySpotlightPhoto: { width: 225, height: 125, borderRadius: 16, backgroundColor: '#F4F1FF' },
