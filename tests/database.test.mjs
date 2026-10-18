@@ -244,8 +244,8 @@ for (const inheritedGrants of [false, true]) {
       await expectCount('authenticated', c, `select * from public.student_group_messages where id = '${messageId}'`, 0);
       await assert.rejects(as('authenticated', b,
         `insert into public.student_group_messages (group_id,author_id,body) values ('${groupId}','${b}','Bypass limits')`), e => e.code === '42501');
-      await assert.rejects(as('authenticated', b,
-        `update public.student_groups set name = 'Hijacked' where id = '${groupId}'`), e => e.code === '42501');
+      await expectCount('authenticated', b,
+        `update public.student_groups set name = 'Hijacked' where id = '${groupId}' returning id`, 0);
       await expectCount('authenticated', a,
         `update public.student_groups set name = 'Berlin Study Circle' where id = '${groupId}' returning id`, 1);
       // Owner may not silently leave their group, preserving its creator membership.
