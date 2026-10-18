@@ -3,6 +3,7 @@ import AccountPanel from './src/account/AccountPanel';
 import ListingWorkspace from './src/listings/ListingWorkspace';
 import MessageWorkspace from './src/messages/MessageWorkspace';
 import PeopleDirectory from './src/people/PeopleDirectory';
+import CommunityCatalog from './src/community/CommunityCatalog';
 import { useAuth } from './src/account/AuthProvider';
 import { Icon, StuoraMark } from './src/ui/Brand';
 import { CategoryArtwork } from './src/ui/CategoryArtwork';
@@ -71,13 +72,13 @@ function CategoryTile({ item, onPress }: { item: (typeof categories)[number]; on
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={`Browse ${item.name}`}
-      accessibilityHint={upcoming ? 'This category is not available yet' : undefined}
+      accessibilityHint={upcoming ? 'Browsing available; posting and participation are coming soon' : undefined}
       onPress={onPress}
       style={({ pressed }) => [styles.categoryTile, width >= 960 && styles.categoryTileDesktop, pressed && styles.pressed]}
     >
       <View style={styles.categoryArtWrap}>
         <CategoryArtwork category={item.name} width="100%" height={74} />
-        {upcoming ? <View style={styles.categorySoonTag}><Text style={styles.categorySoonText}>Coming soon</Text></View> : null}
+        {upcoming ? <View style={styles.categorySoonTag}><Text style={styles.categorySoonText}>Posting soon</Text></View> : null}
       </View>
       <Text style={styles.categoryName}>{item.name}</Text>
     </Pressable>
@@ -118,9 +119,9 @@ export default function App({ onOpenSavings }: { onOpenSavings: () => void }) {
   const categoryCopy: Record<Category, string> = {
     Housing: 'Find shared spaces and student rooms posted by real members.',
     Marketplace: 'Make more of student life with local, secondhand essentials.',
-    Trips: 'A place for student adventures once verified trip posting is ready.',
-    Jobs: 'Student-friendly opportunities when verified job posting is ready.',
-    Events: 'Discover student gatherings once real event publishing is ready.',
+    Trips: 'Explore real student trips. Posting and joining are being qualified separately.',
+    Jobs: 'Browse real student opportunities. Posting and applications are being qualified separately.',
+    Events: 'Explore real community gatherings. Posting and RSVP are being qualified separately.',
     People: 'Meet students beyond your classroom through real public profiles.',
   };
 
@@ -207,7 +208,7 @@ export default function App({ onOpenSavings }: { onOpenSavings: () => void }) {
               </Pressable>
             ))}
           </ScrollView>
-          {category === 'Housing' || category === 'Marketplace' ? <ListingWorkspace key={`${category}-${session?.user.id ?? 'public'}`} category={category} search={search} onAccount={() => setTab('profile')} onMessage={() => setTab('messages')} onCreate={() => startListing(category)} onClearSearch={() => setSearch('')} /> : category === 'People' ? <PeopleDirectory key={session?.user.id ?? 'public'} search={search} onAccount={() => setTab('profile')} /> : <View style={styles.emptyState}><CategoryArtwork category={category} width={240} height={120} /><Text style={styles.emptyTitle}>{category} is not available yet</Text><Text style={styles.emptyText}>Posting and participation will open after persistence and permissions are verified. No sample offers are displayed.</Text><Pressable accessibilityRole="button" accessibilityLabel="Browse Housing instead" onPress={() => goToCategory('Housing')} style={styles.secondaryButton}><Text style={styles.secondaryButtonText}>Browse Housing instead</Text></Pressable></View>}
+          {category === 'Housing' || category === 'Marketplace' ? <ListingWorkspace key={`${category}-${session?.user.id ?? 'public'}`} category={category} search={search} onAccount={() => setTab('profile')} onMessage={() => setTab('messages')} onCreate={() => startListing(category)} onClearSearch={() => setSearch('')} /> : category === 'People' ? <PeopleDirectory key={session?.user.id ?? 'public'} search={search} onAccount={() => setTab('profile')} /> : <CommunityCatalog key={category} category={category} search={search} onHousing={() => goToCategory('Housing')} />}
         </ScrollView>
       )}
 
