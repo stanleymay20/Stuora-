@@ -207,7 +207,7 @@ test('real Trips/Jobs/Events catalog queries active persisted rows and keeps par
     await page.getByRole('button', {name: `View ${expected}`}).click();
     await expect(page.getByText('Publishing, joining, and applying are not enabled until the reviewed safety migration is qualified.')).toBeVisible();
     await expect(page.getByRole('button', {name:back})).toBeVisible();
-    await page.getByRole('button', {name:'Open Home'}).click();
+    await page.goto('/');
   }
   expect(observed).toContain('eq.trip');
   expect(observed).toContain('eq.job');
