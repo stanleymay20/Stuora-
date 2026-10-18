@@ -120,6 +120,8 @@ export default function App({ onOpenSavings }: { onOpenSavings: () => void }) {
   const [category, setCategory] = useState<Category>('Housing');
   const [search, setSearch] = useState('');
   const [draftType, setDraftType] = useState<'Housing' | 'Marketplace'>('Marketplace');
+  const [preferredConversationId, setPreferredConversationId] = useState<string | null>(null);
+  const openListingConversation = (conversationId: string) => { setPreferredConversationId(conversationId); setTab('messages'); };
 
   const categoryCopy: Record<Category, string> = {
     Housing: 'Find shared spaces and student rooms posted by real members.',
@@ -185,10 +187,10 @@ export default function App({ onOpenSavings }: { onOpenSavings: () => void }) {
           </View>
 
           <View style={styles.sectionHeaderInline}><Text style={styles.sectionTitle}>Community housing</Text><Pressable accessibilityRole="button" accessibilityLabel="See all housing" onPress={() => goToCategory('Housing')}><Text style={styles.linkText}>See all</Text></Pressable></View>
-          <ListingWorkspace key={`home-${session?.user.id ?? 'public'}`} category="Housing" preview onAccount={() => setTab('profile')} onMessage={() => setTab('messages')} onCreate={() => startListing('Housing')} />
+          <ListingWorkspace key={`home-${session?.user.id ?? 'public'}`} category="Housing" preview onAccount={() => setTab('profile')} onMessage={openListingConversation} onCreate={() => startListing('Housing')} />
 
           <View style={styles.sectionHeaderInline}><Text style={styles.sectionTitle}>Marketplace</Text><Pressable accessibilityRole="button" accessibilityLabel="See all marketplace" onPress={() => goToCategory('Marketplace')}><Text style={styles.linkText}>See all</Text></Pressable></View>
-          <ListingWorkspace key={`home-market-${session?.user.id ?? 'public'}`} category="Marketplace" preview onAccount={() => setTab('profile')} onMessage={() => setTab('messages')} onCreate={() => startListing('Marketplace')} />
+          <ListingWorkspace key={`home-market-${session?.user.id ?? 'public'}`} category="Marketplace" preview onAccount={() => setTab('profile')} onMessage={openListingConversation} onCreate={() => startListing('Marketplace')} />
         </ScrollView>
       )}
 
@@ -218,7 +220,7 @@ export default function App({ onOpenSavings }: { onOpenSavings: () => void }) {
               <SearchField value={search} onChangeText={setSearch} onClear={() => setSearch('')} clearLabel={`Clear ${category.toLowerCase()} search`} placeholder={`Search ${category.toLowerCase()}…`} />
             </View>
           ) : null}
-          {category === 'Housing' || category === 'Marketplace' ? <ListingWorkspace key={`${category}-${session?.user.id ?? 'public'}`} category={category} search={search} onAccount={() => setTab('profile')} onMessage={() => setTab('messages')} onCreate={() => startListing(category)} onClearSearch={() => setSearch('')} /> : category === 'People' ? <PeopleDirectory key={session?.user.id ?? 'public'} search={search} onAccount={() => setTab('profile')} /> : <CommunityCatalog key={category} category={category} search={search} onHousing={() => goToCategory('Housing')} />}
+          {category === 'Housing' || category === 'Marketplace' ? <ListingWorkspace key={`${category}-${session?.user.id ?? 'public'}`} category={category} search={search} onAccount={() => setTab('profile')} onMessage={openListingConversation} onCreate={() => startListing(category)} onClearSearch={() => setSearch('')} /> : category === 'People' ? <PeopleDirectory key={session?.user.id ?? 'public'} search={search} onAccount={() => setTab('profile')} /> : <CommunityCatalog key={category} category={category} search={search} onHousing={() => goToCategory('Housing')} />}
         </ScrollView>
       )}
 
@@ -240,7 +242,7 @@ export default function App({ onOpenSavings }: { onOpenSavings: () => void }) {
                 </Pressable>
               ))}
             </View>
-            <ListingWorkspace key={`${draftType}-${session?.user.id ?? 'public'}`} category={draftType} mode="create" onAccount={() => setTab('profile')} onMessage={() => setTab('messages')} />
+            <ListingWorkspace key={`${draftType}-${session?.user.id ?? 'public'}`} category={draftType} mode="create" onAccount={() => setTab('profile')} onMessage={openListingConversation} />
             <View style={styles.noteCard}>
               <Text style={styles.noteTitle}>Stuora quality rule</Text>
               <Text style={styles.noteText}>If a feature appears in the product, it must work end-to-end. Payments, production verification and media upload stay hidden until their backend flows are ready.</Text>
@@ -249,7 +251,7 @@ export default function App({ onOpenSavings }: { onOpenSavings: () => void }) {
         </ScrollView>
       )}
 
-      {tab === 'messages' && <MessageWorkspace onAccount={() => setTab('profile')} />}
+      {tab === 'messages' && <MessageWorkspace onAccount={() => setTab('profile')} preferredConversationId={preferredConversationId} />}
 
       {tab === 'profile' && (
         <ScrollView testID="profile-scroll" style={styles.pageScroll} contentContainerStyle={[styles.page, styles.profilePage]} showsVerticalScrollIndicator={true}>
