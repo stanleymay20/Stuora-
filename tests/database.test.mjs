@@ -239,6 +239,12 @@ for (const inheritedGrants of [false, true]) {
       const { rows: message } = await as('authenticated', b,
         `select public.send_student_group_message('${groupId}', 'Meeting on Tuesday') id`);
       const messageId = message[0].id;
+      // Deleted messages must not reset the per-account discussion quota.
+      for (let i = 0; i < 9; i++) {
+        await as('authenticated', b, `select public.send_student_group_message('${groupId}', 'Another study message ${i}')`);
+      }
+      await assert.rejects(as('authenticated', b,
+        `select public.send_student_group_message('${groupId}', 'Spam after ten')`), e => e.code === 'P0001');
       await expectCount('authenticated', b, `select * from public.student_group_messages where id = '${messageId}'`, 1);
       await expectCount('authenticated', a, `select * from public.student_group_messages where id = '${messageId}'`, 1);
       await expectCount('authenticated', c, `select * from public.student_group_messages where id = '${messageId}'`, 0);
@@ -261,6 +267,13 @@ for (const inheritedGrants of [false, true]) {
         `delete from public.student_groups where id = '${groupId}' returning id`, 1);
       await expectCount('anon', null, `select * from public.student_groups where id = '${groupId}'`, 0);
       await expectCount('authenticated', a, `select * from public.student_group_messages where group_id = '${groupId}'`, 0);
+      // First group was deleted. Creation limits must still count its event.
+      for (const label of ['Second Study Circle', 'Third Study Circle']) {
+        await expectCount('authenticated', a,
+          `select public.create_student_group('${label}', '', 'Berlin', 'Study')`, 1);
+      }
+      await assert.rejects(as('authenticated', a,
+        "select public.create_student_group('Fourth Study Circle', '', 'Berlin', 'Study')"), e => e.code === 'P0001');
       t.diagnostic('student groups: public discovery, atomic owner membership, restricted discussion, moderation, anti-hijack and deletion cascade verified');
     } finally { await db.close(); }
   });
