@@ -86,3 +86,43 @@ async function messagesPersisted(page: Page) {
   await page.getByRole('button', { name: 'Refresh messages', exact: true }).click();
   await expect(page.getByText('Hi, is this room still available?', { exact: true })).toBeVisible();
 }
+
+test('Messages show newest entries first and load older history without losing newer replies', async ({ page }) => {
+  await messagingBackend(page);
+  const calls: Array<{ offset: number; limit: number; order: string | null }> = [];
+  const archive = Array.from({ length: 61 }, (_, i) => ({
+    id: `00000000-0000-0000-0000-${String(i + 401).padStart(12, '0')}`,
+    conversation_id: conversationId,
+    sender_id: bob,
+    body: `Archive message ${i + 1}`,
+    created_at: new Date(Date.UTC(2026, 9, 11, 10, 0, i)).toISOString(),
+  })).reverse();
+  await page.route('**/rest/v1/messages?*', async route => {
+    const request = route.request();
+    if (request.method() !== 'GET') return route.fallback();
+    const url = new URL(request.url());
+    const offset = Number(url.searchParams.get('offset') ?? 0);
+    const limit = Number(url.searchParams.get('limit') ?? 100);
+    const order = url.searchParams.get('order');
+    calls.push({ offset, limit, order });
+    await route.fulfill({ json: archive.slice(offset, offset + limit) });
+  });
+  await page.goto('/');
+  await page.getByText('You', { exact: true }).click();
+  await page.getByLabel('Email', { exact: true }).fill('alice@example.invalid');
+  await page.getByLabel('Password', { exact: true }).fill('correct-password');
+  await page.getByRole('button', { name: 'Sign in', exact: true }).click();
+  await expect(page.getByText('Your Stuora Passport', { exact: true })).toBeVisible();
+  await page.getByText('Home', { exact: true }).first().click();
+  await page.getByRole('button', { name: 'View Room near campus' }).first().click();
+  await page.getByRole('button', { name: 'Message owner' }).click();
+  await expect(page.getByText('Archive message 61', { exact: true })).toBeVisible();
+  await expect(page.getByText('Archive message 1', { exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Load older messages' })).toBeVisible();
+  expect(calls.some(x => x.offset === 0 && x.limit === 51 && x.order?.includes('created_at.desc'))).toBe(true);
+  await page.getByRole('button', { name: 'Load older messages' }).click();
+  await expect(page.getByText('Archive message 1', { exact: true })).toBeVisible();
+  await expect(page.getByText('Archive message 61', { exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Load older messages' })).toHaveCount(0);
+  expect(calls.some(x => x.offset === 0 && x.limit === 101)).toBe(true);
+});
