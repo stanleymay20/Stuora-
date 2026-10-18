@@ -4,7 +4,7 @@ import { ActivityIndicator, Image, Platform, Pressable, StyleSheet, Switch, Text
 import { useAuth } from '../account/AuthProvider';
 import { supabase } from '../backend/supabase';
 import { Icon } from '../ui/Brand';
-import { CategoryArtwork } from '../ui/CategoryArtwork';
+import { EditorialImage } from '../ui/EditorialImage';
 import type { Database } from '../backend/database.types';
 
 type Row = Database['public']['Tables']['listings']['Row'];
@@ -280,7 +280,7 @@ export default function ListingWorkspace({ category, mode = 'browse', search = '
       <Text style={s.hint}>{own ? 'Your listings, including archived posts.' : 'Active listings from the community.'}{search ? ' Search matches titles.' : ''}</Text>
       {loading ? <ActivityIndicator accessibilityLabel="Loading listings" /> : error ? <View><Text accessibilityRole="alert" style={s.error}>{error}</Text><Button title="Retry listings" onPress={() => setRevision(v => v + 1)} /></View> : <>
         {!items.length ? <View style={[s.emptyListings, preview && s.emptyPreview, compactWideEmpty && s.emptyPreviewWide]}>
-          <CategoryArtwork category={category} width={compactWideEmpty ? 155 : preview ? 130 : 206} height={compactWideEmpty ? 82 : preview ? 72 : 103} />
+          <EditorialImage kind={search.trim() ? 'EmptySearch' : category === 'Housing' ? 'EmptyHousing' : 'Marketplace'} style={[s.emptyArt, compactWideEmpty && s.emptyArtWide]} cover={false} label="Stuora decorative illustration for an empty category; not a real listing" />
           <View style={[s.emptyCopy, compactWideEmpty && s.emptyCopyWide]}>
             <Text style={[s.emptyTitle, compactWideEmpty && s.emptyTitleWide]}>No {category.toLowerCase()} listings found.</Text>
             <Text style={[s.emptyCaption, compactWideEmpty && s.emptyCaptionWide]}>{search.trim()
@@ -338,6 +338,8 @@ const s = StyleSheet.create({
   price: { fontWeight: '900', color: '#11162F', fontSize: 18 },
   emptyListings: { borderRadius: 20, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E9EAF1', paddingVertical: 27, paddingHorizontal: 22, alignItems: 'center', gap: 12 },
   emptyPreview: { paddingVertical: 14, paddingHorizontal: 16, gap: 8 },
+  emptyArt: { width: 160, height: 95, borderRadius: 12 },
+  emptyArtWide: { width: 155, height: 82 },
   emptyPreviewWide: { flexDirection: 'row', justifyContent: 'center', gap: 22, minHeight: 150 },
   emptyCopy: { alignItems: 'center', gap: 8, flexShrink: 1 },
   emptyCopyWide: { alignItems: 'flex-start', maxWidth: 500 },
