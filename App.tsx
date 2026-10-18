@@ -318,7 +318,7 @@ export default function App({ onOpenSavings }: { onOpenSavings: () => void }) {
         </ScrollView>
       )}
 
-      {tab === 'messages' && <MessageWorkspace onAccount={() => setTab('profile')} preferredConversationId={preferredConversationId} />}
+      {tab === 'messages' && <MessageWorkspace key={session?.user.id ?? 'public'} onAccount={() => setTab('profile')} preferredConversationId={preferredConversationId} />}
 
       {tab === 'profile' && (
         <ScrollView testID="profile-scroll" style={styles.pageScroll} contentContainerStyle={[styles.page, styles.profilePage]} showsVerticalScrollIndicator={true}>
