@@ -21,7 +21,7 @@ test('Stuora Bot finds real affordable rooms with backend filters and opens Hous
   await expect(page.locator('img[src*="stuora-bot"]')).toHaveCount(2);
   await page.getByRole('textbox', { name: 'Ask Stuora Bot' }).fill('Find rooms in Berlin under €650');
   await page.getByRole('button', { name: 'Ask Stuora Bot' }).click();
-  await expect(page.getByText('Student room near campus', { exact: true })).toBeVisible();
+  await expect(page.getByRole('dialog').getByText('Student room near campus', { exact: true })).toBeVisible();
   await expect(page.getByText('Berlin · 590,00', { exact: false })).toBeVisible();
   expect(calls.some(x => x.kind === 'eq.housing' && x.city === 'ilike.%Berlin%' && x.price === 'lte.65000')).toBe(true);
   expect(calls.every(x => x.select === 'id,kind,title,city,price_cents,currency')).toBe(true);
@@ -47,8 +47,10 @@ test('Stuora Bot searches only public group metadata, not member messages', asyn
   const searched: string[] = [];
   await page.route('**/rest/v1/student_groups?*', async route => {
     const params = new URL(route.request().url()).searchParams;
+    if (params.get('select') !== 'id,name,city,topic,description') {
+      return route.fulfill({ json: [] }); // Underlying Groups directory, not the Bot request.
+    }
     searched.push(route.request().url());
-    expect(params.get('select')).toBe('id,name,city,topic,description');
     expect(params.get('city')).toBe('ilike.%Potsdam%');
     await route.fulfill({ json: [{ id: 'g-1', name: 'Potsdam Study Circle', city: 'Potsdam', topic: 'Study', description: 'Weekly sessions' }] });
   });
