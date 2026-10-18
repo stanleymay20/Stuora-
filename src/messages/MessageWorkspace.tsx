@@ -7,6 +7,7 @@ import { EditorialImage } from '../ui/EditorialImage';
 
 type Conversation = { id: string; title: string; created_at: string };
 type Message = { id: string; conversation_id: string; sender_id: string; body: string; created_at: string };
+const MESSAGES_PAGE_SIZE = 50;
 
 function Button({ title, onPress, disabled = false }: { title: string; onPress: () => void; disabled?: boolean }) {
   return <Pressable accessibilityRole="button" accessibilityLabel={title} disabled={disabled} onPress={onPress} style={[s.button, disabled && s.disabled]}><Text style={s.buttonText}>{title}</Text></Pressable>;
@@ -25,6 +26,8 @@ export default function MessageWorkspace({ onAccount, preferredConversationId }:
   const [loadingThreads, setLoadingThreads] = useState(false);
   const [loadingMessages, setLoadingMessages] = useState(false);
   const [sending, setSending] = useState(false);
+  const [messagePages, setMessagePages] = useState(1);
+  const [hasOlderMessages, setHasOlderMessages] = useState(false);
   const [threadIssue, setThreadIssue] = useState('');
   const [messageIssue, setMessageIssue] = useState('');
   const [revision, setRevision] = useState(0);
@@ -52,22 +55,36 @@ export default function MessageWorkspace({ onAccount, preferredConversationId }:
     return () => { clearTimeout(timeout); ac.abort(); };
   }, [userId, profile, revision, preferredConversationId]);
 
+  // Never reuse unsent text from another conversation or show the previous member's messages.
+  useEffect(() => { setDraft(''); setMessages([]); setMessagePages(1); setHasOlderMessages(false); setMessageIssue(''); }, [selectedId, userId]);
+
   useEffect(() => {
-    if (!selectedId || !userId) { setMessages([]); return; }
+    if (!selectedId || !userId) { setMessages([]); setHasOlderMessages(false); return; }
     const ac = new AbortController();
     setLoadingMessages(true); setMessageIssue('');
     const timeout = setTimeout(() => { setMessageIssue('Could not load messages. Check your connection and retry.'); setLoadingMessages(false); ac.abort(); }, 15000);
-    const query = supabase.from('messages').select('id,conversation_id,sender_id,body,created_at').eq('conversation_id', selectedId).order('created_at', { ascending: true }).order('id').limit(200).abortSignal(ac.signal);
+    // Fetch the NEWEST messages, then display them chronologically. Older messages are explicitly pageable.
+    const pageLimit = messagePages * MESSAGES_PAGE_SIZE;
+    const query = supabase.from('messages').select('id,conversation_id,sender_id,body,created_at').eq('conversation_id', selectedId)
+      .order('created_at', { ascending: false }).order('id', { ascending: false })
+      .range(0, pageLimit).abortSignal(ac.signal);
     void Promise.resolve(query).then(({ data, error }) => {
       if (ac.signal.aborted) return;
-      if (error) setMessageIssue('Could not load messages. Check your connection and retry.');
-      else setMessages((data ?? []) as Message[]);
+      if (error) {
+        setMessages([]); setHasOlderMessages(false);
+        setMessageIssue('Could not load messages. Check your connection and retry.');
+      } else {
+        const recent = (data ?? []) as Message[];
+        setHasOlderMessages(recent.length > pageLimit);
+        setMessages(recent.slice(0, pageLimit).reverse());
+      }
       setLoadingMessages(false);
     }).catch(() => { if (!ac.signal.aborted) { setMessageIssue('Could not load messages. Check your connection and retry.'); setLoadingMessages(false); } }).finally(() => clearTimeout(timeout));
     return () => { clearTimeout(timeout); ac.abort(); };
-  }, [selectedId, userId, revision]);
+  }, [selectedId, userId, revision, messagePages]);
 
   async function send() {
+    if (sending) return;
     const body = draft.trim();
     setMessageIssue('');
     if (!userId || !selectedId || !body) return;
@@ -96,7 +113,10 @@ export default function MessageWorkspace({ onAccount, preferredConversationId }:
         {!selected ? <View style={s.empty}><Text style={s.muted}>{preferredConversationId && !loadingThreads ? 'This listing conversation is not accessible. Refresh Messages or return to the listing.' : 'Select a conversation.'}</Text></View> : <>
           <View style={s.conversationHeader}><Icon name="messages" size={22} color="#7048FF" /><View><Text style={s.conversationTitle}>{selected.title || 'Stuora conversation'}</Text><Text style={s.threadDate}>Only conversation members can read or send messages.</Text></View></View>
           <ScrollView contentContainerStyle={s.messageList}>
-            {loadingMessages ? <ActivityIndicator accessibilityLabel="Loading conversation messages" /> : !messages.length ? <Text style={s.muted}>No messages yet. Say hello.</Text> : messages.map(message => { const own = message.sender_id === userId; return <View key={message.id} style={[s.bubble, own ? s.bubbleOwn : s.bubbleOther]}><Text style={own ? s.bubbleOwnText : s.bubbleText}>{message.body}</Text><Text style={[s.messageTime, own && s.messageTimeOwn]}>{new Date(message.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</Text></View>; })}
+            {loadingMessages ? <ActivityIndicator accessibilityLabel="Loading conversation messages" /> : messageIssue ? null : <>
+              {hasOlderMessages ? <Button title="Load older messages" onPress={() => setMessagePages(value => value + 1)} /> : null}
+              {!messages.length ? <Text style={s.muted}>No messages yet. Say hello.</Text> : messages.map(message => { const own = message.sender_id === userId; return <View key={message.id} style={[s.bubble, own ? s.bubbleOwn : s.bubbleOther]}><Text style={own ? s.bubbleOwnText : s.bubbleText}>{message.body}</Text><Text style={[s.messageTime, own && s.messageTimeOwn]}>{new Date(message.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</Text></View>; })}
+            </>}
           </ScrollView>
           {messageIssue ? <Text accessibilityRole="alert" style={s.error}>{messageIssue}</Text> : null}
           <View style={s.composer}><TextInput accessibilityLabel="Message" value={draft} onChangeText={setDraft} placeholder="Write a message…" multiline maxLength={4000} style={s.input} /><Pressable accessibilityRole="button" accessibilityLabel="Send message" disabled={sending || !draft.trim()} onPress={() => void send()} style={[s.send, (sending || !draft.trim()) && s.disabled]}><Icon name="send" size={18} color="#FFFFFF" /></Pressable></View>
