@@ -60,7 +60,7 @@ function Photo({ media, title, index, removable, disabled, onRemove }: { media: 
   </View>;
 }
 
-export default function ListingWorkspace({ category, mode = 'browse', search = '', preview = false, onAccount, onMessage, onCreate, onClearSearch }: { category: 'Housing' | 'Marketplace'; mode?: 'browse' | 'create'; search?: string; preview?: boolean; onAccount: () => void; onMessage?: () => void; onCreate?: () => void; onClearSearch?: () => void }) {
+export default function ListingWorkspace({ category, mode = 'browse', search = '', preview = false, onAccount, onMessage, onCreate, onClearSearch }: { category: 'Housing' | 'Marketplace'; mode?: 'browse' | 'create'; search?: string; preview?: boolean; onAccount: () => void; onMessage?: (conversationId: string) => void; onCreate?: () => void; onClearSearch?: () => void }) {
   const { session, profile, profileLoading, initializing, error: profileError } = useAuth();
   const { width } = useWindowDimensions();
   const compactWideEmpty = preview && width >= 760;
@@ -241,10 +241,12 @@ export default function ListingWorkspace({ category, mode = 'browse', search = '
     if (selected.owner_id === userId || selected.status !== 'active') return;
     setBusy(true);
     try {
-      const { error: issue } = await (supabase.rpc as any)('start_listing_conversation', { p_listing_id: selected.id });
-      if (issue) throw issue;
+      const { data: conversationId, error: issue } = await (supabase.rpc as any)('start_listing_conversation', { p_listing_id: selected.id });
+      if (issue || typeof conversationId !== 'string' || !/^[0-9a-f]{8}-[0-9a-f-]{27,}$/i.test(conversationId)) {
+        throw issue ?? new Error('Conversation reference missing');
+      }
       setNotice('Conversation ready. Opening Messages…');
-      onMessage?.();
+      onMessage?.(conversationId);
     } catch {
       setActionError('Could not start a secure conversation. Check that the listing is still active, then retry.');
     } finally { setBusy(false); }
