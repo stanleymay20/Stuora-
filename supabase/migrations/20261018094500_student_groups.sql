@@ -2,6 +2,18 @@
 -- Additive staging-first migration. Never use listing conversation_members as group membership.
 begin;
 
+-- Independent internal quota ledger; never depend on an unmerged PR's private schema.
+create schema if not exists private;
+create table private.student_group_action_limits (
+  user_id uuid not null references public.profiles(id) on delete cascade,
+  action text not null check (action in ('student_group_create','student_group_message')),
+  window_start timestamptz not null default now(),
+  used integer not null default 0 check (used >= 0),
+  primary key (user_id, action)
+);
+alter table private.student_group_action_limits enable row level security;
+revoke all on private.student_group_action_limits from public, anon, authenticated;
+
 create table public.student_groups (
   id uuid primary key default gen_random_uuid(),
   owner_id uuid not null references public.profiles(id) on delete cascade,
@@ -123,13 +135,13 @@ begin
   then raise exception 'Group creation limit reached' using errcode = 'P0001'; end if;
   -- The existing private action ledger survives group deletions and prevents
   -- bypassing the daily quota by deleting and recreating groups.
-  insert into private.action_limits(user_id, action, window_start, used)
+  insert into private.student_group_action_limits(user_id, action, window_start, used)
     values (actor, 'student_group_create', now(), 1)
     on conflict (user_id, action) do update set
-      used = case when private.action_limits.window_start <= now() - interval '24 hours'
-        then 1 else private.action_limits.used + 1 end,
-      window_start = case when private.action_limits.window_start <= now() - interval '24 hours'
-        then now() else private.action_limits.window_start end
+      used = case when private.student_group_action_limits.window_start <= now() - interval '24 hours'
+        then 1 else private.student_group_action_limits.used + 1 end,
+      window_start = case when private.student_group_action_limits.window_start <= now() - interval '24 hours'
+        then now() else private.student_group_action_limits.window_start end
     returning used into quota_used;
   if quota_used > 3 then raise exception 'Group creation limit reached' using errcode = 'P0001'; end if;
   insert into public.student_groups (owner_id, name, description, city, topic)
@@ -157,13 +169,13 @@ begin
     select 1 from public.student_group_members m
       where m.group_id = p_group_id and m.user_id = actor
   ) then raise exception 'Join the group to post' using errcode = '42501'; end if;
-  insert into private.action_limits(user_id, action, window_start, used)
+  insert into private.student_group_action_limits(user_id, action, window_start, used)
     values (actor, 'student_group_message', now(), 1)
     on conflict (user_id, action) do update set
-      used = case when private.action_limits.window_start <= now() - interval '1 minute'
-        then 1 else private.action_limits.used + 1 end,
-      window_start = case when private.action_limits.window_start <= now() - interval '1 minute'
-        then now() else private.action_limits.window_start end
+      used = case when private.student_group_action_limits.window_start <= now() - interval '1 minute'
+        then 1 else private.student_group_action_limits.used + 1 end,
+      window_start = case when private.student_group_action_limits.window_start <= now() - interval '1 minute'
+        then now() else private.student_group_action_limits.window_start end
     returning used into quota_used;
   if quota_used > 10 then raise exception 'Please wait before posting again' using errcode = 'P0001'; end if;
   insert into public.student_group_messages (group_id, author_id, body)
