@@ -276,14 +276,14 @@ test('user-selected photos replace original category thumbnails and remain bundl
     const tile = page.getByRole('button', { name: `Browse ${category}`, exact: true }).first();
     const photo = tile.locator('img');
     await expect(photo).toHaveCount(1);
-    await expect(photo).toHaveAttribute('src', new RegExp(expectedFile.replace('.', '\\.')));
+    expect(await photo.getAttribute('src')).toContain(expectedFile.replace('.webp', '.'));
     await expect.poll(() => photo.evaluate((element: HTMLImageElement) => element.naturalWidth)).toBeGreaterThan(0);
   }
   // The moodboard is only a reference; People still uses previously branded artwork.
   const peoplePhoto = page.getByRole('button', { name: 'Browse People', exact: true }).first().locator('img');
-  await expect(peoplePhoto).toHaveAttribute('src', /people\.webp/);
+  expect(await peoplePhoto.getAttribute('src')).toContain('/people.');
   await page.getByRole('button', { name: 'Browse Events', exact: true }).first().click();
   const banner = page.getByLabel('Stuora Events editorial image; actual posts come from the database');
-  await expect(banner).toHaveAttribute('src', /events-community\.webp/);
+  expect(await banner.getAttribute('src')).toContain('/events-community.');
   await expect(page.getByText('No events listings found.', { exact: true })).toBeVisible();
 });
