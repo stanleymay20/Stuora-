@@ -66,9 +66,19 @@ function Pill({ children, active = false }: { children: React.ReactNode; active?
 
 function CategoryTile({ item, onPress }: { item: (typeof categories)[number]; onPress: () => void }) {
   const { width } = useWindowDimensions();
+  const upcoming = item.name === 'Trips' || item.name === 'Jobs' || item.name === 'Events';
   return (
-    <Pressable accessibilityRole="button" accessibilityLabel={`Browse ${item.name}`} onPress={onPress} style={({ pressed }) => [styles.categoryTile, width >= 960 && styles.categoryTileDesktop, pressed && styles.pressed]}>
-      <View style={styles.categoryArtWrap}><CategoryArtwork category={item.name} width="100%" height={74} /></View>
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`Browse ${item.name}`}
+      accessibilityHint={upcoming ? 'This category is not available yet' : undefined}
+      onPress={onPress}
+      style={({ pressed }) => [styles.categoryTile, width >= 960 && styles.categoryTileDesktop, pressed && styles.pressed]}
+    >
+      <View style={styles.categoryArtWrap}>
+        <CategoryArtwork category={item.name} width="100%" height={74} />
+        {upcoming ? <View style={styles.categorySoonTag}><Text style={styles.categorySoonText}>Coming soon</Text></View> : null}
+      </View>
       <Text style={styles.categoryName}>{item.name}</Text>
     </Pressable>
   );
@@ -385,7 +395,9 @@ const styles = StyleSheet.create({
   categoryGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   categoryTile: { flexGrow: 0, flexBasis: '22%', backgroundColor: BRAND.white, borderWidth: 1, borderColor: BRAND.line, borderRadius: 17, paddingBottom: 12, alignItems: 'center', gap: 8, overflow: 'hidden', shadowColor: '#10162F', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.04, shadowRadius: 8, elevation: 1 },
   categoryTileDesktop: { flexBasis: '15%', minHeight: 121, justifyContent: 'flex-start' },
-  categoryArtWrap: { width: '100%', overflow: 'hidden', backgroundColor: '#F1EDFF' },
+  categoryArtWrap: { width: '100%', overflow: 'hidden', backgroundColor: '#F1EDFF', position: 'relative' },
+  categorySoonTag: { position: 'absolute', top: 5, right: 5, borderRadius: 8, backgroundColor: 'rgba(255,255,255,0.96)', paddingHorizontal: 5, paddingVertical: 3, borderWidth: 1, borderColor: '#E8DFFF' },
+  categorySoonText: { color: BRAND.purple, fontWeight: '800', fontSize: 8 },
   categoryIcon: { width: 43, height: 43, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
   categoryEmoji: { fontSize: 21 },
   categoryName: { color: BRAND.ink, fontWeight: '800', fontSize: 11 },
