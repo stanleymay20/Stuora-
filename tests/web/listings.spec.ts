@@ -310,7 +310,7 @@ test('messaging a real listing opens the exact returned conversation and never a
   await page.getByRole('button', { name: 'View A real room from another member' }).click();
   await expect(page.getByRole('button', { name: 'Message owner' })).toBeVisible();
   await page.getByRole('button', { name: 'Message owner' }).click();
-  await expect(page.getByText('Listing: A real room from another member', { exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Open conversation Listing: A real room from another member' })).toBeVisible();
   await expect.poll(() => requestedMessages).toBe('eq.' + targetId);
   expect(requestedListing).toBe(listingId);
   await expect(page.getByText('Older unrelated conversation', { exact: true })).toBeVisible();
