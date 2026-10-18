@@ -68,3 +68,26 @@ test('Stuora Bot searches only public group metadata, not member messages', asyn
   await page.getByRole('button', { name: 'Explore Groups' }).click();
   await expect.poll(() => new URL(page.url()).searchParams.get('stuora')).toBe('groups');
 });
+
+test('Stuora Bot interprets German and international thousands separators as euros, not cents', async ({ page }) => {
+  await backend(page);
+  const filtered: string[] = [];
+  await page.route('**/rest/v1/listings?*', async route => {
+    const p = new URL(route.request().url()).searchParams;
+    if (p.get('select') === 'id,kind,title,city,price_cents,currency' && p.get('kind') === 'eq.housing') {
+      filtered.push(p.get('price_cents') || '');
+    }
+    await route.fulfill({ json: [] });
+  });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open Stuora Bot' }).click();
+  for (const [request, expected] of [
+    ['Find housing in Berlin under €1.200,50', 'lte.120050'],
+    ['Find housing in Berlin under €1,200', 'lte.120000'],
+    ['Find housing in Berlin under €650,50', 'lte.65050'],
+  ] as const) {
+    await page.getByRole('textbox', { name: 'Ask Stuora Bot' }).fill(request);
+    await page.getByRole('button', { name: 'Ask Stuora Bot' }).click();
+    await expect.poll(() => filtered.filter(price => price === expected).length).toBe(1);
+  }
+});
