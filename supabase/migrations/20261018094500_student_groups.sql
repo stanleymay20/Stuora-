@@ -105,6 +105,7 @@ as $$
 declare
   actor uuid := (select auth.uid());
   new_id uuid;
+  quota_used integer;
 begin
   if actor is null then raise exception 'Sign in to create a group' using errcode = '42501'; end if;
   if p_name is null or char_length(btrim(p_name)) not between 3 and 80
@@ -119,8 +120,18 @@ begin
     for update;
   if not found then raise exception 'Complete a student profile before creating a group' using errcode = '42501'; end if;
   if (select count(*) from public.student_groups where owner_id = actor) >= 10
-    or (select count(*) from public.student_groups where owner_id = actor and created_at > now() - interval '24 hours') >= 3
   then raise exception 'Group creation limit reached' using errcode = 'P0001'; end if;
+  -- The existing private action ledger survives group deletions and prevents
+  -- bypassing the daily quota by deleting and recreating groups.
+  insert into private.action_limits(user_id, action, window_start, used)
+    values (actor, 'student_group_create', now(), 1)
+    on conflict (user_id, action) do update set
+      used = case when private.action_limits.window_start <= now() - interval '24 hours'
+        then 1 else private.action_limits.used + 1 end,
+      window_start = case when private.action_limits.window_start <= now() - interval '24 hours'
+        then now() else private.action_limits.window_start end
+    returning used into quota_used;
+  if quota_used > 3 then raise exception 'Group creation limit reached' using errcode = 'P0001'; end if;
   insert into public.student_groups (owner_id, name, description, city, topic)
     values (actor, btrim(p_name), p_description, btrim(p_city), p_topic)
     returning id into new_id;
@@ -134,7 +145,7 @@ create function public.send_student_group_message(
 ) returns uuid
 language plpgsql security definer set search_path = ''
 as $$
-declare actor uuid := (select auth.uid()); new_id uuid;
+declare actor uuid := (select auth.uid()); new_id uuid; quota_used integer;
 begin
   if actor is null then raise exception 'Sign in first' using errcode = '42501'; end if;
   if p_group_id is null or p_body is null or char_length(btrim(p_body)) not between 1 and 1000
@@ -146,9 +157,15 @@ begin
     select 1 from public.student_group_members m
       where m.group_id = p_group_id and m.user_id = actor
   ) then raise exception 'Join the group to post' using errcode = '42501'; end if;
-  if (select count(*) from public.student_group_messages
-      where author_id = actor and created_at > now() - interval '1 minute') >= 10
-  then raise exception 'Please wait before posting again' using errcode = 'P0001'; end if;
+  insert into private.action_limits(user_id, action, window_start, used)
+    values (actor, 'student_group_message', now(), 1)
+    on conflict (user_id, action) do update set
+      used = case when private.action_limits.window_start <= now() - interval '1 minute'
+        then 1 else private.action_limits.used + 1 end,
+      window_start = case when private.action_limits.window_start <= now() - interval '1 minute'
+        then now() else private.action_limits.window_start end
+    returning used into quota_used;
+  if quota_used > 10 then raise exception 'Please wait before posting again' using errcode = 'P0001'; end if;
   insert into public.student_group_messages (group_id, author_id, body)
     values (p_group_id, actor, btrim(p_body)) returning id into new_id;
   return new_id;
