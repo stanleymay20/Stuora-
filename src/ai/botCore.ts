@@ -25,10 +25,10 @@ export function parseBotIntent(text: string): BotIntent {
   // Apply price only to listings where price has a well-defined meaning.
   // Interpret €1,200 / €1.200 as twelve hundred, and €1.200,50 as 1200.50.
   // Do not silently turn a thousands separator into a decimal rent ceiling.
-  const budget = value.match(/(?:under|below|less than|up to|max(?:imum)?|budget(?: of)?)[\\s:€]*(\\d{1,3}(?:[., ]\\d{3})+(?:[.,]\\d{1,2})?|\\d{1,7}(?:[.,]\\d{1,2})?)/i);
+  const budget = value.match(/(?:under|below|less than|up to|max(?:imum)?|budget(?: of)?)[\s:€]*(\d{1,3}(?:[., ]\d{3})+(?:[.,]\d{1,2})?|\d{1,7}(?:[.,]\d{1,2})?)/i);
   const amount = budget?.[1]?.replace(/ /g, '') ?? '';
-  const grouped = /^\\d{1,3}(?:[.,]\\d{3})+(?:[.,]\\d{1,2})?$/.test(amount);
-  const decimalPart = grouped ? amount.match(/[.,]\\d{1,2}$/) : null;
+  const grouped = /^\d{1,3}(?:[.,]\d{3})+(?:[.,]\d{1,2})?$/.test(amount);
+  const decimalPart = grouped ? amount.match(/[.,]\d{1,2}$/) : null;
   const normalized = grouped
     ? amount.slice(0, decimalPart ? -decimalPart[0].length : undefined).replace(/[.,]/g, '') +
       (decimalPart ? '.' + decimalPart[0].slice(1) : '')
