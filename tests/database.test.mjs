@@ -208,3 +208,60 @@ for (const inheritedGrants of [false, true]) {
     } finally { await db.close(); }
   });
 }
+
+for (const inheritedGrants of [false, true]) {
+  test(`Student Groups enforce ownership, membership and member-only messaging (default grants: ${inheritedGrants})`, async t => {
+    const db = await database(inheritedGrants);
+    async function as(role, user, sql) {
+      await db.exec(`set role ${role}; select set_config('request.jwt.claim.sub', '${user ?? ''}', false);`);
+      try { return await db.query(sql); } finally { await db.exec('reset role'); }
+    }
+    async function expectCount(role, user, query, count) {
+      const { rows } = await as(role, user, query);
+      assert.equal(rows.length, count); return rows;
+    }
+    try {
+      assert.ok((await db.query("select relname from pg_class where relname in ('student_groups','student_group_members','student_group_messages') and relrowsecurity")).rows.length === 3);
+      await assert.rejects(as('anon', null, "select public.create_student_group('Berlin Physics', '', 'Berlin', 'Study')"), e => e.code === '42501');
+      const { rows: created } = await as('authenticated', a,
+        "select public.create_student_group('Berlin Physics', 'Weekly study circle', 'Berlin', 'Study') id");
+      const groupId = created[0].id;
+      await expectCount('anon', null, `select * from public.student_groups where id = '${groupId}'`, 1);
+      await expectCount('authenticated', a, `select * from public.student_group_members where group_id = '${groupId}'`, 1);
+      await expectCount('authenticated', b, `select * from public.student_group_members where group_id = '${groupId}'`, 0);
+      await assert.rejects(as('authenticated', b,
+        `select public.send_student_group_message('${groupId}', 'Intruder message')`), e => e.code === '42501');
+      await assert.rejects(as('authenticated', b,
+        `insert into public.student_group_members (group_id,user_id) values ('${groupId}','${c}')`), e => e.code === '42501');
+      await expectCount('authenticated', b,
+        `insert into public.student_group_members (group_id,user_id) values ('${groupId}','${b}') returning group_id`, 1);
+      await expectCount('authenticated', a, `select * from public.student_group_members where group_id = '${groupId}'`, 2);
+      const { rows: message } = await as('authenticated', b,
+        `select public.send_student_group_message('${groupId}', 'Meeting on Tuesday') id`);
+      const messageId = message[0].id;
+      await expectCount('authenticated', b, `select * from public.student_group_messages where id = '${messageId}'`, 1);
+      await expectCount('authenticated', a, `select * from public.student_group_messages where id = '${messageId}'`, 1);
+      await expectCount('authenticated', c, `select * from public.student_group_messages where id = '${messageId}'`, 0);
+      await assert.rejects(as('authenticated', b,
+        `insert into public.student_group_messages (group_id,author_id,body) values ('${groupId}','${b}','Bypass limits')`), e => e.code === '42501');
+      await assert.rejects(as('authenticated', b,
+        `update public.student_groups set name = 'Hijacked' where id = '${groupId}'`), e => e.code === '42501');
+      await expectCount('authenticated', a,
+        `update public.student_groups set name = 'Berlin Study Circle' where id = '${groupId}' returning id`, 1);
+      // Owner may not silently leave their group, preserving its creator membership.
+      await expectCount('authenticated', a,
+        `delete from public.student_group_members where group_id = '${groupId}' and user_id = '${a}' returning user_id`, 0);
+      await expectCount('authenticated', a,
+        `delete from public.student_group_members where group_id = '${groupId}' and user_id = '${b}' returning user_id`, 1);
+      await expectCount('authenticated', b, `select * from public.student_group_messages where id = '${messageId}'`, 0);
+      await expectCount('authenticated', a, `select * from public.student_group_messages where id = '${messageId}'`, 1);
+      await expectCount('authenticated', b,
+        `delete from public.student_groups where id = '${groupId}' returning id`, 0);
+      await expectCount('authenticated', a,
+        `delete from public.student_groups where id = '${groupId}' returning id`, 1);
+      await expectCount('anon', null, `select * from public.student_groups where id = '${groupId}'`, 0);
+      await expectCount('authenticated', a, `select * from public.student_group_messages where group_id = '${groupId}'`, 0);
+      t.diagnostic('student groups: public discovery, atomic owner membership, restricted discussion, moderation, anti-hijack and deletion cascade verified');
+    } finally { await db.close(); }
+  });
+}
