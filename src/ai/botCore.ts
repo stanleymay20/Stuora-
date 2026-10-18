@@ -10,7 +10,7 @@ export type BotIntent = {
 
 const cities = ['Berlin', 'Potsdam', 'Brandenburg', 'Leipzig', 'Hamburg', 'Munich', 'Cologne', 'Frankfurt', 'Dresden'];
 const domains: [BotDomain, RegExp][] = [
-  ['housing', /\b(housing|rent|flat|apartment|room|dorm|wg|accommodation|landlord)\b/i],
+  ['housing', /\b(housing|rent(?:al)?|flats?|apartments?|rooms?|dorms?|wg|accommodation|landlords?)\b/i],
   ['jobs', /\b(job|jobs|career|internship|employer|werkstudent|working.student|part.time work|vacancy)\b/i],
   ['marketplace', /\b(marketplace|buy|sell|second.hand|furniture|bicycle|bike|used item|laptop)\b/i],
   ['groups', /\b(group|groups|club|study circle|student communit|meet students|interest group)\b/i],
