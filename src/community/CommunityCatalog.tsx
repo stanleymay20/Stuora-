@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { supabase } from '../backend/supabase';
 
 export type CommunityCategory = 'Trips' | 'Jobs' | 'Events';
@@ -142,11 +142,13 @@ export default function CommunityCatalog({ category, search, onHousing }: {
     <View style={styles.info}>
       <Text style={styles.sectionTitle}>Live community {category.toLowerCase()}</Text>
       <Text style={styles.muted}>Only real active records from Stuora are shown. Posting and participation are being qualified separately.</Text>
+      <TextInput value={city} onChangeText={setCity} accessibilityLabel="Filter listings by city" placeholder="Filter by city" placeholderTextColor="#9299AA" style={styles.cityInput} />
+      {city.trim() ? action('Clear city filter', () => setCity('')) : null}
       {action('Refresh listings', () => setRevision(v => v + 1))}
     </View>
     {!entries.length ? <View style={styles.empty}>
       <Text style={styles.sectionTitle}>No {category.toLowerCase()} listings found.</Text>
-      <Text style={styles.muted}>When community members publish verified records, they will appear here. Nothing is simulated.</Text>
+      <Text style={styles.muted}>When community members publish real listings, they will appear here. Nothing is simulated.</Text>
       {action('Browse Housing instead', onHousing)}
     </View> : <View style={styles.grid}>{entries.map(item =>
       <Pressable accessibilityRole="button" accessibilityLabel={`View ${item.title}`} key={item.id}
@@ -165,6 +167,7 @@ const styles = StyleSheet.create({
   list: { gap: 14 },
   panel: { backgroundColor: '#FFFFFF', padding: 22, borderRadius: 18, borderWidth: 1, borderColor: '#E9EAF1', gap: 12 },
   info: { backgroundColor: '#FFFFFF', padding: 17, borderRadius: 18, borderWidth: 1, borderColor: '#E9EAF1', gap: 10, alignItems: 'flex-start' },
+  cityInput: { width: '100%', maxWidth: 320, borderRadius: 12, borderWidth: 1, borderColor: '#DDDDEA', paddingHorizontal: 13, paddingVertical: 11, backgroundColor: '#FFFFFF', color: '#11162F' },
   empty: { padding: 25, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E9EAF1', borderRadius: 18, alignItems: 'center', gap: 12 },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
   card: { flexGrow: 1, flexBasis: 245, maxWidth: 450, padding: 18, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E9EAF1', borderRadius: 18, gap: 8 },
