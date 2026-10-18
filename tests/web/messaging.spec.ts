@@ -170,7 +170,7 @@ test('a delayed send completion never clears a newly selected conversation draft
   const blocked = new Promise<void>(resolve => { release = resolve; });
   let started!: () => void;
   const requested = new Promise<void>(resolve => { started = resolve; });
-  await page.route('**/rest/v1/messages', async route => {
+  await page.route('**/rest/v1/messages?*', async route => {
     if (route.request().method() !== 'POST') return route.fallback();
     expect(route.request().postDataJSON()).toMatchObject({
       conversation_id: conversationId, sender_id: alice, body: 'Message sent to the first listing',
