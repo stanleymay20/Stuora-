@@ -2,17 +2,19 @@ import React from 'react';
 import { Image, ImageStyle, StyleProp } from 'react-native';
 
 /**
- * Original licensed-for-Stuora editorial assets.
- * Editorial images are not verified listings, real students, jobs, trips, or offers.
- * Keep the require() paths static so Metro bundles them on web, iOS and Android.
+ * Editorial images are decorative category/promotional visuals, not verified
+ * student posts, real jobs, real trips, or verified profile photos.
+ * Five selected category photographs were provided by the project owner.
+ * Their redistribution/commercial-use rights must be confirmed before GA.
+ * Keep require() paths static so Metro bundles them on web, iOS and Android.
  */
 const images = {
   Community: require('../../assets/editorial/community.webp'),
-  Housing: require('../../assets/editorial/housing.webp'),
-  Marketplace: require('../../assets/editorial/marketplace.webp'),
-  Trips: require('../../assets/editorial/trips.webp'),
-  Jobs: require('../../assets/editorial/jobs.webp'),
-  Events: require('../../assets/editorial/events.webp'),
+  Housing: require('../../assets/editorial/user-selected/housing-community.webp'),
+  Marketplace: require('../../assets/editorial/user-selected/marketplace-community.webp'),
+  Trips: require('../../assets/editorial/user-selected/trips-community.webp'),
+  Jobs: require('../../assets/editorial/user-selected/jobs-community.webp'),
+  Events: require('../../assets/editorial/user-selected/events-community.webp'),
   People: require('../../assets/editorial/people.webp'),
   EmptyHousing: require('../../assets/editorial/empty-housing.webp'),
   EmptySearch: require('../../assets/editorial/empty-search.webp'),
