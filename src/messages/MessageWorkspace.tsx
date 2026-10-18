@@ -32,6 +32,9 @@ export default function MessageWorkspace({ onAccount, preferredConversationId }:
   const [messageIssue, setMessageIssue] = useState('');
   const [revision, setRevision] = useState(0);
   const selected = useMemo(() => conversations.find(item => item.id === selectedId) ?? null, [conversations, selectedId]);
+  // Ignore late send completions after a conversation or account switch.
+  const activeChat = useRef({ selectedId, userId });
+  activeChat.current = { selectedId, userId };
 
   useEffect(() => {
     if (!userId || !profile) { setConversations([]); setSelectedId(null); return; }
@@ -89,14 +92,20 @@ export default function MessageWorkspace({ onAccount, preferredConversationId }:
     setMessageIssue('');
     if (!userId || !selectedId || !body) return;
     if (body.length > 4000) return setMessageIssue('Messages must be 4,000 characters or fewer.');
+    const sendingTo = selectedId;
+    const sendingAs = userId;
     setSending(true);
     try {
-      const { error } = await supabase.from('messages').insert({ conversation_id: selectedId, sender_id: userId, body });
+      const { error } = await supabase.from('messages').insert({ conversation_id: sendingTo, sender_id: sendingAs, body });
       if (error) throw error;
-      setDraft('');
-      setRevision(value => value + 1);
+      if (activeChat.current.selectedId === sendingTo && activeChat.current.userId === sendingAs) {
+        setDraft(current => current.trim() === body ? '' : current);
+        setRevision(value => value + 1);
+      }
     } catch {
-      setMessageIssue('Could not send your message. Your text is preserved; check your connection and retry.');
+      if (activeChat.current.selectedId === sendingTo && activeChat.current.userId === sendingAs) {
+        setMessageIssue('Could not send your message. Your text is preserved; check your connection and retry.');
+      }
     } finally { setSending(false); }
   }
 
