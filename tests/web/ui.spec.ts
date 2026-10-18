@@ -175,12 +175,14 @@ test('community category tiles disclose that posting remains gated', async ({ pa
 test('real Trips/Jobs/Events catalog queries active persisted rows and keeps participation disabled', async ({ page }) => {
   await backend(page);
   let observed: string[] = [];
+  const cityFilters: string[] = [];
   await page.route('**/rest/v1/listings?*', async route => {
     const params = new URL(route.request().url()).searchParams;
     const kind = params.get('kind');
     if (!['eq.trip', 'eq.job', 'eq.event'].includes(kind || '')) return route.fallback();
     expect(params.get('status')).toBe('eq.active');
     observed.push(kind!);
+    if (params.has('city')) cityFilters.push(params.get('city')!);
     const select = params.get('select') || '';
     expect(select).toContain('id,title,description,city,price_cents,created_at');
     const item = {
@@ -204,6 +206,10 @@ test('real Trips/Jobs/Events catalog queries active persisted rows and keeps par
   ] as const) {
     await page.getByRole('button', {name: `Browse ${label}`, exact:true}).click();
     await expect(page.getByRole('button', {name: `View ${expected}`})).toBeVisible();
+    if (label === 'Events') {
+      await page.getByRole('textbox', {name:'Filter listings by city'}).fill('Berlin');
+      await expect(page.getByRole('button', {name:'Clear city filter'})).toBeVisible();
+    }
     await page.getByRole('button', {name: `View ${expected}`}).click();
     await expect(page.getByText('Publishing, joining, and applying are not enabled until the reviewed safety migration is qualified.')).toBeVisible();
     await expect(page.getByRole('button', {name:back})).toBeVisible();
@@ -212,4 +218,5 @@ test('real Trips/Jobs/Events catalog queries active persisted rows and keeps par
   expect(observed).toContain('eq.trip');
   expect(observed).toContain('eq.job');
   expect(observed).toContain('eq.event');
+  expect(cityFilters.some(value => value.includes('Berlin'))).toBe(true);
 });
