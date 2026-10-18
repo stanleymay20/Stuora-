@@ -65,3 +65,22 @@ Status: Phase 1 candidate (NOT GA; unmerged, requires exact-head CI + hosted acc
 - The unmerged PR #18 candidate `dd67cbe646a0990ac9a5d93d48efaf40ddb49a78` already includes real category create/edit, attendance, job applications, user blocks, reports, and rate-limiting, with a prior passing GitHub workflow. Do **not** duplicate its stores or apply migration `20261012182717_complete_category_posting_release.sql` as a routine UI change; it affects security-definer routines, grants, RLS, Storage, messaging and rate limits and was explicitly held for broader approval.
 - Safe progression: (1) review isolated migration and server privilege diffs, (2) qualify in an approved disposable or designated staging DB with read-back advisor and negative-RLS tests, (3) integrate the PR #18 contracts/code onto the current reviewed UI head without clobbering auth/recovery and scroll fixes, (4) run exact-head CI and hosted two-account end-to-end tests, (5) only then promote category write flags. No production mutation without explicit approval.
 - Generated image candidates remain in the separate `Stuora_UI_Visual_Asset_Kit_2026-10-18.zip`. Confirmed source assets and optimized versions exist locally, but they have NOT been uploaded to GitHub. The UI currently uses original SVG artwork. For real asset integration, use permanent repository binaries and verify their SHA256 against the manifest, not time-limited CDN URLs, temporary sandbox paths or unreviewed external hosts.
+
+## Phase 6 — Five owner-selected category photographs (2026-10-18)
+
+The following **uploaded user-selected assets** are committed to the existing review branch as static WebP resources, in `assets/editorial/user-selected/`. They replace only the matching editorial category card and banner images:
+
+| Category | Uploaded file | Bundled asset |
+|---|---|---|
+| Housing | `housing.jpg` (living room) | `housing-community.webp` |
+| Marketplace | `market.jpg` (street market stall) | `marketplace-community.webp` |
+| Trips | `images.jpg` (friends on a road trip) | `trips-community.webp` |
+| Jobs | `images (1).jpg` (person working in office) | `jobs-community.webp` |
+| Events | `images (2).jpg` (conference crowd) | `events-community.webp` |
+
+- The first upload, `image(20261018-063553).png`, is the UI/UX **reference moodboard only**, not an app tile or invented content source.
+- People and community header retain the previously generated Stuora editorial assets; empty states retain their dedicated branded illustrations. Real listings display **only** media uploaded by real listing owners; no sample inventory is introduced.
+- Image optimization preserves the photographic content, removes unnecessary metadata, and converts to WebP. All imports in `src/ui/EditorialImage.tsx` are static Metro `require()` calls for Expo Web, iOS and Android.
+- Playwright validates all five actual uploaded image filenames and that they decode in browser on desktop and mobile. CI and preview still require exact-head qualification.
+- **Commercial-rights gate:** these files were supplied by the product owner, but their copyright and onward commercial redistribution permissions have not been independently proven. Treat them as preview-only until the owner confirms valid licenses/permission. Do not claim the external photographs are original or automatically cleared for commercial GA.
+- Prior notes in this document describing generated assets as “not in GitHub” or “SVG-only” are historical checkpoints and have been superseded by the subsequent reviewed asset commits.
