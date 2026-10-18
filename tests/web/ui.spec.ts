@@ -283,7 +283,8 @@ test('user-selected photos replace original category thumbnails and remain bundl
   const peoplePhoto = page.getByRole('button', { name: 'Browse People', exact: true }).first().locator('img');
   expect(await peoplePhoto.getAttribute('src')).toContain('/people.');
   await page.getByRole('button', { name: 'Browse Events', exact: true }).first().click();
-  const banner = page.getByLabel('Stuora Events editorial image; actual posts come from the database');
-  expect(await banner.getAttribute('src')).toContain('/events-community.');
+  const banner = page.locator('img[src*="events-community."]').first();
+  await expect(banner).toBeVisible();
+  await expect.poll(() => banner.evaluate((image: HTMLImageElement) => image.naturalWidth)).toBeGreaterThan(0);
   await expect(page.getByText('No events listings found.', { exact: true })).toBeVisible();
 });
