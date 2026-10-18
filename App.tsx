@@ -85,7 +85,7 @@ function CategoryTile({ item, onPress }: { item: (typeof categories)[number]; on
   );
 }
 
-function SearchField({ value, onChangeText, placeholder, onSubmit }: { value: string; onChangeText: (value: string) => void; placeholder: string; onSubmit?: () => void }) {
+function SearchField({ value, onChangeText, placeholder, onSubmit, onClear, clearLabel }: { value: string; onChangeText: (value: string) => void; placeholder: string; onSubmit?: () => void; onClear?: () => void; clearLabel?: string }) {
   return (
     <View style={styles.searchBox}>
       <Icon name="search" size={20} />
@@ -98,6 +98,11 @@ function SearchField({ value, onChangeText, placeholder, onSubmit }: { value: st
         returnKeyType="search"
         style={styles.searchInput}
       />
+      {value.trim() && onClear ? (
+        <Pressable accessibilityRole="button" accessibilityLabel={clearLabel || "Clear search"} onPress={onClear} style={({ pressed }) => [styles.searchClear, pressed && styles.pressed]}>
+          <Text style={styles.searchClearText}>Clear</Text>
+        </Pressable>
+      ) : null}
       {onSubmit ? (
         <Pressable accessibilityRole="button" accessibilityLabel="Search housing listings" onPress={onSubmit} style={({ pressed }) => [styles.searchSubmit, pressed && styles.pressed]}>
           <Text style={styles.searchSubmitText}>Search</Text>
@@ -195,15 +200,11 @@ export default function App({ onOpenSavings }: { onOpenSavings: () => void }) {
               <Text style={styles.pageTitle}>{category}</Text>
               <Text style={styles.pageSubtitle}>{categoryCopy[category]}</Text>
               {(category === 'Housing' || category === 'Marketplace') ? (
-                <Pressable accessibilityRole="button" accessibilityLabel="Create in this category" onPress={() => startListing(category)} style={styles.spotlightCreate}>
-                  <Icon name="plus" color={BRAND.white} size={16} />
-                  <Text style={styles.spotlightCreateText}>Post a listing</Text>
-                </Pressable>
+                <Text style={styles.spotlightPostingNote}>Free to post · Real student listings only</Text>
               ) : null}
             </View>
             <EditorialImage kind={category} style={[styles.categorySpotlightPhoto, !isDesktop && styles.categorySpotlightPhotoMobile]} label={`Stuora ${category} editorial illustration; actual posts come from the database`} />
           </View>
-          {category === 'Housing' || category === 'Marketplace' || category === 'People' ? <SearchField value={search} onChangeText={setSearch} placeholder={`Search ${category.toLowerCase()}…`} /> : null}
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipsRow}>
             {categories.map((item) => (
               <Pressable accessibilityRole="button" accessibilityLabel={`Browse ${item.name}`} key={item.name} onPress={() => { setCategory(item.name); setSearch(''); }}>
@@ -211,6 +212,12 @@ export default function App({ onOpenSavings }: { onOpenSavings: () => void }) {
               </Pressable>
             ))}
           </ScrollView>
+          {category === 'Housing' || category === 'Marketplace' || category === 'People' ? (
+            <View style={styles.exploreSearchPanel}>
+              <Text style={styles.exploreSearchLabel}>{category === 'People' ? 'Find people by name' : `Search ${category.toLowerCase()} listings`}</Text>
+              <SearchField value={search} onChangeText={setSearch} onClear={() => setSearch('')} clearLabel={`Clear ${category.toLowerCase()} search`} placeholder={`Search ${category.toLowerCase()}…`} />
+            </View>
+          ) : null}
           {category === 'Housing' || category === 'Marketplace' ? <ListingWorkspace key={`${category}-${session?.user.id ?? 'public'}`} category={category} search={search} onAccount={() => setTab('profile')} onMessage={() => setTab('messages')} onCreate={() => startListing(category)} onClearSearch={() => setSearch('')} /> : category === 'People' ? <PeopleDirectory key={session?.user.id ?? 'public'} search={search} onAccount={() => setTab('profile')} /> : <CommunityCatalog key={category} category={category} search={search} onHousing={() => goToCategory('Housing')} />}
         </ScrollView>
       )}
@@ -390,6 +397,10 @@ const styles = StyleSheet.create({
   searchBox: { backgroundColor: BRAND.white, borderWidth: 1, borderColor: BRAND.line, borderRadius: 14, paddingHorizontal: 11, minHeight: 50, flexDirection: 'row', alignItems: 'center', gap: 8 },
   searchSubmit: { backgroundColor: BRAND.purple, borderRadius: 10, paddingHorizontal: 13, paddingVertical: 9, alignItems: 'center', justifyContent: 'center' },
   searchSubmitText: { color: BRAND.white, fontWeight: '800', fontSize: 12 },
+  searchClear: { paddingHorizontal: 10, paddingVertical: 9, borderRadius: 10, backgroundColor: BRAND.purpleSoft },
+  searchClearText: { color: BRAND.purple, fontSize: 12, fontWeight: '800' },
+  exploreSearchPanel: { gap: 8 },
+  exploreSearchLabel: { color: BRAND.inkSoft, fontSize: 13, fontWeight: '800' },
   searchIcon: { fontSize: 21, color: BRAND.muted },
   searchInput: { flex: 1, color: BRAND.ink, fontSize: 14, outlineStyle: Platform.OS === 'web' ? 'none' : undefined } as any,
   sectionHeader: { gap: 2 },
@@ -444,6 +455,7 @@ const styles = StyleSheet.create({
   spotlightEyebrow: { color: BRAND.purple, fontSize: 10, fontWeight: '900', letterSpacing: 1 },
   spotlightCreate: { alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 10, borderRadius: 12, backgroundColor: BRAND.purple, paddingVertical: 10, paddingHorizontal: 13 },
   spotlightCreateText: { color: BRAND.white, fontWeight: '800', fontSize: 12 },
+  spotlightPostingNote: { marginTop: 10, color: BRAND.purple, fontWeight: '800', fontSize: 12 },
   pageTitle: { color: BRAND.ink, fontSize: 29, fontWeight: '900', letterSpacing: -0.8 },
   pageSubtitle: { color: BRAND.muted, fontSize: 13, lineHeight: 19, marginTop: 2 },
   createTopButton: { backgroundColor: BRAND.purple, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 10 },
