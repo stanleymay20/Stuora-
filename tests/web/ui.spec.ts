@@ -366,3 +366,23 @@ test('switching Explore categories restores the top of the new category rather t
   await expect(page.getByText('STUORA / MARKETPLACE', { exact: true })).toBeVisible();
   await expect.poll(() => scroll.evaluate(node => node.scrollTop)).toBe(0);
 });
+
+test('responsive UI audit: 320px phone through 1600px desktop preserve usable navigation and prevent sideways overflow', async ({ page }) => {
+  test.skip(test.info().project.name !== 'desktop', 'Viewport matrix runs on desktop browser once');
+  await backend(page);
+  await page.goto('/');
+  for (const width of [320, 360, 390, 768, 959, 960, 1024, 1280, 1600]) {
+    await page.setViewportSize({ width, height: 800 });
+    await expect(page.getByText('Find your people.', { exact: false })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Browse Housing', exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Open Student Savings' })).toBeVisible();
+    await expect.poll(async () => page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(1);
+    if (width >= 960) {
+      await expect(page.getByRole('button', { name: 'Open Home', exact: true })).toBeVisible();
+      await expect(page.getByRole('button', { name: 'Create listing', exact: true })).toBeVisible();
+    } else {
+      await expect(page.getByRole('button', { name: 'Home', exact: true })).toBeVisible();
+      await expect(page.getByRole('button', { name: 'Explore', exact: true })).toBeVisible();
+    }
+  }
+});
