@@ -162,15 +162,13 @@ test('a delayed send completion never clears a newly selected conversation draft
     { id: conversationId, title: 'Listing: Room near campus', created_at: '2026-10-11T10:00:00Z' },
     { id: other, title: 'Listing: Other student item', created_at: '2026-10-11T09:00:00Z' },
   ] }));
-  await page.route('**/rest/v1/messages?*', async route => {
-    if (route.request().method() === 'GET') return route.fulfill({ json: [] });
-    return route.fallback();
-  });
   let release!: () => void;
   const blocked = new Promise<void>(resolve => { release = resolve; });
   let started!: () => void;
   const requested = new Promise<void>(resolve => { started = resolve; });
-  await page.route('**/rest/v1/messages?*', async route => {
+  // Match REST collection with or without query params (PostgREST may append columns).
+  await page.route('**/rest/v1/messages**', async route => {
+    if (route.request().method() === 'GET') return route.fulfill({ json: [] });
     if (route.request().method() !== 'POST') return route.fallback();
     expect(route.request().postDataJSON()).toMatchObject({
       conversation_id: conversationId, sender_id: alice, body: 'Message sent to the first listing',
