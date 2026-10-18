@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View } from 'react-native';
 import { useAuth } from '../account/AuthProvider';
 import { supabase } from '../backend/supabase';
@@ -19,6 +19,7 @@ export default function MessageWorkspace({ onAccount, preferredConversationId }:
   const userId = session?.user.id;
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const consumedPreferredId = useRef<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [draft, setDraft] = useState('');
   const [loadingThreads, setLoadingThreads] = useState(false);
@@ -41,7 +42,10 @@ export default function MessageWorkspace({ onAccount, preferredConversationId }:
       else {
         const rows = (data ?? []) as Conversation[];
         setConversations(rows);
-        setSelectedId(current => preferredConversationId ? (rows.some(row => row.id === preferredConversationId) ? preferredConversationId : null) : current && rows.some(row => row.id === current) ? current : rows[0]?.id ?? null);
+        // Honor the listing handoff once. Subsequent send/refresh must not override a thread manually selected by the student.
+        const applyHandoff = Boolean(preferredConversationId && consumedPreferredId.current !== preferredConversationId);
+        if (applyHandoff) consumedPreferredId.current = preferredConversationId!;
+        setSelectedId(current => applyHandoff ? (rows.some(row => row.id === preferredConversationId) ? preferredConversationId! : null) : current && rows.some(row => row.id === current) ? current : rows[0]?.id ?? null);
       }
       setLoadingThreads(false);
     }).catch(() => { if (!ac.signal.aborted) { setThreadIssue('Could not load conversations. Check your connection and retry.'); setLoadingThreads(false); } }).finally(() => clearTimeout(timeout));
