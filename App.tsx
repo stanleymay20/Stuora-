@@ -1,10 +1,12 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import AccountPanel from './src/account/AccountPanel';
 import ListingWorkspace from './src/listings/ListingWorkspace';
 import MessageWorkspace from './src/messages/MessageWorkspace';
 import PeopleDirectory from './src/people/PeopleDirectory';
+import CommunityCatalog from './src/community/CommunityCatalog';
 import { useAuth } from './src/account/AuthProvider';
 import { Icon, StuoraMark } from './src/ui/Brand';
+import { EditorialImage } from './src/ui/EditorialImage';
 import {
   Platform,
   Image,
@@ -21,6 +23,31 @@ import {
 
 type Tab = 'home' | 'explore' | 'create' | 'messages' | 'profile';
 type Category = 'Housing' | 'Marketplace' | 'Trips' | 'Jobs' | 'Events' | 'People';
+type PostCategory = 'Housing' | 'Marketplace';
+type Destination = { tab: Tab; category: Category; draftType: PostCategory };
+const WEB_ROUTE_KEY = 'stuora';
+const categoryRoutes: Record<string, Category> = {
+  housing: 'Housing', marketplace: 'Marketplace', trips: 'Trips',
+  jobs: 'Jobs', events: 'Events', people: 'People',
+};
+function readWebDestination(): Destination {
+  const fallback: Destination = { tab: 'home', category: 'Housing', draftType: 'Marketplace' };
+  if (Platform.OS !== 'web' || typeof window === 'undefined') return fallback;
+  const route = new URLSearchParams(window.location.search).get(WEB_ROUTE_KEY)?.toLowerCase() ?? '';
+  if (route in categoryRoutes) return { ...fallback, tab: 'explore', category: categoryRoutes[route] };
+  if (route === 'explore') return { ...fallback, tab: 'explore' };
+  if (route === 'messages') return { ...fallback, tab: 'messages' };
+  if (route === 'profile') return { ...fallback, tab: 'profile' };
+  if (route === 'create-housing') return { ...fallback, tab: 'create', draftType: 'Housing' };
+  if (route === 'create-marketplace' || route === 'create') return { ...fallback, tab: 'create' };
+  return fallback;
+}
+function routeForDestination(tab: Tab, category: Category, draftType: PostCategory): string | null {
+  if (tab === 'explore') return category.toLowerCase();
+  if (tab === 'create') return draftType === 'Housing' ? 'create-housing' : 'create-marketplace';
+  if (tab === 'profile' || tab === 'messages') return tab;
+  return null;
+}
 
 const BRAND = {
   ink: '#11162F',
@@ -65,17 +92,25 @@ function Pill({ children, active = false }: { children: React.ReactNode; active?
 
 function CategoryTile({ item, onPress }: { item: (typeof categories)[number]; onPress: () => void }) {
   const { width } = useWindowDimensions();
+  const upcoming = item.name === 'Trips' || item.name === 'Jobs' || item.name === 'Events';
   return (
-    <Pressable accessibilityRole="button" accessibilityLabel={`Browse ${item.name}`} onPress={onPress} style={({ pressed }) => [styles.categoryTile, width >= 960 && styles.categoryTileDesktop, pressed && styles.pressed]}>
-      <View style={[styles.categoryIcon, { backgroundColor: item.tint }]}>
-        <Icon name={item.name} color={BRAND.purple} size={25} />
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`Browse ${item.name}`}
+      accessibilityHint={upcoming ? 'Browsing available; posting and participation are coming soon' : undefined}
+      onPress={onPress}
+      style={({ pressed }) => [styles.categoryTile, width >= 960 && styles.categoryTileDesktop, pressed && styles.pressed]}
+    >
+      <View style={styles.categoryArtWrap}>
+        <EditorialImage kind={item.name} style={styles.categoryPhoto} label={`Stuora editorial image for ${item.name}`} />
+        {upcoming ? <View style={styles.categorySoonTag}><Text style={styles.categorySoonText}>Posting soon</Text></View> : null}
       </View>
       <Text style={styles.categoryName}>{item.name}</Text>
     </Pressable>
   );
 }
 
-function SearchField({ value, onChangeText, placeholder, onSubmit }: { value: string; onChangeText: (value: string) => void; placeholder: string; onSubmit?: () => void }) {
+function SearchField({ value, onChangeText, placeholder, onSubmit, onClear, clearLabel, label }: { value: string; onChangeText: (value: string) => void; placeholder: string; onSubmit?: () => void; onClear?: () => void; clearLabel?: string; label?: string }) {
   return (
     <View style={styles.searchBox}>
       <Icon name="search" size={20} />
@@ -84,26 +119,90 @@ function SearchField({ value, onChangeText, placeholder, onSubmit }: { value: st
         onChangeText={onChangeText}
         onSubmitEditing={onSubmit}
         placeholder={placeholder}
+        accessibilityLabel={label ?? placeholder}
         placeholderTextColor="#A2A8B8"
+        returnKeyType="search"
         style={styles.searchInput}
       />
+      {value.trim() && onClear ? (
+        <Pressable accessibilityRole="button" accessibilityLabel={clearLabel || "Clear search"} onPress={onClear} style={({ pressed }) => [styles.searchClear, pressed && styles.pressed]}>
+          <Text style={styles.searchClearText}>Clear</Text>
+        </Pressable>
+      ) : null}
+      {onSubmit ? (
+        <Pressable accessibilityRole="button" accessibilityLabel="Search housing listings" onPress={onSubmit} style={({ pressed }) => [styles.searchSubmit, pressed && styles.pressed]}>
+          <Text style={styles.searchSubmitText}>Search</Text>
+        </Pressable>
+      ) : null}
     </View>
   );
 }
 
-export default function App() {
+export default function App({ onOpenSavings }: { onOpenSavings: () => void }) {
   const { session, profile } = useAuth();
-  const { width } = useWindowDimensions();
+  const { width, height } = useWindowDimensions();
   const isDesktop = width >= 960;
-  const [tab, setTab] = useState<Tab>('home');
-  const [category, setCategory] = useState<Category>('Housing');
+  const [initialWebDestination] = useState(readWebDestination);
+  const [tab, setTab] = useState<Tab>(initialWebDestination.tab);
+  const [category, setCategory] = useState<Category>(initialWebDestination.category);
   const [search, setSearch] = useState('');
-  const [draftType, setDraftType] = useState<'Housing' | 'Marketplace'>('Marketplace');
+  const [draftType, setDraftType] = useState<PostCategory>(initialWebDestination.draftType);
+  const popstatePending = useRef(false);
+  const exploreScrollRef = useRef<ScrollView>(null);
+  const [popstateRevision, setPopstateRevision] = useState(0);
+
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof window === 'undefined') return;
+    const onBackOrForward = () => {
+      popstatePending.current = true;
+      const route = readWebDestination();
+      setTab(route.tab);
+      setCategory(route.category);
+      setDraftType(route.draftType);
+      setSearch('');
+      setPopstateRevision(value => value + 1);
+    };
+    window.addEventListener('popstate', onBackOrForward);
+    return () => window.removeEventListener('popstate', onBackOrForward);
+  }, []);
+
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof window === 'undefined') return;
+    if (popstatePending.current) {
+      popstatePending.current = false;
+      return;
+    }
+    const next = routeForDestination(tab, category, draftType);
+    const url = new URL(window.location.href);
+    if (url.searchParams.get(WEB_ROUTE_KEY) === next) return;
+    if (next) url.searchParams.set(WEB_ROUTE_KEY, next);
+    else url.searchParams.delete(WEB_ROUTE_KEY);
+    // Preserve existing callback parameters and hash for Supabase Auth.
+    window.history.pushState(null, '', url.pathname + url.search + url.hash);
+  }, [tab, category, draftType, popstateRevision]);
+  const [preferredConversationId, setPreferredConversationId] = useState<string | null>(null);
+
+  useEffect(() => { exploreScrollRef.current?.scrollTo({ y: 0, animated: false }); }, [category]);
+  const openListingConversation = (conversationId: string) => { setPreferredConversationId(conversationId); setTab('messages'); };
+
+  const categoryCopy: Record<Category, string> = {
+    Housing: 'Find shared spaces and student rooms posted by real members.',
+    Marketplace: 'Make more of student life with local, secondhand essentials.',
+    Trips: 'Explore real student trips. Posting and joining are being qualified separately.',
+    Jobs: 'Browse real student opportunities. Posting and applications are being qualified separately.',
+    Events: 'Explore real community gatherings. Posting and RSVP are being qualified separately.',
+    People: 'Meet students beyond your classroom through real public profiles.',
+  };
 
   const goToCategory = (next: Category) => {
     setCategory(next);
     setSearch('');
     setTab('explore');
+  };
+
+  const startListing = (next: 'Housing' | 'Marketplace') => {
+    setDraftType(next);
+    setTab('create');
   };
 
   const bottomNav: { key: Tab; label: string; icon: string }[] = [
@@ -114,89 +213,81 @@ export default function App() {
     { key: 'profile', label: 'You', icon: '○' },
   ];
 
-  const sidebarItems: { label: string; icon: string; action: () => void; active: boolean }[] = [
-    { label: 'Home', icon: '⌂', action: () => setTab('home'), active: tab === 'home' },
-    ...categories.map((item) => ({
-      label: item.name,
-      icon: item.emoji,
-      action: () => goToCategory(item.name),
-      active: tab === 'explore' && category === item.name,
-    })),
-    { label: 'Messages', icon: '◫', action: () => setTab('messages'), active: tab === 'messages' },
-    { label: 'You', icon: '○', action: () => setTab('profile'), active: tab === 'profile' },
+  const desktopNav: { key: Tab; label: string; icon: string }[] = [
+    { key: 'home', label: 'Home', icon: 'home' },
+    { key: 'explore', label: 'Explore', icon: 'search' },
+    { key: 'messages', label: 'Messages', icon: 'messages' },
+    { key: 'profile', label: 'You', icon: 'profile' },
   ];
 
   const content = (
     <View style={styles.contentFrame}>
       {tab === 'home' && (
-        <ScrollView contentContainerStyle={[styles.page, isDesktop && styles.pageDesktop]} showsVerticalScrollIndicator={false}>
-          {!isDesktop ? (
-            <View style={styles.mobileWelcomeRow}>
-              <View>
-                <Text style={styles.greeting}>Welcome to Stuora</Text>
-                <Text style={styles.mobileHeading}>Home</Text>
-              </View>
-              <View style={styles.locationChip}><Text style={styles.locationChipText}>Berlin</Text></View>
-            </View>
-          ) : null}
-
-          {isDesktop ? <View style={[styles.hero, styles.heroDesktop]}>
+        <ScrollView testID="home-scroll" style={styles.pageScroll} contentContainerStyle={[styles.page, isDesktop && styles.pageDesktop]} showsVerticalScrollIndicator={true}>
+          <View style={[styles.hero, isDesktop ? styles.heroDesktop : styles.heroMobile]}>
             <Image source={require('./assets/berlin-skyline.jpg')} resizeMode="cover" style={[StyleSheet.absoluteFill, { width: '100%', height: '100%' }]} accessibilityLabel="Berlin skyline at sunset" />
-            <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(17,22,47,0.48)' }]} />
-
+            <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(17,22,47,0.56)' }]} />
+            {width >= 1280 ? (
+              <EditorialImage kind="Community" style={styles.heroCommunityPhoto} label="Stuora promotional artwork depicting university students spending time together; not actual Stuora profiles" />
+            ) : null}
             <View style={styles.heroCopy}>
               <Text style={styles.eyebrow}>STUDENT LIFE, CONNECTED</Text>
-              <Text style={[styles.heroTitle, isDesktop && styles.heroTitleDesktop]}>Find your people.{"\n"}Find your place.{"\n"}Make the most of student life.</Text>
+              <Text style={[styles.heroTitle, isDesktop ? styles.heroTitleDesktop : styles.heroTitleMobile]}>Find your people.{"\n"}Find your place.{"\n"}Make the most of student life.</Text>
               <Text style={styles.heroText}>Housing, things, trips, jobs and student communities — all in one trusted local network.</Text>
-              {isDesktop ? (
-                <View style={styles.heroSearchWrap}>
-                  <SearchField value={search} onChangeText={setSearch} placeholder="Search housing listings…" onSubmit={() => { setCategory('Housing'); setTab('explore'); }} />
-                </View>
-              ) : null}
+              <View style={styles.heroSearchWrap}>
+                <SearchField value={search} onChangeText={setSearch} label="Search housing listings" placeholder="Search housing listings…" onSubmit={() => { setCategory('Housing'); setTab('explore'); }} />
+              </View>
             </View>
-          </View> : null}
-
-          {!isDesktop ? <SearchField value={search} onChangeText={setSearch} placeholder="Search housing listings…" onSubmit={() => { setCategory('Housing'); setTab('explore'); }} /> : null}
+          </View>
 
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Explore Stuora</Text>
+            <Text style={styles.sectionTitle}>Browse by category</Text>
             <Text style={styles.sectionHint}>Everything outside the classroom</Text>
           </View>
           <View style={styles.categoryGrid}>
             {categories.map((item) => <CategoryTile key={item.name} item={item} onPress={() => goToCategory(item.name)} />)}
           </View>
 
-          <View style={styles.sectionHeaderInline}><Text style={styles.sectionTitle}>Community housing</Text><Pressable accessibilityRole="button" accessibilityLabel="See all housing" onPress={() => goToCategory('Housing')}><Text style={styles.linkText}>See all</Text></Pressable></View>
-          <ListingWorkspace key={`home-${session?.user.id ?? 'public'}`} category="Housing" preview onAccount={() => setTab('profile')} onMessage={() => setTab('messages')} />
+          <View style={styles.sectionHeaderInline}><Text style={styles.sectionTitle}>Community housing</Text><Pressable accessibilityRole="button" accessibilityLabel="See all housing" onPress={() => goToCategory('Housing')} style={styles.seeAllHitArea}><Text style={styles.linkText}>See all</Text></Pressable></View>
+          <ListingWorkspace key={`home-${session?.user.id ?? 'public'}`} category="Housing" preview onAccount={() => setTab('profile')} onMessage={openListingConversation} onCreate={() => startListing('Housing')} />
 
-          <View style={styles.sectionHeaderInline}><Text style={styles.sectionTitle}>Marketplace</Text><Pressable accessibilityRole="button" accessibilityLabel="See all marketplace" onPress={() => goToCategory('Marketplace')}><Text style={styles.linkText}>See all</Text></Pressable></View>
-          <ListingWorkspace key={`home-market-${session?.user.id ?? 'public'}`} category="Marketplace" preview onAccount={() => setTab('profile')} onMessage={() => setTab('messages')} />
+          <View style={styles.sectionHeaderInline}><Text style={styles.sectionTitle}>Marketplace</Text><Pressable accessibilityRole="button" accessibilityLabel="See all marketplace" onPress={() => goToCategory('Marketplace')} style={styles.seeAllHitArea}><Text style={styles.linkText}>See all</Text></Pressable></View>
+          <ListingWorkspace key={`home-market-${session?.user.id ?? 'public'}`} category="Marketplace" preview onAccount={() => setTab('profile')} onMessage={openListingConversation} onCreate={() => startListing('Marketplace')} />
         </ScrollView>
       )}
 
       {tab === 'explore' && (
-        <ScrollView contentContainerStyle={[styles.page, isDesktop && styles.pageDesktop]} showsVerticalScrollIndicator={false}>
-          <View style={styles.pageHeadingRow}>
-            <View>
+        <ScrollView ref={exploreScrollRef} testID="explore-scroll" style={styles.pageScroll} contentContainerStyle={[styles.page, isDesktop && styles.pageDesktop]} showsVerticalScrollIndicator={true}>
+          <View style={styles.categorySpotlight}>
+            <View style={styles.categorySpotlightText}>
+              <Text style={styles.spotlightEyebrow}>STUORA / {category.toUpperCase()}</Text>
               <Text style={styles.pageTitle}>{category}</Text>
-              <Text style={styles.pageSubtitle}>{category === 'Housing' || category === 'Marketplace' ? 'Live community listings · one shared backend.' : category === 'People' ? 'Discoverable profiles from Stuora.' : 'This category is not available yet.'}</Text>
+              <Text style={styles.pageSubtitle}>{categoryCopy[category]}</Text>
+              {(category === 'Housing' || category === 'Marketplace') ? (
+                <Text style={styles.spotlightPostingNote}>Free to post · Real student listings only</Text>
+              ) : null}
             </View>
-            {isDesktop && (category === 'Housing' || category === 'Marketplace') ? <Pressable accessibilityRole="button" accessibilityLabel="Create in this category" onPress={() => { setDraftType(category); setTab('create'); }} style={styles.createTopButton}><Text style={styles.createTopButtonText}>Create</Text></Pressable> : null}
+            <EditorialImage kind={category} style={[styles.categorySpotlightPhoto, !isDesktop && styles.categorySpotlightPhotoMobile]} label={`Stuora ${category} editorial image; actual posts come from the database`} />
           </View>
-          {category === 'Housing' || category === 'Marketplace' || category === 'People' ? <SearchField value={search} onChangeText={setSearch} placeholder={`Search ${category.toLowerCase()}…`} /> : null}
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipsRow}>
             {categories.map((item) => (
-              <Pressable accessibilityRole="button" accessibilityLabel={`Browse ${item.name}`} key={item.name} onPress={() => { setCategory(item.name); setSearch(''); }}>
+              <Pressable accessibilityRole="button" accessibilityLabel={`Browse ${item.name}`} accessibilityState={{ selected: category === item.name }} key={item.name} onPress={() => { setCategory(item.name); setSearch(''); }}>
                 <Pill active={category === item.name}>{item.name}</Pill>
               </Pressable>
             ))}
           </ScrollView>
-          {category === 'Housing' || category === 'Marketplace' ? <ListingWorkspace key={`${category}-${session?.user.id ?? 'public'}`} category={category} search={search} onAccount={() => setTab('profile')} onMessage={() => setTab('messages')} /> : category === 'People' ? <PeopleDirectory key={session?.user.id ?? 'public'} search={search} onAccount={() => setTab('profile')} /> : <View style={styles.emptyState}><Icon name={category} size={40} color={BRAND.purple} /><Text style={styles.emptyTitle}>{category} is not available yet</Text><Text style={styles.emptyText}>Posting and participation will open after persistence and permissions are verified. No sample offers are displayed.</Text></View>}
+          {category === 'Housing' || category === 'Marketplace' || category === 'People' ? (
+            <View style={styles.exploreSearchPanel}>
+              <Text style={styles.exploreSearchLabel}>{category === 'People' ? 'Find people by name' : `Search ${category.toLowerCase()} listings`}</Text>
+              <SearchField value={search} onChangeText={setSearch} onClear={() => setSearch('')} clearLabel={`Clear ${category.toLowerCase()} search`} label={category === 'People' ? 'Search people by name' : `Search ${category.toLowerCase()} listings`} placeholder={`Search ${category.toLowerCase()}…`} />
+            </View>
+          ) : null}
+          {category === 'Housing' || category === 'Marketplace' ? <ListingWorkspace key={`${category}-${session?.user.id ?? 'public'}`} category={category} search={search} onAccount={() => setTab('profile')} onMessage={openListingConversation} onCreate={() => startListing(category)} onClearSearch={() => setSearch('')} /> : category === 'People' ? <PeopleDirectory key={session?.user.id ?? 'public'} search={search} onAccount={() => setTab('profile')} /> : <CommunityCatalog key={category} category={category} search={search} onHousing={() => goToCategory('Housing')} />}
         </ScrollView>
       )}
 
       {tab === 'create' && (
-        <ScrollView contentContainerStyle={[styles.page, styles.formPage]} keyboardShouldPersistTaps="handled">
+        <ScrollView testID="create-scroll" style={styles.pageScroll} contentContainerStyle={[styles.page, styles.formPage]} keyboardShouldPersistTaps="handled">
           <View style={styles.formCard}>
             <View style={styles.formHeader}>
               <View style={styles.formIcon}><Icon name="plus" color={BRAND.purple} size={26} /></View>
@@ -213,19 +304,19 @@ export default function App() {
                 </Pressable>
               ))}
             </View>
-            <ListingWorkspace key={`${draftType}-${session?.user.id ?? 'public'}`} category={draftType} mode="create" onAccount={() => setTab('profile')} onMessage={() => setTab('messages')} />
+            <ListingWorkspace key={`${draftType}-${session?.user.id ?? 'public'}`} category={draftType} mode="create" onAccount={() => setTab('profile')} onMessage={openListingConversation} />
             <View style={styles.noteCard}>
               <Text style={styles.noteTitle}>Stuora quality rule</Text>
-              <Text style={styles.noteText}>If a feature appears in the product, it must work end-to-end. Payments, production verification and media upload stay hidden until their backend flows are ready.</Text>
+              <Text style={styles.noteText}>Features must work end-to-end. Saved Housing and Marketplace listings can upload real photos. Trips, Jobs and Events publishing and participation remain unavailable until separately verified.</Text>
             </View>
           </View>
         </ScrollView>
       )}
 
-      {tab === 'messages' && <MessageWorkspace onAccount={() => setTab('profile')} />}
+      {tab === 'messages' && <MessageWorkspace onAccount={() => setTab('profile')} preferredConversationId={preferredConversationId} />}
 
       {tab === 'profile' && (
-        <ScrollView contentContainerStyle={[styles.page, styles.profilePage]} showsVerticalScrollIndicator={false}>
+        <ScrollView testID="profile-scroll" style={styles.pageScroll} contentContainerStyle={[styles.page, styles.profilePage]} showsVerticalScrollIndicator={true}>
           <AccountPanel />
         </ScrollView>
       )}
@@ -233,42 +324,51 @@ export default function App() {
   );
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView style={Platform.OS === 'web' ? [styles.safeArea, { height }] : styles.safeArea}>
       <StatusBar barStyle="dark-content" backgroundColor={BRAND.white} />
       <View style={styles.appShell}>
         {isDesktop ? (
           <View style={styles.desktopShell}>
-            <View style={styles.sidebar}>
+            <View style={styles.desktopNavigation}>
               <BrandMark />
-              <Text style={styles.sidebarTagline}>Student life, all in one place.</Text>
-              <View style={styles.sidebarMenu}>
-                {sidebarItems.map((item) => (
-                  <Pressable key={item.label} onPress={item.action} style={({ pressed }) => [styles.sidebarItem, item.active && styles.sidebarItemActive, pressed && styles.pressed]}>
-                    <Icon name={item.label === 'You' ? 'profile' : item.label} size={21} color={item.active ? BRAND.purple : BRAND.muted} />
-                    <Text style={[styles.sidebarLabel, item.active && styles.sidebarLabelActive]}>{item.label}</Text>
+              <View style={styles.desktopNavLinks}>
+                {desktopNav.map(item => (
+                  <Pressable
+                    key={item.key}
+                    accessibilityRole="button"
+                    accessibilityLabel={item.label === 'You' ? 'Open your profile' : `Open ${item.label}`}
+                    accessibilityState={{ selected: tab === item.key }}
+                    onPress={() => setTab(item.key)}
+                    style={({ pressed }) => [styles.desktopNavItem, tab === item.key && styles.desktopNavItemActive, pressed && styles.pressed]}
+                  >
+                    <Icon name={item.icon} size={19} color={tab === item.key ? BRAND.purple : BRAND.muted} />
+                    <Text style={[styles.desktopNavText, tab === item.key && styles.desktopNavTextActive]}>{item.label}</Text>
                   </Pressable>
                 ))}
               </View>
-              <Pressable accessibilityRole="button" accessibilityLabel="Create listing" onPress={() => setTab('create')} style={styles.sidebarCreate}><Icon name="plus" color={BRAND.white} size={18} /><Text style={styles.sidebarCreateText}>Create</Text></Pressable>
-              <View style={styles.sidebarFooter}><View style={styles.miniAvatar}><Text style={styles.miniAvatarText}>{profile?.display_name.charAt(0).toUpperCase() ?? 'S'}</Text></View><View><Text style={styles.sidebarUser}>{profile?.display_name ?? 'Your account'}</Text><Text style={styles.sidebarUserSub}>{profile?.city ?? 'Sign in to get started'}</Text></View></View>
-            </View>
-            <View style={styles.desktopMain}>
-              <View style={styles.desktopTopBar}>
-                <View><Text style={styles.desktopTopTitle}>{tab === 'home' ? 'Home' : tab === 'explore' ? category : tab === 'profile' ? 'Profile' : tab[0].toUpperCase() + tab.slice(1)}</Text><Text style={styles.desktopTopSub}>Berlin student network</Text></View>
-                <View style={styles.desktopTopActions}><View style={styles.locationChip}><Text style={styles.locationChipText}>Berlin</Text></View></View>
+              <View style={styles.desktopTopActions}>
+                <View style={styles.locationChip}><Text style={styles.locationChipText}>{profile?.city || 'Berlin'}</Text></View>
+                <Pressable accessibilityRole="button" accessibilityLabel="Open Student Savings" onPress={onOpenSavings} style={({ pressed }) => [styles.savingsNav, pressed && styles.pressed]}>
+                  <Text style={styles.savingsNavIcon}>€</Text>
+                  <Text style={styles.savingsNavText}>Student Savings</Text>
+                </Pressable>
+                <Pressable accessibilityRole="button" accessibilityLabel="Create listing" onPress={() => setTab('create')} style={[styles.desktopCreate, tab === 'create' && styles.desktopCreateActive]}>
+                  <Icon name="plus" size={18} color={BRAND.white} />
+                  <Text style={styles.desktopCreateText}>Create</Text>
+                </Pressable>
               </View>
-              {content}
             </View>
+            <View style={styles.desktopMain}>{content}</View>
           </View>
         ) : (
           <>
-            <View style={styles.mobileTopBar}><BrandMark /><View style={styles.mobileTopActions}><Pressable accessibilityRole="button" accessibilityLabel="Open your account" onPress={() => setTab('profile')} style={styles.miniAvatar}><Icon name="profile" color="#FFFFFF" size={22} /></Pressable></View></View>
+            <View style={styles.mobileTopBar}><BrandMark /><View style={styles.mobileTopActions}><Pressable accessibilityRole="button" accessibilityLabel="Open Student Savings" onPress={onOpenSavings} style={({ pressed }) => [styles.mobileSavings, pressed && styles.pressed]}><Text style={styles.mobileSavingsText}>€ Savings</Text></Pressable><Pressable accessibilityRole="button" accessibilityLabel="Open your account" onPress={() => setTab('profile')} style={styles.miniAvatar}><Icon name="profile" color="#FFFFFF" size={22} /></Pressable></View></View>
             {content}
             <View style={styles.bottomNav}>
               {bottomNav.map((item) => {
                 const isCreate = item.key === 'create';
                 return (
-                  <Pressable key={item.key} accessibilityRole="button" accessibilityLabel={isCreate ? 'Create listing' : item.label} onPress={() => setTab(item.key)} style={styles.navButton}>
+                  <Pressable key={item.key} accessibilityRole="button" accessibilityLabel={isCreate ? 'Create listing' : item.label} accessibilityState={{ selected: tab === item.key }} onPress={() => setTab(item.key)} style={styles.navButton}>
                     <View style={[styles.navIconWrap, isCreate && styles.navIconCreate, tab === item.key && !isCreate && styles.navIconActive]}><Icon name={isCreate ? 'plus' : item.key === 'explore' ? 'search' : item.key} size={isCreate ? 25 : 21} color={isCreate ? BRAND.white : tab === item.key ? BRAND.purple : BRAND.muted} /></View>
                     {!isCreate ? <Text style={[styles.navLabel, tab === item.key && styles.navLabelActive]}>{item.label}</Text> : null}
                   </Pressable>
@@ -286,9 +386,18 @@ const styles = StyleSheet.create({
   demoBackdrop: { flex: 1, backgroundColor: 'rgba(17,22,47,0.55)', padding: 24, alignItems: 'center', justifyContent: 'center' },
   demoPanel: { width: '100%', maxWidth: 480, padding: 24, borderRadius: 24, backgroundColor: BRAND.white, gap: 18 },
   safeArea: { flex: 1, backgroundColor: BRAND.white },
-  appShell: { flex: 1, backgroundColor: BRAND.soft },
-  desktopShell: { flex: 1, flexDirection: 'row' },
-  desktopMain: { flex: 1, backgroundColor: BRAND.soft },
+  appShell: { flex: 1, minHeight: 0, backgroundColor: BRAND.soft },
+  desktopShell: { flex: 1, minHeight: 0 },
+  desktopMain: { flex: 1, minHeight: 0, backgroundColor: BRAND.soft },
+  desktopNavigation: { backgroundColor: BRAND.white, borderBottomWidth: 1, borderBottomColor: BRAND.line, paddingHorizontal: 28, minHeight: 74, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 22 },
+  desktopNavLinks: { flexDirection: 'row', alignItems: 'center', gap: 7, flex: 1, justifyContent: 'center' },
+  desktopNavItem: { minHeight: 43, paddingHorizontal: 15, borderRadius: 12, flexDirection: 'row', alignItems: 'center', gap: 8 },
+  desktopNavItemActive: { backgroundColor: BRAND.purpleSoft },
+  desktopNavText: { color: BRAND.muted, fontSize: 13, fontWeight: '700' },
+  desktopNavTextActive: { color: BRAND.purple, fontWeight: '900' },
+  desktopCreate: { backgroundColor: BRAND.purple, paddingVertical: 11, paddingHorizontal: 17, borderRadius: 12, flexDirection: 'row', alignItems: 'center', gap: 7 },
+  desktopCreateActive: { backgroundColor: '#5931E8' },
+  desktopCreateText: { color: BRAND.white, fontWeight: '900', fontSize: 13 },
   sidebar: { width: 230, backgroundColor: BRAND.white, borderRightWidth: 1, borderRightColor: BRAND.line, paddingHorizontal: 18, paddingTop: 22, paddingBottom: 18 },
   sidebarTagline: { color: BRAND.subtle, fontSize: 11, marginTop: 2, marginBottom: 22 },
   sidebarMenu: { gap: 5, flex: 1 },
@@ -305,10 +414,16 @@ const styles = StyleSheet.create({
   desktopTopBar: { minHeight: 72, backgroundColor: BRAND.white, borderBottomWidth: 1, borderBottomColor: BRAND.line, paddingHorizontal: 28, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   desktopTopTitle: { color: BRAND.ink, fontSize: 17, fontWeight: '900' },
   desktopTopSub: { color: BRAND.subtle, fontSize: 11, marginTop: 2 },
-  desktopTopActions: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  desktopTopActions: { flexDirection: 'row', alignItems: 'center', gap: 9 },
+  savingsNav: { borderRadius: 12, backgroundColor: BRAND.purpleSoft, flexDirection: 'row', gap: 5, paddingVertical: 11, paddingHorizontal: 12, alignItems: 'center' },
+  savingsNavIcon: { fontWeight: '900', color: BRAND.purple, fontSize: 15 },
+  savingsNavText: { fontWeight: '800', color: BRAND.purple, fontSize: 12 },
+  mobileSavings: { borderRadius: 11, backgroundColor: BRAND.purpleSoft, paddingHorizontal: 11, paddingVertical: 10 },
+  mobileSavingsText: { color: BRAND.purple, fontSize: 12, fontWeight: '800' },
   mobileTopBar: { minHeight: 64, paddingHorizontal: 16, paddingVertical: 10, backgroundColor: BRAND.white, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: BRAND.line, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   mobileTopActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  contentFrame: { flex: 1 },
+  contentFrame: { flex: 1, minHeight: 0 },
+  pageScroll: { flex: 1, minHeight: 0 },
   brandRow: { flexDirection: 'row', alignItems: 'center', gap: 9 },
   logoMark: { width: 38, height: 38, borderRadius: 12, backgroundColor: BRAND.purple, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
   logoMarkCompact: { width: 30, height: 30, borderRadius: 9 },
@@ -328,29 +443,45 @@ const styles = StyleSheet.create({
   greeting: { color: BRAND.muted, fontSize: 12, fontWeight: '700' },
   mobileHeading: { color: BRAND.ink, fontSize: 23, lineHeight: 28, fontWeight: '900', letterSpacing: -0.7, maxWidth: 260, marginTop: 3 },
   hero: { backgroundColor: BRAND.ink, borderRadius: 24, padding: 22, overflow: 'hidden', minHeight: 190, justifyContent: 'space-between' },
-  heroDesktop: { minHeight: 280, padding: 34, flexDirection: 'row', alignItems: 'center' },
+  heroDesktop: { minHeight: 292, padding: 34, flexDirection: 'row', alignItems: 'center' },
+  heroMobile: { minHeight: 312, padding: 20, justifyContent: 'flex-end' },
   heroCopy: { flex: 1, maxWidth: 670, zIndex: 2 },
   heroOrbOne: { position: 'absolute', width: 260, height: 260, borderRadius: 130, backgroundColor: '#2B376D', right: -70, top: -120, opacity: 0.72 },
   heroOrbTwo: { position: 'absolute', width: 180, height: 180, borderRadius: 90, backgroundColor: '#4C2B8A', right: 120, bottom: -135, opacity: 0.55 },
   eyebrow: { color: '#B9AAFF', fontSize: 11, fontWeight: '900', letterSpacing: 1.3, marginBottom: 8 },
   heroTitle: { color: BRAND.white, fontSize: 31, lineHeight: 36, fontWeight: '900', letterSpacing: -1.2 },
   heroTitleDesktop: { fontSize: 34, lineHeight: 40 },
+  heroTitleMobile: { fontSize: 24, lineHeight: 29, letterSpacing: -0.6 },
   heroText: { color: '#D3D7E7', marginTop: 11, fontSize: 14, lineHeight: 21, maxWidth: 540 },
-  heroSearchWrap: { marginTop: 20, maxWidth: 570 },
+  heroSearchWrap: { marginTop: 18, width: '100%', maxWidth: 570 },
   heroCityCard: { alignSelf: 'flex-start', backgroundColor: '#202A55', borderWidth: 1, borderColor: '#34406F', borderRadius: 20, padding: 16, minWidth: 142, alignItems: 'center', zIndex: 2, marginTop: 18 },
   heroCityIcon: { fontSize: 34 },
   heroCityTitle: { color: BRAND.white, fontSize: 16, fontWeight: '900', marginTop: 7 },
   heroCitySub: { color: '#B9C0DA', fontSize: 10, marginTop: 2 },
-  searchBox: { backgroundColor: BRAND.white, borderWidth: 1, borderColor: BRAND.line, borderRadius: 14, paddingHorizontal: 13, minHeight: 48, flexDirection: 'row', alignItems: 'center', gap: 9 },
+  searchBox: { backgroundColor: BRAND.white, borderWidth: 1, borderColor: BRAND.line, borderRadius: 14, paddingHorizontal: 11, minHeight: 50, flexDirection: 'row', alignItems: 'center', gap: 8 },
+  searchSubmit: { backgroundColor: BRAND.purple, borderRadius: 10, paddingHorizontal: 13, paddingVertical: 9, alignItems: 'center', justifyContent: 'center' },
+  searchSubmitText: { color: BRAND.white, fontWeight: '800', fontSize: 12 },
+  searchClear: { paddingHorizontal: 10, paddingVertical: 9, borderRadius: 10, backgroundColor: BRAND.purpleSoft },
+  searchClearText: { color: BRAND.purple, fontSize: 12, fontWeight: '800' },
+  exploreSearchPanel: { gap: 8 },
+  exploreSearchLabel: { color: BRAND.inkSoft, fontSize: 13, fontWeight: '800' },
   searchIcon: { fontSize: 21, color: BRAND.muted },
-  searchInput: { flex: 1, color: BRAND.ink, fontSize: 14, outlineStyle: Platform.OS === 'web' ? 'none' : undefined } as any,
+  searchInput: { flex: 1, color: BRAND.ink, fontSize: 14 },
   sectionHeader: { gap: 2 },
-  sectionHeaderInline: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', gap: 12 },
+  sectionHeaderInline: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
+  seeAllHitArea: { minWidth: 48, minHeight: 44, alignItems: 'flex-end', justifyContent: 'center' },
   sectionTitle: { color: BRAND.ink, fontSize: 19, fontWeight: '900', letterSpacing: -0.35 },
   sectionHint: { color: BRAND.subtle, fontSize: 11, marginTop: 2 },
   categoryGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
-  categoryTile: { flexGrow: 0, flexBasis: '22%', backgroundColor: BRAND.white, borderWidth: 0, borderColor: BRAND.line, borderRadius: 16, paddingVertical: 13, paddingHorizontal: 10, alignItems: 'center', gap: 7, shadowColor: '#10162F', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.03, shadowRadius: 6, elevation: 1 },
-  categoryTileDesktop: { flexBasis: '15%' },
+  categoryTile: { flexGrow: 0, flexBasis: '22%', backgroundColor: BRAND.white, borderWidth: 1, borderColor: BRAND.line, borderRadius: 17, paddingBottom: 12, alignItems: 'center', gap: 8, overflow: 'hidden', shadowColor: '#10162F', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.04, shadowRadius: 8, elevation: 1 },
+  categoryTileDesktop: { flexBasis: '15%', minHeight: 121, justifyContent: 'flex-start' },
+  categoryArtWrap: { width: '100%', overflow: 'hidden', backgroundColor: '#F1EDFF', position: 'relative', height: 74 },
+  categoryPhoto: { width: '100%', height: 74, backgroundColor: '#F4F1FF' },
+  categorySpotlightPhoto: { width: 225, height: 125, borderRadius: 16, backgroundColor: '#F4F1FF' },
+  categorySpotlightPhotoMobile: { width: 115, height: 105, borderRadius: 13 },
+  heroCommunityPhoto: { position: 'absolute', right: 20, top: 28, width: 248, height: 230, borderRadius: 18, borderWidth: 2, borderColor: '#FFFFFF', opacity: 0.96 },
+  categorySoonTag: { position: 'absolute', top: 5, right: 5, borderRadius: 8, backgroundColor: 'rgba(255,255,255,0.96)', paddingHorizontal: 5, paddingVertical: 3, borderWidth: 1, borderColor: '#E8DFFF' },
+  categorySoonText: { color: BRAND.purple, fontWeight: '800', fontSize: 8 },
   categoryIcon: { width: 43, height: 43, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
   categoryEmoji: { fontSize: 21 },
   categoryName: { color: BRAND.ink, fontWeight: '800', fontSize: 11 },
@@ -384,6 +515,12 @@ const styles = StyleSheet.create({
   linkText: { color: BRAND.purple, fontWeight: '900', fontSize: 11 },
   chipsRow: { paddingVertical: 2 },
   pageHeadingRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
+  categorySpotlight: { backgroundColor: BRAND.white, borderRadius: 22, borderWidth: 1, borderColor: BRAND.line, padding: 17, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 7, overflow: 'hidden' },
+  categorySpotlightText: { flex: 1, gap: 5 },
+  spotlightEyebrow: { color: BRAND.purple, fontSize: 10, fontWeight: '900', letterSpacing: 1 },
+  spotlightCreate: { alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 10, borderRadius: 12, backgroundColor: BRAND.purple, paddingVertical: 10, paddingHorizontal: 13 },
+  spotlightCreateText: { color: BRAND.white, fontWeight: '800', fontSize: 12 },
+  spotlightPostingNote: { marginTop: 10, color: BRAND.purple, fontWeight: '800', fontSize: 12 },
   pageTitle: { color: BRAND.ink, fontSize: 29, fontWeight: '900', letterSpacing: -0.8 },
   pageSubtitle: { color: BRAND.muted, fontSize: 13, lineHeight: 19, marginTop: 2 },
   createTopButton: { backgroundColor: BRAND.purple, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 10 },

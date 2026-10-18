@@ -1,19 +1,18 @@
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, Modal, Pressable, SafeAreaView, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { ActivityIndicator, Modal, Pressable, SafeAreaView, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { supabase } from './backend/supabase';
 import type { Database } from './backend/database.types';
 type Benefit = Database['public']['Tables']['student_benefits']['Row'];
 function euro(cents: number, currency: string) { return new Intl.NumberFormat('de-DE', { style: 'currency', currency }).format(cents / 100); }
 function date(value: string | null) { return value ? new Date(value).toLocaleDateString('de-DE', { timeZone: 'Europe/Berlin' }) : 'No end date specified'; }
-export default function StudentSavingsOverlay() {
-  const { width } = useWindowDimensions();
-  const [open, setOpen] = useState(false);
+export default function StudentSavingsOverlay({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
   const [benefits, setBenefits] = useState<Benefit[]>([]);
   const [loading, setLoading] = useState(false);
   const [issue, setIssue] = useState(false);
   const [revision, setRevision] = useState(0);
   const [pages, setPages] = useState(1);
   const [more, setMore] = useState(false);
+  useEffect(() => { if (!open) setPages(1); }, [open]);
   useEffect(() => {
     if (!open) return;
     const ac = new AbortController(); setLoading(true); setIssue(false); setBenefits([]);
@@ -30,9 +29,8 @@ export default function StudentSavingsOverlay() {
     void load(); return () => { clearTimeout(timeout); ac.abort(); };
   }, [open, pages, revision]);
   return <>
-    <Pressable accessibilityRole="button" accessibilityLabel="Open Student Savings" onPress={() => { setPages(1); setOpen(true); }} style={[styles.floatingButton, { bottom: width >= 960 ? 96 : 152 }]}><Text style={styles.floatingIcon}>€</Text><View><Text style={styles.floatingLabel}>Student Savings</Text><Text style={styles.floatingValue}>Browse verified benefits</Text></View></Pressable>
-    <Modal visible={open} animationType="slide" onRequestClose={() => setOpen(false)}><SafeAreaView style={styles.safeArea}>
-      <View style={styles.header}><View><Text style={styles.eyebrow}>STUORA SAVINGS</Text><Text style={styles.title}>Student life for less.</Text></View><Pressable accessibilityRole="button" accessibilityLabel="Close Student Savings" onPress={() => setOpen(false)} style={styles.closeButton}><Text style={styles.closeText}>Close</Text></Pressable></View>
+    <Modal visible={open} animationType="slide" onRequestClose={() => onOpenChange(false)}><SafeAreaView style={styles.safeArea}>
+      <View style={styles.header}><View><Text style={styles.eyebrow}>STUORA SAVINGS</Text><Text style={styles.title}>Student life for less.</Text></View><Pressable accessibilityRole="button" accessibilityLabel="Close Student Savings" onPress={() => onOpenChange(false)} style={styles.closeButton}><Text style={styles.closeText}>Close</Text></Pressable></View>
       <ScrollView contentContainerStyle={styles.page}>
         <View style={styles.integrityCard}><Text style={styles.integrityTitle}>Verified partner benefits</Text><Text style={styles.integrityText}>Only verified, currently valid offers from Stuora are shown. Personal redemption accounting is not available yet. Stuora does not hold money or show a cash balance.</Text></View>
         {loading ? <ActivityIndicator accessibilityLabel="Loading benefits" /> : issue ? <View><Text accessibilityRole="alert">Could not load benefits. Check your connection and retry.</Text><Pressable accessibilityRole="button" onPress={() => setRevision(v => v + 1)}><Text style={styles.closeText}>Retry benefits</Text></Pressable></View> : <>
@@ -55,26 +53,6 @@ export default function StudentSavingsOverlay() {
 
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: '#F7F7FB' },
-  floatingButton: {
-    position: 'absolute',
-    right: 16,
-    zIndex: 999,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    backgroundColor: '#10162F',
-    borderRadius: 18,
-    paddingHorizontal: 14,
-    paddingVertical: 11,
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 5 },
-    shadowOpacity: 0.16,
-    shadowRadius: 12,
-    elevation: 7,
-  },
-  floatingIcon: { color: '#FFFFFF', fontWeight: '900', fontSize: 19 },
-  floatingLabel: { color: '#FFFFFF', fontWeight: '900', fontSize: 12 },
-  floatingValue: { color: '#B7A9FF', fontWeight: '800', fontSize: 11, marginTop: 1 },
   pressed: { opacity: 0.72 },
   header: {
     minHeight: 76,

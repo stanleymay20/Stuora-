@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Image, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { StuoraMark } from '../ui/Brand';
 import { supabase } from '../backend/supabase';
@@ -24,14 +24,18 @@ export default function AccountPanel() {
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState('');
   const [issue, setIssue] = useState('');
+  // Preserve the password-reset confirmation across the forced SIGNED_OUT event.
+  const preserveRecoveryNotice = useRef(false);
 
   useEffect(() => {
     setName(profile?.display_name ?? ''); setCity(profile?.city ?? 'Berlin');
     setBio(profile?.bio ?? ''); setDiscoverable(profile?.is_discoverable ?? true);
   }, [profile]);
   useEffect(() => {
-    setPassword(''); setNewPassword(''); setConfirmPassword(''); setNotice(''); setIssue('');
-    if (session) setForgot(false);
+    setPassword(''); setNewPassword(''); setConfirmPassword('');
+    if (!preserveRecoveryNotice.current) setNotice('');
+    setIssue('');
+    if (session) { setForgot(false); preserveRecoveryNotice.current = false; }
   }, [session?.user.id]);
 
   async function authenticate() {
@@ -79,8 +83,19 @@ export default function AccountPanel() {
         return;
       }
       setNewPassword(''); setConfirmPassword('');
+      // Recovery grants a temporary authenticated session. Revoke it so a
+      // copied or unattended recovery link cannot leave the account signed in.
+      preserveRecoveryNotice.current = true;
       finishRecovery();
-      setNotice('Password updated successfully. Your Stuora account is ready.');
+      const { error: signOutError } = await supabase.auth.signOut({ scope: 'local' });
+      if (signOutError) {
+        setIssue('Password changed, but this device could not sign out. Please sign out manually.');
+        return;
+      }
+      if (Platform.OS === 'web' && typeof window !== 'undefined' && window.location.hash) {
+        window.history.replaceState({}, '', window.location.pathname + window.location.search);
+      }
+      setNotice('Password updated successfully. Sign in again with your new password.');
     } catch { setIssue('Unable to connect. Your password was not changed.'); }
     finally { setBusy(false); }
   }
@@ -132,6 +147,14 @@ export default function AccountPanel() {
   </View>;
 
   return <View style={styles.card}>
+    {session && profile ? <View style={styles.passportHeader}>
+      <View style={styles.passportAvatar}><Text style={styles.passportInitial}>{profile.display_name.charAt(0).toUpperCase()}</Text></View>
+      <View style={styles.passportInfo}>
+        <Text style={styles.passportName}>{profile.display_name}</Text>
+        <Text style={styles.passportMeta}>{profile.city} · Verification: {profile.student_status}</Text>
+        {profile.bio ? <Text style={styles.passportBio}>{profile.bio}</Text> : null}
+      </View>
+    </View> : null}
     {!session ? <View style={styles.welcome}><Image source={require('../../assets/berlin-skyline.jpg')} style={[StyleSheet.absoluteFill, { width: '100%', height: '100%' }]} resizeMode="cover" /><View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(17,22,47,0.35)' }]} /><View style={{ zIndex: 1 }}><StuoraMark size={58} /></View><Text style={styles.welcomeTitle}>Stuora</Text><Text style={styles.welcomeSubtitle}>Student life, all in one place.</Text></View> : null}
     <Text accessibilityRole="header" style={styles.heading}>{session ? 'Your Stuora Passport' : forgot ? 'Reset your password' : signup ? 'Create your Stuora account' : 'Welcome to Stuora'}</Text>
     <Text style={styles.description}>{session ? 'Your profile is saved to your account and available across devices.' : forgot ? 'Enter your account email. We will send a secure recovery link if an account exists.' : 'Core student participation is free. No university connection is required.'}</Text>
@@ -171,7 +194,14 @@ export default function AccountPanel() {
 }
 
 const styles = StyleSheet.create({
-  welcome: { minHeight: 190, borderRadius: 16, overflow: 'hidden', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#11162F' },
+  passportHeader: { flexDirection: 'row', alignItems: 'center', gap: 18, backgroundColor: '#F7F5FF', padding: 20, borderRadius: 18, borderWidth: 1, borderColor: '#E9E5FF' },
+  passportAvatar: { width: 72, height: 72, borderRadius: 26, backgroundColor: '#7048FF', alignItems: 'center', justifyContent: 'center' },
+  passportInitial: { fontSize: 34, fontWeight: '900', color: '#FFFFFF' },
+  passportInfo: { flex: 1, gap: 6 },
+  passportName: { fontSize: 21, fontWeight: '900', color: '#11162F' },
+  passportMeta: { fontSize: 12, color: '#6F7490', fontWeight: '600' },
+  passportBio: { fontSize: 12, lineHeight: 19, color: '#252B4A' },
+  welcome: { minHeight: 215, borderRadius: 18, overflow: 'hidden', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#11162F' },
   welcomeTitle: { color: '#FFFFFF', fontSize: 30, fontWeight: '900' },
   welcomeSubtitle: { color: '#FFFFFF', fontSize: 14 },
   card: { padding: 24, backgroundColor: '#fff', borderRadius: 20, borderWidth: 1, borderColor: '#E9EAF1', gap: 12 },

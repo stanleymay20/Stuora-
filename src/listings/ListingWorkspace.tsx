@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import * as ImagePicker from 'expo-image-picker';
-import { ActivityIndicator, Image, Platform, Pressable, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Image, Platform, Pressable, StyleSheet, Switch, Text, TextInput, useWindowDimensions, View } from 'react-native';
 import { useAuth } from '../account/AuthProvider';
 import { supabase } from '../backend/supabase';
 import { Icon } from '../ui/Brand';
+import { EditorialImage } from '../ui/EditorialImage';
 import type { Database } from '../backend/database.types';
 
 type Row = Database['public']['Tables']['listings']['Row'];
@@ -59,14 +60,19 @@ function Photo({ media, title, index, removable, disabled, onRemove }: { media: 
   </View>;
 }
 
-export default function ListingWorkspace({ category, mode = 'browse', search = '', preview = false, onAccount, onMessage }: { category: 'Housing' | 'Marketplace'; mode?: 'browse' | 'create'; search?: string; preview?: boolean; onAccount: () => void; onMessage?: () => void }) {
+export default function ListingWorkspace({ category, mode = 'browse', search = '', preview = false, onAccount, onMessage, onCreate, onClearSearch }: { category: 'Housing' | 'Marketplace'; mode?: 'browse' | 'create'; search?: string; preview?: boolean; onAccount: () => void; onMessage?: (conversationId: string) => void; onCreate?: () => void; onClearSearch?: () => void }) {
   const { session, profile, profileLoading, initializing, error: profileError } = useAuth();
+  const { width } = useWindowDimensions();
+  const compactWideEmpty = preview && width >= 760;
   const kind: Kind = category === 'Housing' ? 'housing' : 'marketplace';
   const userId = session?.user.id;
   const [items, setItems] = useState<Item[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [own, setOwn] = useState(false);
+  const [cityFilter, setCityFilter] = useState('');
+  const [maxPrice, setMaxPrice] = useState('');
+  const hasListingFilters = Boolean(cityFilter.trim() || maxPrice.trim());
   const [revision, setRevision] = useState(0);
   const [pages, setPages] = useState(1);
   const [more, setMore] = useState(false);
@@ -80,7 +86,7 @@ export default function ListingWorkspace({ category, mode = 'browse', search = '
 
   useEffect(() => {
     setPages(1); setSelected(null); setEditing(false); setDraft(blank()); setNotice(''); setActionError(''); setConfirmArchive(false);
-  }, [kind, mode, userId, own, search]);
+  }, [kind, mode, userId, own, search, cityFilter, maxPrice]);
 
   useEffect(() => {
     if (mode === 'create') { setLoading(false); return; }
@@ -100,6 +106,8 @@ export default function ListingWorkspace({ category, mode = 'browse', search = '
       .abortSignal(ac.signal);
     query = own && userId ? query.eq('owner_id', userId) : query.eq('status', 'active');
     if (search.trim()) query = query.ilike('title', `%${search.trim().replace(/[\\%_]/g, '\\$&')}%`);
+    if (cityFilter.trim()) query = query.ilike('city', `%${cityFilter.trim().replace(/[\\%_]/g, '\\$&')}%`);
+    if (maxPrice.trim()) query = query.lte('price_cents', Math.round(Number(maxPrice) * 100));
     void Promise.resolve(query).then((result: any) => {
       if (ac.signal.aborted) return;
       if (result.error) setError('Could not load listings. Check your connection and retry.');
@@ -113,7 +121,7 @@ export default function ListingWorkspace({ category, mode = 'browse', search = '
       if (!ac.signal.aborted) { setError('Could not load listings. Check your connection and retry.'); setLoading(false); }
     }).finally(() => clearTimeout(timeout));
     return () => { clearTimeout(timeout); ac.abort(); };
-  }, [kind, userId, own, revision, pages, search, mode]);
+  }, [kind, userId, own, revision, pages, search, cityFilter, maxPrice, mode]);
 
   const change = <K extends keyof Draft>(key: K, value: Draft[K]) => setDraft(d => ({ ...d, [key]: value }));
   function replaceItem(item: Item) {
@@ -233,10 +241,12 @@ export default function ListingWorkspace({ category, mode = 'browse', search = '
     if (selected.owner_id === userId || selected.status !== 'active') return;
     setBusy(true);
     try {
-      const { error: issue } = await (supabase.rpc as any)('start_listing_conversation', { p_listing_id: selected.id });
-      if (issue) throw issue;
+      const { data: conversationId, error: issue } = await (supabase.rpc as any)('start_listing_conversation', { p_listing_id: selected.id });
+      if (issue || typeof conversationId !== 'string' || !/^[0-9a-f]{8}-[0-9a-f-]{27,}$/i.test(conversationId)) {
+        throw issue ?? new Error('Conversation reference missing');
+      }
       setNotice('Conversation ready. Opening Messages…');
-      onMessage?.();
+      onMessage?.(conversationId);
     } catch {
       setActionError('Could not start a secure conversation. Check that the listing is still active, then retry.');
     } finally { setBusy(false); }
@@ -244,7 +254,7 @@ export default function ListingWorkspace({ category, mode = 'browse', search = '
 
   const form = (mode === 'create' && !selected) || editing;
   return <View style={s.workspace}>
-    {!preview ? <Text style={s.hint}>{category} listings are saved to Stuora. No student posting or application fee.</Text> : null}
+    {!preview && form ? <Text style={s.hint}>Publish your own listing for free. Stuora does not charge a student posting fee.</Text> : null}
     {notice ? <Text accessibilityLiveRegion="polite" style={s.notice}>{notice}</Text> : null}
     {actionError ? <Text accessibilityRole="alert" style={s.error}>{actionError}</Text> : null}
 
@@ -273,15 +283,59 @@ export default function ListingWorkspace({ category, mode = 'browse', search = '
       {selected.owner_id === userId && selected.status === 'active' ? <><Button title="Edit listing" onPress={() => edit(selected)} disabled={busy} />{confirmArchive ? <><Text>Archive this listing? It will disappear from public discovery.</Text><Button title="Confirm archive" onPress={() => void archive()} disabled={busy} /><Button title="Keep listing" onPress={() => setConfirmArchive(false)} disabled={busy} /></> : <Button title="Archive listing" onPress={() => setConfirmArchive(true)} disabled={busy} />}</> : null}
       <Button title={mode === 'create' ? 'Create another listing' : 'Back to listings'} onPress={() => { setSelected(null); setConfirmArchive(false); setActionError(''); setNotice(''); }} disabled={busy} />
     </View> : <>
-      {!preview ? <View style={s.wrap}><Button title="Refresh listings" onPress={() => setRevision(v => v + 1)} disabled={loading} />{session ? <Button title={own ? 'Browse public listings' : 'My listings'} onPress={() => setOwn(v => !v)} /> : null}</View> : null}
-      <Text style={s.hint}>{own ? 'Your listings, including archived posts.' : 'Active listings from the community.'}{search ? ' Search matches titles.' : ''}</Text>
+      {!preview ? (
+        <View style={s.filters}>
+          <View style={s.filtersHeading}>
+            <View style={s.filtersTitleGroup}>
+              <Text style={s.filtersTitle}>Refine your search</Text>
+              <Text style={s.hint}>Filters apply to real {category.toLowerCase()} listings.</Text>
+            </View>
+            <View style={s.filterActions}>
+              <Button title="Refresh listings" onPress={() => setRevision(v => v + 1)} disabled={loading} />
+              {session ? <Button title={own ? 'Browse public listings' : 'My listings'} onPress={() => setOwn(v => !v)} /> : null}
+            </View>
+          </View>
+          <View style={s.filterFields}>
+            <View style={s.filterField}>
+              <Text style={s.filterLabel}>City</Text>
+              <TextInput accessibilityLabel="Filter listings by city" value={cityFilter} onChangeText={setCityFilter} placeholder="All cities" placeholderTextColor="#8B91A4" style={s.filterInput} />
+            </View>
+            <View style={s.filterField}>
+              <Text style={s.filterLabel}>Maximum {kind === 'housing' ? 'monthly rent' : 'price'} (EUR)</Text>
+              <TextInput accessibilityLabel="Maximum listing price (EUR)" inputMode="decimal" value={maxPrice} onChangeText={value => { if (/^\d{0,7}(\.\d{0,2})?$/.test(value)) setMaxPrice(value); }} placeholder="No maximum" placeholderTextColor="#8B91A4" style={s.filterInput} />
+            </View>
+          </View>
+          {hasListingFilters ? <View style={s.clearFilters}><Button title="Clear listing filters" onPress={() => { setCityFilter(''); setMaxPrice(''); }} /></View> : null}
+        </View>
+      ) : null}
+      <View style={s.resultsHeading}>
+        <Text style={s.resultsTitle}>{own ? 'My listings' : 'Available listings'}</Text>
+        {!loading && !error ? <Text style={s.resultsCaption}>{items.length} shown{more ? ' · More available' : ''}</Text> : null}
+      </View>
       {loading ? <ActivityIndicator accessibilityLabel="Loading listings" /> : error ? <View><Text accessibilityRole="alert" style={s.error}>{error}</Text><Button title="Retry listings" onPress={() => setRevision(v => v + 1)} /></View> : <>
-        {!items.length ? <Text style={s.text}>No {category.toLowerCase()} listings found.</Text> : null}
+        {!items.length ? <View style={[s.emptyListings, preview && s.emptyPreview, compactWideEmpty && s.emptyPreviewWide]}>
+          <EditorialImage kind={search.trim() ? 'EmptySearch' : category === 'Housing' ? 'EmptyHousing' : 'Marketplace'} style={[s.emptyArt, compactWideEmpty && s.emptyArtWide]} cover={false} label="Stuora decorative illustration for an empty category; not a real listing" />
+          <View style={[s.emptyCopy, compactWideEmpty && s.emptyCopyWide]}>
+            <Text style={[s.emptyTitle, compactWideEmpty && s.emptyTitleWide]}>No {category.toLowerCase()} listings found.</Text>
+            <Text style={[s.emptyCaption, compactWideEmpty && s.emptyCaptionWide]}>{search.trim()
+              ? 'No listing titles match that search. Try a different term or clear the search.'
+              : hasListingFilters ? 'No real listings match these filters. Clear the filters or adjust the city and maximum price.'
+              : own ? 'You have not posted a listing in this category yet.'
+              : 'Be among the first students to share a real listing. Only published community listings appear here.'}</Text>
+            {search.trim() && onClearSearch ? <Button title="Clear search" onPress={onClearSearch} /> : !search.trim() && onCreate ? <Button title={`Post ${category.toLowerCase()} listing`} onPress={onCreate} /> : null}
+          </View>
+        </View> : null}
         <View style={s.grid}>{(preview ? items.slice(0, 4) : items).map(item => {
           const cover = item.listing_media[0];
           return <Pressable key={item.id} accessibilityRole="button" accessibilityLabel={`View ${item.title}`} onPress={() => { setSelected(item); setNotice(''); setActionError(''); }} style={s.listing}>
-            {cover ? <Image source={{ uri: mediaUrl(cover.object_path) }} accessibilityLabel={`${item.title} cover photo`} style={s.cardImage} resizeMode="cover" /> : <View style={s.visual}><Icon name={kind === 'housing' ? 'housing' : 'marketplace'} size={44} color="#7048FF" /><Text style={s.hint}>No photo</Text></View>}
-            <Text style={s.title}>{item.title}</Text><Text style={s.price}>{money(item.price_cents)}{kind === 'housing' ? ' / month' : ''}</Text><Text>{item.city} · {item.status}</Text>
+            <View style={s.coverWrap}>
+              {cover ? <Image source={{ uri: mediaUrl(cover.object_path) }} accessibilityLabel={`${item.title} cover photo`} style={s.cardImage} resizeMode="cover" /> : <View style={s.visual}><Icon name={kind === 'housing' ? 'housing' : 'marketplace'} size={44} color="#7048FF" /><Text style={s.hint}>Photo not added yet</Text></View>}
+            </View>
+            <View style={s.listingDetails}>
+              <Text style={s.title} numberOfLines={2}>{item.title}</Text>
+              <Text style={s.price}>{money(item.price_cents)}{kind === 'housing' ? ' / month' : ''}</Text>
+              <View style={s.listingMeta}><Icon name="location" size={15} color="#747B91" /><Text style={s.metaText}>{item.city} · {item.status}</Text></View>
+            </View>
           </Pressable>;
         })}</View>
         {more && !preview ? <Button title="Load more listings" onPress={() => setPages(v => v + 1)} /> : null}
@@ -292,6 +346,19 @@ export default function ListingWorkspace({ category, mode = 'browse', search = '
 
 const s = StyleSheet.create({
   workspace: { gap: 16, width: '100%' },
+  filters: { backgroundColor: '#FFFFFF', borderColor: '#E9EAF1', borderWidth: 1, borderRadius: 17, padding: 17, gap: 13 },
+  filtersHeading: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 },
+  filtersTitleGroup: { flexGrow: 1, gap: 2 },
+  filtersTitle: { fontSize: 16, color: '#11162F', fontWeight: '900' },
+  filterActions: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 7 },
+  filterFields: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
+  clearFilters: { alignSelf: 'flex-start' },
+  resultsHeading: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 9 },
+  resultsTitle: { color: '#11162F', fontWeight: '900', fontSize: 17 },
+  resultsCaption: { color: '#747B91', fontWeight: '700', fontSize: 12 },
+  filterField: { flexGrow: 1, flexBasis: 180, minWidth: 150, gap: 7 },
+  filterLabel: { fontSize: 12, fontWeight: '800', color: '#252B4A' },
+  filterInput: { backgroundColor: '#FAFAFD', borderColor: '#D5D7E2', borderWidth: 1, borderRadius: 11, paddingHorizontal: 12, paddingVertical: 11, fontSize: 14, color: '#11162F' },
   card: { backgroundColor: '#FFFFFF', padding: 20, borderRadius: 18, borderWidth: 1, borderColor: '#E9EAF1', gap: 14 },
   title: { fontSize: 18, fontWeight: '700', color: '#11162F' },
   text: { fontSize: 15, lineHeight: 23, color: '#252B4A' },
@@ -309,10 +376,26 @@ const s = StyleSheet.create({
   notice: { backgroundColor: '#EDFFF4', color: '#136B3A', padding: 12, borderRadius: 10 },
   error: { backgroundColor: '#FFF0F0', color: '#9C2D2D', padding: 12, borderRadius: 10 },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 14 },
-  listing: { backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E9EAF1', borderRadius: 16, padding: 12, gap: 8, minWidth: 220, flexGrow: 1, flexBasis: 220, maxWidth: 420 },
-  visual: { height: 150, borderRadius: 12, backgroundColor: '#F4F1FF', alignItems: 'center', justifyContent: 'center', gap: 8 },
-  cardImage: { width: '100%', height: 170, borderRadius: 12, backgroundColor: '#F4F1FF' },
-  price: { fontWeight: '800', color: '#11162F', fontSize: 17 },
+  listing: { backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E9EAF1', borderRadius: 19, overflow: 'hidden', minWidth: 220, flexGrow: 1, flexBasis: 220, maxWidth: 390, shadowColor: '#11162F', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.06, shadowRadius: 14, elevation: 2 },
+  coverWrap: { backgroundColor: '#F4F1FF' },
+  listingDetails: { padding: 16, gap: 8 },
+  listingMeta: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  metaText: { fontSize: 12, color: '#747B91', flexShrink: 1 },
+  visual: { height: 174, backgroundColor: '#F4F1FF', alignItems: 'center', justifyContent: 'center', gap: 8 },
+  cardImage: { width: '100%', height: 174, backgroundColor: '#F4F1FF' },
+  price: { fontWeight: '900', color: '#11162F', fontSize: 18 },
+  emptyListings: { borderRadius: 20, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E9EAF1', paddingVertical: 27, paddingHorizontal: 22, alignItems: 'center', gap: 12 },
+  emptyPreview: { paddingVertical: 14, paddingHorizontal: 16, gap: 8 },
+  emptyArt: { width: 160, height: 95, borderRadius: 12 },
+  emptyArtWide: { width: 155, height: 82 },
+  emptyPreviewWide: { flexDirection: 'row', justifyContent: 'center', gap: 22, minHeight: 150 },
+  emptyCopy: { alignItems: 'center', gap: 8, flexShrink: 1 },
+  emptyCopyWide: { alignItems: 'flex-start', maxWidth: 500 },
+  emptyTitleWide: { textAlign: 'left' },
+  emptyCaptionWide: { textAlign: 'left' },
+  emptyIcon: { width: 64, height: 64, borderRadius: 21, backgroundColor: '#F1EDFF', justifyContent: 'center', alignItems: 'center' },
+  emptyTitle: { color: '#11162F', fontSize: 16, fontWeight: '800', textAlign: 'center' },
+  emptyCaption: { color: '#747B91', fontSize: 12, lineHeight: 18, textAlign: 'center', maxWidth: 420 },
   photoGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   photoWrap: { width: 160, gap: 6 },
   photo: { width: 160, height: 130, borderRadius: 12, backgroundColor: '#F4F1FF' },
