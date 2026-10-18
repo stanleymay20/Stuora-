@@ -24,7 +24,11 @@ test('Stuora Bot finds real affordable rooms with backend filters and opens Hous
   await expect(page.getByRole('dialog').getByText('Student room near campus', { exact: true })).toBeVisible();
   await expect(page.getByText('Berlin · 590,00', { exact: false })).toBeVisible();
   expect(calls.some(x => x.kind === 'eq.housing' && x.city === 'ilike.%Berlin%' && x.price === 'lte.65000')).toBe(true);
-  expect(calls.every(x => x.select === 'id,kind,title,city,price_cents,currency')).toBe(true);
+  // The Home screen also fetches listings using a different projection.
+  // Assert Bot-scoped requests only, without treating Home requests as data leaks.
+  const botHousing = calls.filter(x => x.kind === 'eq.housing' && x.city === 'ilike.%Berlin%' && x.price === 'lte.65000');
+  expect(botHousing.length).toBeGreaterThan(0);
+  expect(botHousing.every(x => x.select === 'id,kind,title,city,price_cents,currency')).toBe(true);
   await page.getByRole('button', { name: 'Explore Housing' }).click();
   await expect.poll(() => new URL(page.url()).searchParams.get('stuora')).toBe('housing');
 });
