@@ -10,11 +10,11 @@ const TOPICS = ['Study', 'University', 'Housing', 'Career', 'Travel', 'Culture',
 const PAGE = 24;
 function escapedLike(value: string) { return value.replace(/[\\%_]/g, '\\$&'); }
 
-function Action({ name, onPress, disabled = false, secondary = false }: {
-  name: string; onPress: () => void; disabled?: boolean; secondary?: boolean;
+function Action({ name, onPress, disabled = false, secondary = false, label }: {
+  name: string; onPress: () => void; disabled?: boolean; secondary?: boolean; label?: string;
 }) {
   return <Pressable
-    accessibilityRole="button" accessibilityLabel={name}
+    accessibilityRole="button" accessibilityLabel={label ?? name}
     disabled={disabled} onPress={onPress}
     style={({ pressed }) => [styles.action, secondary && styles.actionSecondary, disabled && styles.disabled, pressed && styles.pressed]}
   ><Text style={[styles.actionText, secondary && styles.actionSecondaryText]}>{name}</Text></Pressable>;
@@ -260,7 +260,7 @@ export default function GroupWorkspace({ onAccount }: { onAccount: () => void })
                 <Text style={styles.body}>{m.body}</Text>
                 <Text style={styles.muted}>{new Date(m.created_at).toLocaleString()}</Text>
               </View>
-              {owner || m.author_id === userId ? <Action name={`Remove group message ${m.id}`} secondary disabled={busy} onPress={() => void removeMessage(m)} /> : null}
+              {owner || m.author_id === userId ? <Action name="Remove" label={`Remove group message ${m.id}`} secondary disabled={busy} onPress={() => void removeMessage(m)} /> : null}
             </View>)}
             {moreMessages ? <Action name="Load older group messages" secondary onPress={() => setMessagePages(v => v + 1)} /> : null}
             <Field label="Message to group" value={draft} onChange={setDraft} maxLength={1000} multiline placeholder="Write to your group…" />
@@ -330,7 +330,7 @@ const styles = StyleSheet.create({
   disabled: { opacity: 0.45 },
   pressed: { opacity: 0.72 },
   message: { borderWidth: 1, borderColor: '#E9EAF1', backgroundColor: '#FAFAFD', borderRadius: 14, padding: 12, flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
-  messageBody: { flex: 1, gap: 4 },
+  messageBody: { flex: 1, minWidth: 0, gap: 4 },
   messageAuthor: { color: '#11162F', fontWeight: '900', fontSize: 12 },
   issue: { color: '#9A213B', fontWeight: '800', fontSize: 12 },
   success: { color: '#197B56', fontWeight: '800', fontSize: 12 },
