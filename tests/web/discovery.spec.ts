@@ -59,6 +59,8 @@ test('People lets members view opt-in public profiles and filter by city without
       : [{ id:'member-1', display_name:'Public member', city:'Potsdam', bio:'Sharing a public academic bio' }];
     return route.fulfill({ json:people });
   });
+  // The account helper leaves us on Profile after sign-in. Return to Explore first.
+  await page.getByText('Explore', { exact: true }).first().click();
   await page.getByRole('button', { name:'Browse People', exact:true }).click();
   await expect(page.getByRole('button',{name:'View Public member profile'})).toBeVisible();
   await page.getByRole('textbox',{name:'Filter people by city'}).fill('Potsdam');
