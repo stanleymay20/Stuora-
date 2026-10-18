@@ -246,3 +246,28 @@ test('search changes cancel old listing requests and their timers', async ({ pag
   await expect(page.getByText(/Could not load listings/)).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'View Old desk' })).toHaveCount(0);
 });
+
+for (const category of ['Housing', 'Marketplace'] as const) {
+  test(`${category}: city and maximum-price filters are sent to Supabase and clear correctly`, async ({ page }) => {
+    const data = api(); await data.install(page);
+    const requests: { kind: string | null; city: string | null; maximum: string | null }[] = [];
+    await page.route('**/rest/v1/listings?*', async route => {
+      const params = new URL(route.request().url()).searchParams;
+      requests.push({ kind: params.get('kind'), city: params.get('city'), maximum: params.get('price_cents') });
+      await route.fulfill({ json: [] });
+    });
+    await page.goto('/');
+    await page.getByRole('button', { name: `Browse ${category}`, exact: true }).click();
+    await expect(page.getByRole('textbox', { name: 'Filter listings by city' })).toBeVisible();
+    await expect(page.getByRole('textbox', { name: 'Maximum listing price (EUR)' })).toBeVisible();
+    await page.getByRole('textbox', { name: 'Filter listings by city' }).fill('Potsdam');
+    await page.getByRole('textbox', { name: 'Maximum listing price (EUR)' }).fill('650.25');
+    await expect.poll(() => requests.some(r => r.kind === `eq.${category.toLowerCase()}` &&
+      r.city === 'ilike.%Potsdam%' && r.maximum === 'lte.65025')).toBe(true);
+    await expect(page.getByText('No real listings match these filters. Clear the filters or adjust the city and maximum price.')).toBeVisible();
+    await page.getByRole('button', { name: 'Clear listing filters' }).click();
+    await expect(page.getByRole('textbox', { name: 'Filter listings by city' })).toHaveValue('');
+    await expect(page.getByRole('textbox', { name: 'Maximum listing price (EUR)' })).toHaveValue('');
+    await expect.poll(() => requests.some(r => r.kind === `eq.${category.toLowerCase()}` && r.city === null && r.maximum === null)).toBe(true);
+  });
+}
