@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import AccountPanel from './src/account/AccountPanel';
 import ListingWorkspace from './src/listings/ListingWorkspace';
 import MessageWorkspace from './src/messages/MessageWorkspace';
@@ -23,6 +23,31 @@ import {
 
 type Tab = 'home' | 'explore' | 'create' | 'messages' | 'profile';
 type Category = 'Housing' | 'Marketplace' | 'Trips' | 'Jobs' | 'Events' | 'People';
+type PostCategory = 'Housing' | 'Marketplace';
+type Destination = { tab: Tab; category: Category; draftType: PostCategory };
+const WEB_ROUTE_KEY = 'stuora';
+const categoryRoutes: Record<string, Category> = {
+  housing: 'Housing', marketplace: 'Marketplace', trips: 'Trips',
+  jobs: 'Jobs', events: 'Events', people: 'People',
+};
+function readWebDestination(): Destination {
+  const fallback: Destination = { tab: 'home', category: 'Housing', draftType: 'Marketplace' };
+  if (Platform.OS !== 'web' || typeof window === 'undefined') return fallback;
+  const route = new URLSearchParams(window.location.search).get(WEB_ROUTE_KEY)?.toLowerCase() ?? '';
+  if (route in categoryRoutes) return { ...fallback, tab: 'explore', category: categoryRoutes[route] };
+  if (route === 'explore') return { ...fallback, tab: 'explore' };
+  if (route === 'messages') return { ...fallback, tab: 'messages' };
+  if (route === 'profile') return { ...fallback, tab: 'profile' };
+  if (route === 'create-housing') return { ...fallback, tab: 'create', draftType: 'Housing' };
+  if (route === 'create-marketplace' || route === 'create') return { ...fallback, tab: 'create' };
+  return fallback;
+}
+function routeForDestination(tab: Tab, category: Category, draftType: PostCategory): string | null {
+  if (tab === 'explore') return category.toLowerCase();
+  if (tab === 'create') return draftType === 'Housing' ? 'create-housing' : 'create-marketplace';
+  if (tab === 'profile' || tab === 'messages') return tab;
+  return null;
+}
 
 const BRAND = {
   ink: '#11162F',
@@ -116,10 +141,43 @@ export default function App({ onOpenSavings }: { onOpenSavings: () => void }) {
   const { session, profile } = useAuth();
   const { width, height } = useWindowDimensions();
   const isDesktop = width >= 960;
-  const [tab, setTab] = useState<Tab>('home');
-  const [category, setCategory] = useState<Category>('Housing');
+  const [initialWebDestination] = useState(readWebDestination);
+  const [tab, setTab] = useState<Tab>(initialWebDestination.tab);
+  const [category, setCategory] = useState<Category>(initialWebDestination.category);
   const [search, setSearch] = useState('');
-  const [draftType, setDraftType] = useState<'Housing' | 'Marketplace'>('Marketplace');
+  const [draftType, setDraftType] = useState<PostCategory>(initialWebDestination.draftType);
+  const popstatePending = useRef(false);
+  const [popstateRevision, setPopstateRevision] = useState(0);
+
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof window === 'undefined') return;
+    const onBackOrForward = () => {
+      popstatePending.current = true;
+      const route = readWebDestination();
+      setTab(route.tab);
+      setCategory(route.category);
+      setDraftType(route.draftType);
+      setSearch('');
+      setPopstateRevision(value => value + 1);
+    };
+    window.addEventListener('popstate', onBackOrForward);
+    return () => window.removeEventListener('popstate', onBackOrForward);
+  }, []);
+
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof window === 'undefined') return;
+    if (popstatePending.current) {
+      popstatePending.current = false;
+      return;
+    }
+    const next = routeForDestination(tab, category, draftType);
+    const url = new URL(window.location.href);
+    if (url.searchParams.get(WEB_ROUTE_KEY) === next) return;
+    if (next) url.searchParams.set(WEB_ROUTE_KEY, next);
+    else url.searchParams.delete(WEB_ROUTE_KEY);
+    // Preserve existing callback parameters and hash for Supabase Auth.
+    window.history.pushState(null, '', url.pathname + url.search + url.hash);
+  }, [tab, category, draftType, popstateRevision]);
   const [preferredConversationId, setPreferredConversationId] = useState<string | null>(null);
   const openListingConversation = (conversationId: string) => { setPreferredConversationId(conversationId); setTab('messages'); };
 
@@ -404,7 +462,7 @@ const styles = StyleSheet.create({
   exploreSearchPanel: { gap: 8 },
   exploreSearchLabel: { color: BRAND.inkSoft, fontSize: 13, fontWeight: '800' },
   searchIcon: { fontSize: 21, color: BRAND.muted },
-  searchInput: { flex: 1, color: BRAND.ink, fontSize: 14, outlineStyle: Platform.OS === 'web' ? 'none' : undefined } as any,
+  searchInput: { flex: 1, color: BRAND.ink, fontSize: 14 },
   sectionHeader: { gap: 2 },
   sectionHeaderInline: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', gap: 12 },
   sectionTitle: { color: BRAND.ink, fontSize: 19, fontWeight: '900', letterSpacing: -0.35 },
