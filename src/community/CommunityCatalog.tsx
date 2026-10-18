@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { supabase } from '../backend/supabase';
+import { EditorialImage } from '../ui/EditorialImage';
 
 export type CommunityCategory = 'Trips' | 'Jobs' | 'Events';
 type CommunityKind = 'trip' | 'job' | 'event';
@@ -147,6 +148,7 @@ export default function CommunityCatalog({ category, search, onHousing }: {
       {action('Refresh listings', () => setRevision(v => v + 1))}
     </View>
     {!entries.length ? <View style={styles.empty}>
+      <EditorialImage kind={category} style={styles.emptyPhoto} label={`Promotional ${category.toLowerCase()} image; no actual listings available`} />
       <Text style={styles.sectionTitle}>No {category.toLowerCase()} listings found.</Text>
       <Text style={styles.muted}>When community members publish real listings, they will appear here. Nothing is simulated.</Text>
       {action('Browse Housing instead', onHousing)}
@@ -169,6 +171,7 @@ const styles = StyleSheet.create({
   info: { backgroundColor: '#FFFFFF', padding: 17, borderRadius: 18, borderWidth: 1, borderColor: '#E9EAF1', gap: 10, alignItems: 'flex-start' },
   cityInput: { width: '100%', maxWidth: 320, borderRadius: 12, borderWidth: 1, borderColor: '#DDDDEA', paddingHorizontal: 13, paddingVertical: 11, backgroundColor: '#FFFFFF', color: '#11162F' },
   empty: { padding: 25, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E9EAF1', borderRadius: 18, alignItems: 'center', gap: 12 },
+  emptyPhoto: { width: 222, height: 110, borderRadius: 16, backgroundColor: '#F4F1FF' },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
   card: { flexGrow: 1, flexBasis: 245, maxWidth: 450, padding: 18, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E9EAF1', borderRadius: 18, gap: 8 },
   title: { color: '#11162F', fontSize: 18, fontWeight: '900' },
