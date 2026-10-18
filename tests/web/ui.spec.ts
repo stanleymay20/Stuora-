@@ -220,3 +220,17 @@ test('real Trips/Jobs/Events catalog queries active persisted rows and keeps par
   expect(observed).toContain('eq.event');
   expect(cityFilters.some(value => value.includes('Berlin'))).toBe(true);
 });
+
+test('generated editorial images are bundled and displayed without replacing real listing data', async ({ page }) => {
+  await backend(page);
+  await page.goto('/');
+  const photos = page.locator('img[src*="editorial"]');
+  await expect.poll(() => photos.count()).toBeGreaterThanOrEqual(6);
+  await expect.poll(() => photos.first().evaluate((img: HTMLImageElement) => img.naturalWidth)).toBeGreaterThan(0);
+  await expect(page.getByText('No housing listings found.', { exact: true })).toBeVisible();
+  await expect(page.getByText('No marketplace listings found.', { exact: true })).toBeAttached();
+  await page.getByRole('button', { name: 'Browse Trips', exact: true }).click();
+  await expect(page.getByText('No trips listings found.', { exact: true })).toBeVisible();
+  const tripArtwork = page.locator('img[src*="editorial"]');
+  await expect.poll(() => tripArtwork.first().evaluate((img: HTMLImageElement) => img.naturalWidth)).toBeGreaterThan(0);
+});
