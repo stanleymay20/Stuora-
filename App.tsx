@@ -147,6 +147,7 @@ export default function App({ onOpenSavings }: { onOpenSavings: () => void }) {
   const [search, setSearch] = useState('');
   const [draftType, setDraftType] = useState<PostCategory>(initialWebDestination.draftType);
   const popstatePending = useRef(false);
+  const exploreScrollRef = useRef<ScrollView>(null);
   const [popstateRevision, setPopstateRevision] = useState(0);
 
   useEffect(() => {
@@ -179,6 +180,8 @@ export default function App({ onOpenSavings }: { onOpenSavings: () => void }) {
     window.history.pushState(null, '', url.pathname + url.search + url.hash);
   }, [tab, category, draftType, popstateRevision]);
   const [preferredConversationId, setPreferredConversationId] = useState<string | null>(null);
+
+  useEffect(() => { exploreScrollRef.current?.scrollTo({ y: 0, animated: false }); }, [category]);
   const openListingConversation = (conversationId: string) => { setPreferredConversationId(conversationId); setTab('messages'); };
 
   const categoryCopy: Record<Category, string> = {
@@ -253,7 +256,7 @@ export default function App({ onOpenSavings }: { onOpenSavings: () => void }) {
       )}
 
       {tab === 'explore' && (
-        <ScrollView testID="explore-scroll" style={styles.pageScroll} contentContainerStyle={[styles.page, isDesktop && styles.pageDesktop]} showsVerticalScrollIndicator={true}>
+        <ScrollView ref={exploreScrollRef} testID="explore-scroll" style={styles.pageScroll} contentContainerStyle={[styles.page, isDesktop && styles.pageDesktop]} showsVerticalScrollIndicator={true}>
           <View style={styles.categorySpotlight}>
             <View style={styles.categorySpotlightText}>
               <Text style={styles.spotlightEyebrow}>STUORA / {category.toUpperCase()}</Text>
@@ -303,7 +306,7 @@ export default function App({ onOpenSavings }: { onOpenSavings: () => void }) {
             <ListingWorkspace key={`${draftType}-${session?.user.id ?? 'public'}`} category={draftType} mode="create" onAccount={() => setTab('profile')} onMessage={openListingConversation} />
             <View style={styles.noteCard}>
               <Text style={styles.noteTitle}>Stuora quality rule</Text>
-              <Text style={styles.noteText}>If a feature appears in the product, it must work end-to-end. Payments, production verification and media upload stay hidden until their backend flows are ready.</Text>
+              <Text style={styles.noteText}>Features must work end-to-end. Saved Housing and Marketplace listings can upload real photos. Trips, Jobs and Events publishing and participation remain unavailable until separately verified.</Text>
             </View>
           </View>
         </ScrollView>
