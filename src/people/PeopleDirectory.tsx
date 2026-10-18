@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View, useWindowDimensions } from 'react-native';
 import { useAuth } from '../account/AuthProvider';
 import { supabase } from '../backend/supabase';
+import { EditorialImage } from '../ui/EditorialImage';
 import type { Database } from '../backend/database.types';
 
 type Person = Pick<Database['public']['Tables']['profiles']['Row'], 'id' | 'display_name' | 'city' | 'bio'>;
@@ -95,7 +96,7 @@ export default function PeopleDirectory({ search, onAccount }: { search: string;
         {button('Retry people', () => setRevision(v => v + 1))}
       </View> : <>
         <View style={styles.actions}>{button('Refresh people', () => setRevision(v => v + 1))}</View>
-        {!people.length ? <View style={styles.empty}><Text style={styles.subheading}>No discoverable profiles found.</Text>
+        {!people.length ? <View style={styles.empty}><EditorialImage kind="People" style={styles.emptyPhoto} label="Editorial artwork for Stuora student community; not real public profile data" /><Text style={styles.subheading}>No discoverable profiles found.</Text>
           <Text style={styles.muted}>Try another name or city. Private profiles are never shown.</Text>
         </View> : <View style={styles.grid}>
           {people.map(person => <Pressable key={person.id} accessibilityRole="button" accessibilityLabel={`View ${person.display_name} profile`} onPress={() => setSelected(person)} style={[styles.person, width >= 960 && styles.personDesktop]}>
@@ -131,6 +132,7 @@ const styles = StyleSheet.create({
   description: { color: '#252B4A', fontSize: 14, lineHeight: 22 },
   panel: { padding: 20, borderRadius: 18, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E9EAF1', gap: 12 },
   empty: { padding: 28, borderRadius: 20, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E9EAF1', alignItems: 'center', gap: 10 },
+  emptyPhoto: { width: 210, height: 116, borderRadius: 16, backgroundColor: '#F4F1FF' },
   button: { backgroundColor: '#7048FF', borderRadius: 12, paddingVertical: 10, paddingHorizontal: 15, alignItems: 'center' },
   actions: { alignSelf: 'flex-start' },
   buttonText: { color: '#FFFFFF', fontWeight: '800', fontSize: 12 },
