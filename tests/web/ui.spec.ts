@@ -261,3 +261,29 @@ test('Housing and Marketplace use one clear discovery toolbar and avoid duplicat
   await expect(page.getByRole('button', { name: 'Post marketplace listing' })).toHaveCount(1);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
 });
+
+test('user-selected photos replace original category thumbnails and remain bundled on web', async ({ page }) => {
+  await backend(page);
+  await page.goto('/');
+  const mappedPhotos = {
+    Housing: 'housing-community.webp',
+    Marketplace: 'marketplace-community.webp',
+    Trips: 'trips-community.webp',
+    Jobs: 'jobs-community.webp',
+    Events: 'events-community.webp',
+  } as const;
+  for (const [category, expectedFile] of Object.entries(mappedPhotos)) {
+    const tile = page.getByRole('button', { name: `Browse ${category}`, exact: true }).first();
+    const photo = tile.locator('img');
+    await expect(photo).toHaveCount(1);
+    await expect(photo).toHaveAttribute('src', new RegExp(expectedFile.replace('.', '\\.')));
+    await expect.poll(() => photo.evaluate((element: HTMLImageElement) => element.naturalWidth)).toBeGreaterThan(0);
+  }
+  // The moodboard is only a reference; People still uses previously branded artwork.
+  const peoplePhoto = page.getByRole('button', { name: 'Browse People', exact: true }).first().locator('img');
+  await expect(peoplePhoto).toHaveAttribute('src', /people\.webp/);
+  await page.getByRole('button', { name: 'Browse Events', exact: true }).first().click();
+  const banner = page.getByLabel('Stuora Events editorial illustration; actual posts come from the database');
+  await expect(banner).toHaveAttribute('src', /events-community\.webp/);
+  await expect(page.getByText('No events listings found.', { exact: true })).toBeVisible();
+});
