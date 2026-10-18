@@ -70,6 +70,9 @@ export default function ListingWorkspace({ category, mode = 'browse', search = '
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [own, setOwn] = useState(false);
+  const [cityFilter, setCityFilter] = useState('');
+  const [maxPrice, setMaxPrice] = useState('');
+  const hasListingFilters = Boolean(cityFilter.trim() || maxPrice.trim());
   const [revision, setRevision] = useState(0);
   const [pages, setPages] = useState(1);
   const [more, setMore] = useState(false);
@@ -83,7 +86,7 @@ export default function ListingWorkspace({ category, mode = 'browse', search = '
 
   useEffect(() => {
     setPages(1); setSelected(null); setEditing(false); setDraft(blank()); setNotice(''); setActionError(''); setConfirmArchive(false);
-  }, [kind, mode, userId, own, search]);
+  }, [kind, mode, userId, own, search, cityFilter, maxPrice]);
 
   useEffect(() => {
     if (mode === 'create') { setLoading(false); return; }
@@ -102,7 +105,9 @@ export default function ListingWorkspace({ category, mode = 'browse', search = '
       .range(0, pages * PAGE_SIZE)
       .abortSignal(ac.signal);
     query = own && userId ? query.eq('owner_id', userId) : query.eq('status', 'active');
-    if (search.trim()) query = query.ilike('title', `%${search.trim().replace(/[\\%_]/g, '\\$&')}%`);
+    if (search.trim()) query = query.ilike('title', `%${search.trim().replace(/[\\%_]/g, '\\    if (search.trim()) query = query.ilike('title', `%${search.trim().replace(/[\\%_]/g, '\\$&')}%`);')}%`);
+    if (cityFilter.trim()) query = query.ilike('city', `%${cityFilter.trim().replace(/[\\%_]/g, '\\    if (search.trim()) query = query.ilike('title', `%${search.trim().replace(/[\\%_]/g, '\\$&')}%`);')}%`);
+    if (maxPrice.trim()) query = query.lte('price_cents', Math.round(Number(maxPrice) * 100));
     void Promise.resolve(query).then((result: any) => {
       if (ac.signal.aborted) return;
       if (result.error) setError('Could not load listings. Check your connection and retry.');
@@ -116,7 +121,7 @@ export default function ListingWorkspace({ category, mode = 'browse', search = '
       if (!ac.signal.aborted) { setError('Could not load listings. Check your connection and retry.'); setLoading(false); }
     }).finally(() => clearTimeout(timeout));
     return () => { clearTimeout(timeout); ac.abort(); };
-  }, [kind, userId, own, revision, pages, search, mode]);
+  }, [kind, userId, own, revision, pages, search, cityFilter, maxPrice, mode]);
 
   const change = <K extends keyof Draft>(key: K, value: Draft[K]) => setDraft(d => ({ ...d, [key]: value }));
   function replaceItem(item: Item) {
@@ -276,8 +281,21 @@ export default function ListingWorkspace({ category, mode = 'browse', search = '
       {selected.owner_id === userId && selected.status === 'active' ? <><Button title="Edit listing" onPress={() => edit(selected)} disabled={busy} />{confirmArchive ? <><Text>Archive this listing? It will disappear from public discovery.</Text><Button title="Confirm archive" onPress={() => void archive()} disabled={busy} /><Button title="Keep listing" onPress={() => setConfirmArchive(false)} disabled={busy} /></> : <Button title="Archive listing" onPress={() => setConfirmArchive(true)} disabled={busy} />}</> : null}
       <Button title={mode === 'create' ? 'Create another listing' : 'Back to listings'} onPress={() => { setSelected(null); setConfirmArchive(false); setActionError(''); setNotice(''); }} disabled={busy} />
     </View> : <>
-      {!preview ? <View style={s.wrap}><Button title="Refresh listings" onPress={() => setRevision(v => v + 1)} disabled={loading} />{session ? <Button title={own ? 'Browse public listings' : 'My listings'} onPress={() => setOwn(v => !v)} /> : null}</View> : null}
-      <Text style={s.hint}>{own ? 'Your listings, including archived posts.' : 'Active listings from the community.'}{search ? ' Search matches titles.' : ''}</Text>
+      {!preview ? <>
+        <View style={s.filters}>
+          <View style={s.filterField}>
+            <Text style={s.filterLabel}>City</Text>
+            <TextInput accessibilityLabel="Filter listings by city" value={cityFilter} onChangeText={setCityFilter} placeholder="All cities" placeholderTextColor="#8B91A4" style={s.filterInput} />
+          </View>
+          <View style={s.filterField}>
+            <Text style={s.filterLabel}>Maximum {kind === 'housing' ? 'monthly rent' : 'price'} (EUR)</Text>
+            <TextInput accessibilityLabel="Maximum listing price (EUR)" inputMode="decimal" value={maxPrice} onChangeText={value => { if (/^\d{0,7}(\.\d{0,2})?$/.test(value)) setMaxPrice(value); }} placeholder="No maximum" placeholderTextColor="#8B91A4" style={s.filterInput} />
+          </View>
+          {hasListingFilters ? <Button title="Clear listing filters" onPress={() => { setCityFilter(''); setMaxPrice(''); }} /> : null}
+        </View>
+        <View style={s.wrap}><Button title="Refresh listings" onPress={() => setRevision(v => v + 1)} disabled={loading} />{session ? <Button title={own ? 'Browse public listings' : 'My listings'} onPress={() => setOwn(v => !v)} /> : null}</View>
+      </> : null}
+      <Text style={s.hint}>{own ? 'Your listings, including archived posts.' : 'Active listings from the community.'}{search ? ' Search matches titles.' : ''}{hasListingFilters && !preview ? ' Filters are applied to real listings.' : ''}</Text>
       {loading ? <ActivityIndicator accessibilityLabel="Loading listings" /> : error ? <View><Text accessibilityRole="alert" style={s.error}>{error}</Text><Button title="Retry listings" onPress={() => setRevision(v => v + 1)} /></View> : <>
         {!items.length ? <View style={[s.emptyListings, preview && s.emptyPreview, compactWideEmpty && s.emptyPreviewWide]}>
           <EditorialImage kind={search.trim() ? 'EmptySearch' : category === 'Housing' ? 'EmptyHousing' : 'Marketplace'} style={[s.emptyArt, compactWideEmpty && s.emptyArtWide]} cover={false} label="Stuora decorative illustration for an empty category; not a real listing" />
@@ -285,6 +303,7 @@ export default function ListingWorkspace({ category, mode = 'browse', search = '
             <Text style={[s.emptyTitle, compactWideEmpty && s.emptyTitleWide]}>No {category.toLowerCase()} listings found.</Text>
             <Text style={[s.emptyCaption, compactWideEmpty && s.emptyCaptionWide]}>{search.trim()
               ? 'No listing titles match that search. Try a different term or clear the search.'
+              : hasListingFilters ? 'No real listings match these filters. Clear the filters or adjust the city and maximum price.'
               : own ? 'You have not posted a listing in this category yet.'
               : 'Be among the first students to share a real listing. Only published community listings appear here.'}</Text>
             {search.trim() && onClearSearch ? <Button title="Clear search" onPress={onClearSearch} /> : !search.trim() && onCreate ? <Button title={`Post ${category.toLowerCase()} listing`} onPress={onCreate} /> : null}
@@ -311,6 +330,10 @@ export default function ListingWorkspace({ category, mode = 'browse', search = '
 
 const s = StyleSheet.create({
   workspace: { gap: 16, width: '100%' },
+  filters: { backgroundColor: '#FFFFFF', borderColor: '#E9EAF1', borderWidth: 1, borderRadius: 17, padding: 14, flexDirection: 'row', flexWrap: 'wrap', gap: 12, alignItems: 'flex-end' },
+  filterField: { flexGrow: 1, flexBasis: 180, minWidth: 150, gap: 7 },
+  filterLabel: { fontSize: 12, fontWeight: '800', color: '#252B4A' },
+  filterInput: { backgroundColor: '#FAFAFD', borderColor: '#D5D7E2', borderWidth: 1, borderRadius: 11, paddingHorizontal: 12, paddingVertical: 11, fontSize: 14, color: '#11162F' },
   card: { backgroundColor: '#FFFFFF', padding: 20, borderRadius: 18, borderWidth: 1, borderColor: '#E9EAF1', gap: 14 },
   title: { fontSize: 18, fontWeight: '700', color: '#11162F' },
   text: { fontSize: 15, lineHeight: 23, color: '#252B4A' },
