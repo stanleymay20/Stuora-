@@ -159,3 +159,15 @@ test('compact homepage listing previews keep their real first-post actions disco
   await post.click();
   await expect(page.getByText('Sign in and complete your profile to publish a listing.')).toBeVisible();
 });
+
+test('unavailable category tiles are visibly disclosed before navigation', async ({ page }) => {
+  await backend(page);
+  await page.goto('/');
+  await expect(page.getByText('Coming soon', { exact: true })).toHaveCount(3);
+  await expect(page.getByRole('button', { name: 'Browse Housing', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Browse Marketplace', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Browse Jobs', exact: true }).click();
+  await expect(page.getByText('Jobs is not available yet', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Browse Housing instead' }).click();
+  await expect(page.getByRole('button', { name: 'Refresh listings' })).toBeVisible();
+});
