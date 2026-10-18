@@ -126,3 +126,31 @@ test('Messages show newest entries first and load older history without losing n
   await expect(page.getByRole('button', { name: 'Load older messages' })).toHaveCount(0);
   expect(calls.some(x => x.offset === 0 && x.limit === 101)).toBe(true);
 });
+
+test('private inbox clears an unsent draft on thread switch and does not mislabel read errors as an empty chat', async ({ page }) => {
+  await messagingBackend(page);
+  const secondConversation = '00000000-0000-0000-0000-000000000222';
+  await page.route('**/rest/v1/conversations?*', async route => route.fulfill({ json: [
+    { id: conversationId, title: 'Listing: Room near campus', created_at: '2026-10-11T10:00:00Z' },
+    { id: secondConversation, title: 'Listing: Marketplace desk', created_at: '2026-10-11T09:00:00Z' },
+  ] }));
+  let failMessages = false;
+  await page.route('**/rest/v1/messages?*', async route => failMessages
+    ? route.fulfill({ status: 403, json: { code: '42501', message: 'Read restricted' } })
+    : route.fulfill({ json: [] }));
+  await page.goto('/?stuora=profile');
+  await page.getByLabel('Email', { exact: true }).fill('alice@example.invalid');
+  await page.getByLabel('Password', { exact: true }).fill('correct-password');
+  await page.getByRole('button', { name: 'Sign in', exact: true }).click();
+  await expect(page.getByText('Your Stuora Passport', { exact: true })).toBeVisible();
+  await page.goto('/?stuora=messages');
+  await page.getByRole('button', { name: 'Open conversation Listing: Room near campus' }).click();
+  await page.getByRole('textbox', { name: 'Message', exact: true }).fill('Draft for one recipient only');
+  await page.getByRole('button', { name: 'Open conversation Listing: Marketplace desk' }).click();
+  await expect(page.getByRole('textbox', { name: 'Message', exact: true })).toHaveValue('');
+  await expect(page.getByRole('button', { name: 'Send message', exact: true })).toBeDisabled();
+  failMessages = true;
+  await page.getByRole('button', { name: 'Refresh messages' }).click();
+  await expect(page.getByText('Could not load messages. Check your connection and retry.', { exact: true })).toBeVisible();
+  await expect(page.getByText('No messages yet. Say hello.', { exact: true })).toHaveCount(0);
+});
