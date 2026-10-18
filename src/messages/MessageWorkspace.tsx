@@ -12,7 +12,7 @@ function Button({ title, onPress, disabled = false }: { title: string; onPress: 
   return <Pressable accessibilityRole="button" accessibilityLabel={title} disabled={disabled} onPress={onPress} style={[s.button, disabled && s.disabled]}><Text style={s.buttonText}>{title}</Text></Pressable>;
 }
 
-export default function MessageWorkspace({ onAccount }: { onAccount: () => void }) {
+export default function MessageWorkspace({ onAccount, preferredConversationId }: { onAccount: () => void; preferredConversationId?: string | null }) {
   const { session, profile, profileLoading, initializing, error: profileError } = useAuth();
   const { width } = useWindowDimensions();
   const isDesktop = width >= 760;
@@ -41,12 +41,12 @@ export default function MessageWorkspace({ onAccount }: { onAccount: () => void 
       else {
         const rows = (data ?? []) as Conversation[];
         setConversations(rows);
-        setSelectedId(current => current && rows.some(row => row.id === current) ? current : rows[0]?.id ?? null);
+        setSelectedId(current => preferredConversationId ? (rows.some(row => row.id === preferredConversationId) ? preferredConversationId : null) : current && rows.some(row => row.id === current) ? current : rows[0]?.id ?? null);
       }
       setLoadingThreads(false);
     }).catch(() => { if (!ac.signal.aborted) { setThreadIssue('Could not load conversations. Check your connection and retry.'); setLoadingThreads(false); } }).finally(() => clearTimeout(timeout));
     return () => { clearTimeout(timeout); ac.abort(); };
-  }, [userId, profile, revision]);
+  }, [userId, profile, revision, preferredConversationId]);
 
   useEffect(() => {
     if (!selectedId || !userId) { setMessages([]); return; }
@@ -89,7 +89,7 @@ export default function MessageWorkspace({ onAccount }: { onAccount: () => void 
         {loadingThreads ? <ActivityIndicator accessibilityLabel="Loading conversations" /> : threadIssue ? <View style={s.stack}><Text accessibilityRole="alert" style={s.error}>{threadIssue}</Text><Button title="Retry conversations" onPress={() => setRevision(value => value + 1)} /></View> : !conversations.length ? <View style={s.emptyCompact}><EditorialImage kind="EmptyMessages" style={s.emptyImage} cover={false} label="Decorative Stuora illustration for an empty inbox, not a real message" /><Text style={s.emptyTitle}>No conversations yet</Text><Text style={s.muted}>Open an active Housing or Marketplace listing and choose Message owner.</Text></View> : <ScrollView contentContainerStyle={s.threadList}>{conversations.map(item => <Pressable key={item.id} accessibilityRole="button" accessibilityLabel={`Open conversation ${item.title}`} onPress={() => setSelectedId(item.id)} style={[s.thread, item.id === selectedId && s.threadActive]}><View style={s.threadIcon}><Icon name="messages" size={20} color="#7048FF" /></View><View style={s.threadCopy}><Text numberOfLines={1} style={s.threadTitle}>{item.title || 'Stuora conversation'}</Text><Text style={s.threadDate}>{new Date(item.created_at).toLocaleDateString()}</Text></View></Pressable>)}</ScrollView>}
       </View>
       <View style={[s.conversationPane, !isDesktop && s.conversationPaneMobile]}>
-        {!selected ? <View style={s.empty}><Text style={s.muted}>Select a conversation.</Text></View> : <>
+        {!selected ? <View style={s.empty}><Text style={s.muted}>{preferredConversationId && !loadingThreads ? 'This listing conversation is not accessible. Refresh Messages or return to the listing.' : 'Select a conversation.'}</Text></View> : <>
           <View style={s.conversationHeader}><Icon name="messages" size={22} color="#7048FF" /><View><Text style={s.conversationTitle}>{selected.title || 'Stuora conversation'}</Text><Text style={s.threadDate}>Only conversation members can read or send messages.</Text></View></View>
           <ScrollView contentContainerStyle={s.messageList}>
             {loadingMessages ? <ActivityIndicator accessibilityLabel="Loading conversation messages" /> : !messages.length ? <Text style={s.muted}>No messages yet. Say hello.</Text> : messages.map(message => { const own = message.sender_id === userId; return <View key={message.id} style={[s.bubble, own ? s.bubbleOwn : s.bubbleOther]}><Text style={own ? s.bubbleOwnText : s.bubbleText}>{message.body}</Text><Text style={[s.messageTime, own && s.messageTimeOwn]}>{new Date(message.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</Text></View>; })}
