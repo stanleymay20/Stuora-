@@ -120,11 +120,11 @@ test('illustrated discovery tiles remain real category actions and hero search w
   await expect(page.getByRole('button', { name: 'Post marketplace listing' })).toBeVisible();
 });
 
-test('unavailable illustrated categories do not imply real posts and offer a working safe path', async ({ page }) => {
+test('community catalogs do not imply fake posts and offer a safe path', async ({ page }) => {
   await backend(page);
   await page.goto('/');
   await page.getByRole('button', { name: 'Browse Trips', exact: true }).click();
-  await expect(page.getByText('Trips is not available yet', { exact: true })).toBeVisible();
+  await expect(page.getByText('No trips listings found.', { exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Browse Housing instead' })).toBeVisible();
   await page.getByRole('button', { name: 'Browse Housing instead' }).click();
   await expect(page.getByRole('button', { name: 'Refresh listings' })).toBeVisible();
@@ -160,14 +160,56 @@ test('compact homepage listing previews keep their real first-post actions disco
   await expect(page.getByText('Sign in and complete your profile to publish a listing.')).toBeVisible();
 });
 
-test('unavailable category tiles are visibly disclosed before navigation', async ({ page }) => {
+test('community category tiles disclose that posting remains gated', async ({ page }) => {
   await backend(page);
   await page.goto('/');
-  await expect(page.getByText('Coming soon', { exact: true })).toHaveCount(3);
+  await expect(page.getByText('Posting soon', { exact: true })).toHaveCount(3);
   await expect(page.getByRole('button', { name: 'Browse Housing', exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Browse Marketplace', exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Browse Jobs', exact: true }).click();
-  await expect(page.getByText('Jobs is not available yet', { exact: true })).toBeVisible();
+  await expect(page.getByText('No jobs listings found.', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Browse Housing instead' }).click();
   await expect(page.getByRole('button', { name: 'Refresh listings' })).toBeVisible();
+});
+
+test('real Trips/Jobs/Events catalog queries active persisted rows and keeps participation disabled', async ({ page }) => {
+  await backend(page);
+  let observed: string[] = [];
+  await page.route('**/rest/v1/listings?*', async route => {
+    const params = new URL(route.request().url()).searchParams;
+    const kind = params.get('kind');
+    if (!['eq.trip', 'eq.job', 'eq.event'].includes(kind || '')) return route.fallback();
+    expect(params.get('status')).toBe('eq.active');
+    observed.push(kind!);
+    const select = params.get('select') || '';
+    expect(select).toContain('id,title,description,city,price_cents,created_at');
+    const item = {
+      id: 'persisted-item-1',
+      title: kind === 'eq.job' ? 'Real opportunity' : kind === 'eq.event' ? 'Real student event' : 'Real student trip',
+      description: 'From the database',
+      city: 'Berlin',
+      price_cents: 0,
+      created_at: '2026-10-01T09:00:00Z',
+      trip_details: { destination:'Potsdam', starts_at:'2026-11-02T12:00:00Z', ends_at:null, capacity:4 },
+      job_details: { company_name:'A real employer', compensation_text:'€18/hour', workplace_mode:'hybrid' },
+      event_details: { venue_name:'Campus Hall', starts_at:'2026-11-02T12:00:00Z', ends_at:null, capacity:50 },
+    };
+    await route.fulfill({ json: [item] });
+  });
+  await page.goto('/');
+  for (const [label, expected, back] of [
+    ['Trips','Real student trip','Back to Trips'],
+    ['Jobs','Real opportunity','Back to Jobs'],
+    ['Events','Real student event','Back to Events'],
+  ] as const) {
+    await page.getByRole('button', {name: `Browse ${label}`, exact:true}).click();
+    await expect(page.getByRole('button', {name: `View ${expected}`})).toBeVisible();
+    await page.getByRole('button', {name: `View ${expected}`}).click();
+    await expect(page.getByText('Publishing, joining, and applying are not enabled until the reviewed safety migration is qualified.')).toBeVisible();
+    await expect(page.getByRole('button', {name:back})).toBeVisible();
+    await page.getByRole('button', {name:'Open Home'}).click();
+  }
+  expect(observed).toContain('eq.trip');
+  expect(observed).toContain('eq.job');
+  expect(observed).toContain('eq.event');
 });
