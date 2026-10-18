@@ -6,7 +6,7 @@ import PeopleDirectory from './src/people/PeopleDirectory';
 import CommunityCatalog from './src/community/CommunityCatalog';
 import { useAuth } from './src/account/AuthProvider';
 import { Icon, StuoraMark } from './src/ui/Brand';
-import { CategoryArtwork } from './src/ui/CategoryArtwork';
+import { EditorialImage } from './src/ui/EditorialImage';
 import {
   Platform,
   Image,
@@ -77,7 +77,7 @@ function CategoryTile({ item, onPress }: { item: (typeof categories)[number]; on
       style={({ pressed }) => [styles.categoryTile, width >= 960 && styles.categoryTileDesktop, pressed && styles.pressed]}
     >
       <View style={styles.categoryArtWrap}>
-        <CategoryArtwork category={item.name} width="100%" height={74} />
+        <EditorialImage kind={item.name} style={styles.categoryPhoto} label={`Stuora editorial image for ${item.name}`} />
         {upcoming ? <View style={styles.categorySoonTag}><Text style={styles.categorySoonText}>Posting soon</Text></View> : null}
       </View>
       <Text style={styles.categoryName}>{item.name}</Text>
@@ -158,6 +158,9 @@ export default function App({ onOpenSavings }: { onOpenSavings: () => void }) {
           <View style={[styles.hero, isDesktop ? styles.heroDesktop : styles.heroMobile]}>
             <Image source={require('./assets/berlin-skyline.jpg')} resizeMode="cover" style={[StyleSheet.absoluteFill, { width: '100%', height: '100%' }]} accessibilityLabel="Berlin skyline at sunset" />
             <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(17,22,47,0.56)' }]} />
+            {width >= 1280 ? (
+              <EditorialImage kind="Community" style={styles.heroCommunityPhoto} label="Stuora promotional artwork depicting university students spending time together; not actual Stuora profiles" />
+            ) : null}
             <View style={styles.heroCopy}>
               <Text style={styles.eyebrow}>STUDENT LIFE, CONNECTED</Text>
               <Text style={[styles.heroTitle, isDesktop ? styles.heroTitleDesktop : styles.heroTitleMobile]}>Find your people.{"\n"}Find your place.{"\n"}Make the most of student life.</Text>
@@ -198,7 +201,7 @@ export default function App({ onOpenSavings }: { onOpenSavings: () => void }) {
                 </Pressable>
               ) : null}
             </View>
-            <CategoryArtwork category={category} width={isDesktop ? 225 : 115} height={isDesktop ? 125 : 105} />
+            <EditorialImage kind={category} style={[styles.categorySpotlightPhoto, !isDesktop && styles.categorySpotlightPhotoMobile]} label={`Stuora ${category} editorial illustration; actual posts come from the database`} />
           </View>
           {category === 'Housing' || category === 'Marketplace' || category === 'People' ? <SearchField value={search} onChangeText={setSearch} placeholder={`Search ${category.toLowerCase()}…`} /> : null}
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipsRow}>
@@ -396,7 +399,11 @@ const styles = StyleSheet.create({
   categoryGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   categoryTile: { flexGrow: 0, flexBasis: '22%', backgroundColor: BRAND.white, borderWidth: 1, borderColor: BRAND.line, borderRadius: 17, paddingBottom: 12, alignItems: 'center', gap: 8, overflow: 'hidden', shadowColor: '#10162F', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.04, shadowRadius: 8, elevation: 1 },
   categoryTileDesktop: { flexBasis: '15%', minHeight: 121, justifyContent: 'flex-start' },
-  categoryArtWrap: { width: '100%', overflow: 'hidden', backgroundColor: '#F1EDFF', position: 'relative' },
+  categoryArtWrap: { width: '100%', overflow: 'hidden', backgroundColor: '#F1EDFF', position: 'relative', height: 74 },
+  categoryPhoto: { width: '100%', height: 74, backgroundColor: '#F4F1FF' },
+  categorySpotlightPhoto: { width: 225, height: 125, borderRadius: 16, backgroundColor: '#F4F1FF' },
+  categorySpotlightPhotoMobile: { width: 115, height: 105, borderRadius: 13 },
+  heroCommunityPhoto: { position: 'absolute', right: 20, top: 28, width: 248, height: 230, borderRadius: 18, borderWidth: 2, borderColor: '#FFFFFF', opacity: 0.96 },
   categorySoonTag: { position: 'absolute', top: 5, right: 5, borderRadius: 8, backgroundColor: 'rgba(255,255,255,0.96)', paddingHorizontal: 5, paddingVertical: 3, borderWidth: 1, borderColor: '#E8DFFF' },
   categorySoonText: { color: BRAND.purple, fontWeight: '800', fontSize: 8 },
   categoryIcon: { width: 43, height: 43, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
