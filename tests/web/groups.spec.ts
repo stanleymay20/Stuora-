@@ -107,7 +107,9 @@ test('a real saved group is discoverable, editable and discussed through its con
   await page.getByLabel('Message to group').fill('Tuesday at six in the library');
   await page.getByRole('button', { name: 'Send group message' }).click();
   await expect.poll(() => sends).toBe(1);
-  await expect(page.getByText('Tuesday at six in the library')).toBeVisible();
+  const sent = page.getByText('Tuesday at six in the library', { exact: true });
+  await sent.scrollIntoViewIfNeeded();
+  await expect(sent).toBeVisible();
   await page.getByRole('button', { name: 'Edit group' }).click();
   await page.getByLabel('Group name').fill('Potsdam Physics Circle');
   await page.getByRole('button', { name: 'Save group changes' }).click();
