@@ -4,7 +4,9 @@ test('responsive branding and real empty Housing without invented offers', async
   await backend(page); await page.goto('/');
   await expect(page.getByText('Community housing', { exact: true })).toBeVisible();
   await expect(page.getByText('No housing listings found.', { exact: true })).toBeVisible();
-  expect(await page.locator('svg').count()).toBeGreaterThan(8);
+  // The former SVG category thumbnails are now real bundled editorial images.
+  await expect.poll(async () => page.locator('img[src*="editorial"]').count()).toBeGreaterThanOrEqual(6);
+  await expect.poll(async () => page.locator('img[src*="editorial"]').first().evaluate((img: HTMLImageElement) => img.naturalWidth)).toBeGreaterThan(0);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   if (test.info().project.name === 'mobile-web') {
     const first = await page.getByRole('button', { name: 'Browse Housing', exact: true }).boundingBox();
