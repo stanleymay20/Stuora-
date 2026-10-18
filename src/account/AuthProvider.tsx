@@ -11,6 +11,7 @@ type AuthState = {
   profile: Profile | null;
   profileLoading: boolean;
   recoveryMode: boolean;
+  recoveryComplete: boolean;
   error: string;
   reloadProfile: () => void;
   finishRecovery: () => void;
@@ -24,6 +25,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loadedUser, setLoadedUser] = useState<string | undefined>(undefined);
   const [profileLoading, setProfileLoading] = useState(false);
   const [recoveryMode, setRecoveryMode] = useState(false);
+  const [recoveryComplete, setRecoveryComplete] = useState(false);
   const [error, setError] = useState('');
   const [revision, setRevision] = useState(0);
 
@@ -33,7 +35,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, next) => {
       if (!active) return;
       authEvent = true;
-      if (event === 'PASSWORD_RECOVERY') setRecoveryMode(true);
+      if (event === 'PASSWORD_RECOVERY') {
+        setRecoveryMode(true);
+        setRecoveryComplete(false);
+      }
+      if (event === 'SIGNED_IN') setRecoveryComplete(false);
       if (event === 'SIGNED_OUT') setRecoveryMode(false);
       setSession(next);
       setInitializing(false);
@@ -131,9 +137,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     profile: profile?.id === userId ? profile : null,
     profileLoading: profileLoading || (!!userId && loadedUser !== userId),
     recoveryMode,
+    recoveryComplete,
     error,
     reloadProfile: () => setRevision(v => v + 1),
-    finishRecovery: () => setRecoveryMode(false),
+    // Preserve the isolated auth screen across sign-out until the next login.
+    finishRecovery: () => setRecoveryComplete(true),
   }}>{children}</AuthContext.Provider>;
 }
 

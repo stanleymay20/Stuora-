@@ -246,3 +246,97 @@ test('search changes cancel old listing requests and their timers', async ({ pag
   await expect(page.getByText(/Could not load listings/)).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'View Old desk' })).toHaveCount(0);
 });
+
+for (const category of ['Housing', 'Marketplace'] as const) {
+  test(`${category}: city and maximum-price filters are sent to Supabase and clear correctly`, async ({ page }) => {
+    const data = api(); await data.install(page);
+    const requests: { kind: string | null; city: string | null; maximum: string | null }[] = [];
+    await page.route('**/rest/v1/listings?*', async route => {
+      const params = new URL(route.request().url()).searchParams;
+      requests.push({ kind: params.get('kind'), city: params.get('city'), maximum: params.get('price_cents') });
+      await route.fulfill({ json: [] });
+    });
+    await page.goto('/');
+    await page.getByRole('button', { name: `Browse ${category}`, exact: true }).click();
+    await expect(page.getByRole('textbox', { name: 'Filter listings by city' })).toBeVisible();
+    await expect(page.getByRole('textbox', { name: 'Maximum listing price (EUR)' })).toBeVisible();
+    await page.getByRole('textbox', { name: 'Filter listings by city' }).fill('Potsdam');
+    await page.getByRole('textbox', { name: 'Maximum listing price (EUR)' }).fill('650.25');
+    await expect.poll(() => requests.some(r => r.kind === `eq.${category.toLowerCase()}` &&
+      r.city === 'ilike.%Potsdam%' && r.maximum === 'lte.65025')).toBe(true);
+    await expect(page.getByText('No real listings match these filters. Clear the filters or adjust the city and maximum price.')).toBeVisible();
+    await page.getByRole('button', { name: 'Clear listing filters' }).click();
+    await expect(page.getByRole('textbox', { name: 'Filter listings by city' })).toHaveValue('');
+    await expect(page.getByRole('textbox', { name: 'Maximum listing price (EUR)' })).toHaveValue('');
+    await expect.poll(() => requests.some(r => r.kind === `eq.${category.toLowerCase()}` && r.city === null && r.maximum === null)).toBe(true);
+  });
+}
+
+test('messaging a real listing opens the exact returned conversation and never an older thread', async ({ page }) => {
+  const data = api();
+  await data.install(page);
+  const targetId = '00000000-0000-0000-0000-000000000021';
+  const olderId = '00000000-0000-0000-0000-000000000022';
+  const listingId = '00000000-0000-0000-0000-000000000023';
+  const ownerId = '00000000-0000-0000-0000-000000000024';
+  let requestedListing = '';
+  let requestedMessages = '';
+  const listing = {
+    id: listingId, owner_id: ownerId, kind: 'housing', status: 'active',
+    title: 'A real room from another member', description: 'Message the owner about this room',
+    city: 'Berlin', price_cents: 65000,
+    housing_details: { listing_id: listingId, housing_type: 'room', rent_cents: 65000, furnished: false, bills_included: false },
+    marketplace_details: null, listing_media: [],
+  };
+  await page.route('**/rest/v1/listings?*', async route => {
+    const url = new URL(route.request().url());
+    if (url.searchParams.has('id')) return route.fulfill({ json: listing, contentType: 'application/vnd.pgrst.object+json' });
+    return route.fulfill({ json: [listing] });
+  });
+  await page.route('**/rest/v1/rpc/start_listing_conversation', async route => {
+    requestedListing = route.request().postDataJSON()?.p_listing_id;
+    return route.fulfill({ json: targetId });
+  });
+  await page.route('**/rest/v1/conversations?*', async route => route.fulfill({ json: [
+    { id: olderId, title: 'Older unrelated conversation', created_at: '2026-10-18T12:00:00Z' },
+    { id: targetId, title: 'Listing: A real room from another member', created_at: '2026-10-17T12:00:00Z' },
+  ] }));
+  await page.route('**/rest/v1/messages?*', async route => {
+    requestedMessages = new URL(route.request().url()).searchParams.get('conversation_id') ?? '';
+    return route.fulfill({ json: [] });
+  });
+  await account(page); await signin(page);
+  await explore(page, 'Housing');
+  await page.getByRole('button', { name: 'View A real room from another member' }).click();
+  await expect(page.getByRole('button', { name: 'Message owner' })).toBeVisible();
+  await page.getByRole('button', { name: 'Message owner' }).click();
+  await expect(page.getByRole('button', { name: 'Open conversation Listing: A real room from another member' })).toBeVisible();
+  await expect.poll(() => requestedMessages).toBe('eq.' + targetId);
+  expect(requestedListing).toBe(listingId);
+  await expect(page.getByText('Older unrelated conversation', { exact: true })).toBeVisible();
+  await expect(page.getByText('No messages yet. Say hello.', { exact: true })).toBeVisible();
+});
+
+test('message handoff fails closed if returned conversation is not accessible to the signed-in member', async ({ page }) => {
+  const data = api();
+  await data.install(page);
+  const listingId = '00000000-0000-0000-0000-000000000033';
+  const targetId = '00000000-0000-0000-0000-000000000031';
+  await page.route('**/rest/v1/listings?*', async route => route.fulfill({ json: [{
+    id: listingId, owner_id: '00000000-0000-0000-0000-000000000034',
+    kind: 'marketplace', status: 'active', title: 'An actual member desk', description: '',
+    city: 'Berlin', price_cents: 2500, housing_details: null,
+    marketplace_details: { listing_id: listingId, item_condition: 'good', pickup_only: true, quantity: 1 },
+    listing_media: [],
+  }] }));
+  await page.route('**/rest/v1/rpc/start_listing_conversation', async route => route.fulfill({ json: targetId }));
+  await page.route('**/rest/v1/conversations?*', async route => route.fulfill({ json: [
+    { id: '00000000-0000-0000-0000-000000000032', title: 'Someone else', created_at: '2026-10-18T12:00:00Z' },
+  ] }));
+  await account(page); await signin(page);
+  await explore(page, 'Marketplace');
+  await page.getByRole('button', { name: 'View An actual member desk' }).click();
+  await page.getByRole('button', { name: 'Message owner' }).click();
+  await expect(page.getByText('This listing conversation is not accessible. Refresh Messages or return to the listing.')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Send message' })).toHaveCount(0);
+});
