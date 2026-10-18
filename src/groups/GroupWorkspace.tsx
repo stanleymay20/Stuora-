@@ -107,9 +107,9 @@ export default function GroupWorkspace({ onAccount }: { onAccount: () => void })
     const ac = new AbortController();
     setLoadingMessages(true); setMessageIssue('');
     const timer = setTimeout(() => { if (!ac.signal.aborted) { setMessageIssue('Discussion took too long to load.'); setLoadingMessages(false); ac.abort(); } }, 15000);
-    void supabase.from('student_group_messages').select('id,group_id,author_id,body,created_at')
+    void Promise.resolve(supabase.from('student_group_messages').select('id,group_id,author_id,body,created_at')
       .eq('group_id', selectedId).order('created_at', { ascending: false }).order('id', { ascending: false })
-      .range(0, messagePages * PAGE).abortSignal(ac.signal).then(({ data, error }) => {
+      .range(0, messagePages * PAGE).abortSignal(ac.signal)).then(({ data, error }) => {
         if (ac.signal.aborted) return;
         if (error) { setMessageIssue('Could not load the group discussion.'); setMessages([]); return; }
         setMoreMessages((data?.length ?? 0) > messagePages * PAGE);
