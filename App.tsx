@@ -110,7 +110,7 @@ function CategoryTile({ item, onPress }: { item: (typeof categories)[number]; on
   );
 }
 
-function SearchField({ value, onChangeText, placeholder, onSubmit, onClear, clearLabel }: { value: string; onChangeText: (value: string) => void; placeholder: string; onSubmit?: () => void; onClear?: () => void; clearLabel?: string }) {
+function SearchField({ value, onChangeText, placeholder, onSubmit, onClear, clearLabel, label }: { value: string; onChangeText: (value: string) => void; placeholder: string; onSubmit?: () => void; onClear?: () => void; clearLabel?: string; label?: string }) {
   return (
     <View style={styles.searchBox}>
       <Icon name="search" size={20} />
@@ -119,6 +119,7 @@ function SearchField({ value, onChangeText, placeholder, onSubmit, onClear, clea
         onChangeText={onChangeText}
         onSubmitEditing={onSubmit}
         placeholder={placeholder}
+        accessibilityLabel={label ?? placeholder}
         placeholderTextColor="#A2A8B8"
         returnKeyType="search"
         style={styles.searchInput}
@@ -234,7 +235,7 @@ export default function App({ onOpenSavings }: { onOpenSavings: () => void }) {
               <Text style={[styles.heroTitle, isDesktop ? styles.heroTitleDesktop : styles.heroTitleMobile]}>Find your people.{"\n"}Find your place.{"\n"}Make the most of student life.</Text>
               <Text style={styles.heroText}>Housing, things, trips, jobs and student communities — all in one trusted local network.</Text>
               <View style={styles.heroSearchWrap}>
-                <SearchField value={search} onChangeText={setSearch} placeholder="Search housing listings…" onSubmit={() => { setCategory('Housing'); setTab('explore'); }} />
+                <SearchField value={search} onChangeText={setSearch} label="Search housing listings" placeholder="Search housing listings…" onSubmit={() => { setCategory('Housing'); setTab('explore'); }} />
               </View>
             </View>
           </View>
@@ -247,10 +248,10 @@ export default function App({ onOpenSavings }: { onOpenSavings: () => void }) {
             {categories.map((item) => <CategoryTile key={item.name} item={item} onPress={() => goToCategory(item.name)} />)}
           </View>
 
-          <View style={styles.sectionHeaderInline}><Text style={styles.sectionTitle}>Community housing</Text><Pressable accessibilityRole="button" accessibilityLabel="See all housing" onPress={() => goToCategory('Housing')}><Text style={styles.linkText}>See all</Text></Pressable></View>
+          <View style={styles.sectionHeaderInline}><Text style={styles.sectionTitle}>Community housing</Text><Pressable accessibilityRole="button" accessibilityLabel="See all housing" onPress={() => goToCategory('Housing')} style={styles.seeAllHitArea}><Text style={styles.linkText}>See all</Text></Pressable></View>
           <ListingWorkspace key={`home-${session?.user.id ?? 'public'}`} category="Housing" preview onAccount={() => setTab('profile')} onMessage={openListingConversation} onCreate={() => startListing('Housing')} />
 
-          <View style={styles.sectionHeaderInline}><Text style={styles.sectionTitle}>Marketplace</Text><Pressable accessibilityRole="button" accessibilityLabel="See all marketplace" onPress={() => goToCategory('Marketplace')}><Text style={styles.linkText}>See all</Text></Pressable></View>
+          <View style={styles.sectionHeaderInline}><Text style={styles.sectionTitle}>Marketplace</Text><Pressable accessibilityRole="button" accessibilityLabel="See all marketplace" onPress={() => goToCategory('Marketplace')} style={styles.seeAllHitArea}><Text style={styles.linkText}>See all</Text></Pressable></View>
           <ListingWorkspace key={`home-market-${session?.user.id ?? 'public'}`} category="Marketplace" preview onAccount={() => setTab('profile')} onMessage={openListingConversation} onCreate={() => startListing('Marketplace')} />
         </ScrollView>
       )}
@@ -270,7 +271,7 @@ export default function App({ onOpenSavings }: { onOpenSavings: () => void }) {
           </View>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipsRow}>
             {categories.map((item) => (
-              <Pressable accessibilityRole="button" accessibilityLabel={`Browse ${item.name}`} key={item.name} onPress={() => { setCategory(item.name); setSearch(''); }}>
+              <Pressable accessibilityRole="button" accessibilityLabel={`Browse ${item.name}`} accessibilityState={{ selected: category === item.name }} key={item.name} onPress={() => { setCategory(item.name); setSearch(''); }}>
                 <Pill active={category === item.name}>{item.name}</Pill>
               </Pressable>
             ))}
@@ -278,7 +279,7 @@ export default function App({ onOpenSavings }: { onOpenSavings: () => void }) {
           {category === 'Housing' || category === 'Marketplace' || category === 'People' ? (
             <View style={styles.exploreSearchPanel}>
               <Text style={styles.exploreSearchLabel}>{category === 'People' ? 'Find people by name' : `Search ${category.toLowerCase()} listings`}</Text>
-              <SearchField value={search} onChangeText={setSearch} onClear={() => setSearch('')} clearLabel={`Clear ${category.toLowerCase()} search`} placeholder={`Search ${category.toLowerCase()}…`} />
+              <SearchField value={search} onChangeText={setSearch} onClear={() => setSearch('')} clearLabel={`Clear ${category.toLowerCase()} search`} label={category === 'People' ? 'Search people by name' : `Search ${category.toLowerCase()} listings`} placeholder={`Search ${category.toLowerCase()}…`} />
             </View>
           ) : null}
           {category === 'Housing' || category === 'Marketplace' ? <ListingWorkspace key={`${category}-${session?.user.id ?? 'public'}`} category={category} search={search} onAccount={() => setTab('profile')} onMessage={openListingConversation} onCreate={() => startListing(category)} onClearSearch={() => setSearch('')} /> : category === 'People' ? <PeopleDirectory key={session?.user.id ?? 'public'} search={search} onAccount={() => setTab('profile')} /> : <CommunityCatalog key={category} category={category} search={search} onHousing={() => goToCategory('Housing')} />}
@@ -367,7 +368,7 @@ export default function App({ onOpenSavings }: { onOpenSavings: () => void }) {
               {bottomNav.map((item) => {
                 const isCreate = item.key === 'create';
                 return (
-                  <Pressable key={item.key} accessibilityRole="button" accessibilityLabel={isCreate ? 'Create listing' : item.label} onPress={() => setTab(item.key)} style={styles.navButton}>
+                  <Pressable key={item.key} accessibilityRole="button" accessibilityLabel={isCreate ? 'Create listing' : item.label} accessibilityState={{ selected: tab === item.key }} onPress={() => setTab(item.key)} style={styles.navButton}>
                     <View style={[styles.navIconWrap, isCreate && styles.navIconCreate, tab === item.key && !isCreate && styles.navIconActive]}><Icon name={isCreate ? 'plus' : item.key === 'explore' ? 'search' : item.key} size={isCreate ? 25 : 21} color={isCreate ? BRAND.white : tab === item.key ? BRAND.purple : BRAND.muted} /></View>
                     {!isCreate ? <Text style={[styles.navLabel, tab === item.key && styles.navLabelActive]}>{item.label}</Text> : null}
                   </Pressable>
@@ -467,7 +468,8 @@ const styles = StyleSheet.create({
   searchIcon: { fontSize: 21, color: BRAND.muted },
   searchInput: { flex: 1, color: BRAND.ink, fontSize: 14 },
   sectionHeader: { gap: 2 },
-  sectionHeaderInline: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', gap: 12 },
+  sectionHeaderInline: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
+  seeAllHitArea: { minWidth: 48, minHeight: 44, alignItems: 'flex-end', justifyContent: 'center' },
   sectionTitle: { color: BRAND.ink, fontSize: 19, fontWeight: '900', letterSpacing: -0.35 },
   sectionHint: { color: BRAND.subtle, fontSize: 11, marginTop: 2 },
   categoryGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
