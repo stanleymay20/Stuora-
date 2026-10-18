@@ -354,3 +354,15 @@ test('desktop and mobile navigation buttons each reach the correct functional de
   await expect(page.getByText('Student life for less.', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Close Student Savings' }).click();
 });
+
+test('switching Explore categories restores the top of the new category rather than an old scroll position', async ({ page }) => {
+  await backend(page);
+  await page.goto('/?stuora=housing');
+  const scroll = page.getByTestId('explore-scroll');
+  await expect(scroll).toBeVisible();
+  await scroll.evaluate(node => { node.scrollTop = 400; });
+  await expect.poll(() => scroll.evaluate(node => node.scrollTop)).toBeGreaterThan(30);
+  await page.getByRole('button', { name: 'Browse Marketplace', exact: true }).click();
+  await expect(page.getByText('STUORA / MARKETPLACE', { exact: true })).toBeVisible();
+  await expect.poll(() => scroll.evaluate(node => node.scrollTop)).toBe(0);
+});
