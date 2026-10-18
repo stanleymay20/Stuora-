@@ -236,3 +236,28 @@ test('generated editorial images are bundled and displayed without replacing rea
   const tripArtwork = page.locator('img[src*="editorial"]');
   await expect.poll(() => tripArtwork.first().evaluate((img: HTMLImageElement) => img.naturalWidth)).toBeGreaterThan(0);
 });
+
+test('Housing and Marketplace use one clear discovery toolbar and avoid duplicate posting CTAs', async ({ page }) => {
+  await backend(page);
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Browse Housing', exact: true }).click();
+  await expect(page.getByText('Refine your search', { exact: true })).toBeVisible();
+  await expect(page.getByText('Available listings', { exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Refresh listings' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Post housing listing' })).toHaveCount(1);
+  await expect(page.getByRole('button', { name: 'Create in this category' })).toHaveCount(0);
+  const city = page.getByRole('textbox', { name: 'Filter listings by city' });
+  await city.fill('Berlin');
+  await expect(page.getByRole('button', { name: 'Clear listing filters' })).toBeVisible();
+  await page.getByRole('button', { name: 'Clear listing filters' }).click();
+  await expect(city).toHaveValue('');
+  const search = page.getByPlaceholder('Search housing…');
+  await search.fill('Kreuzberg');
+  await expect(page.getByRole('button', { name: 'Clear housing search' })).toBeVisible();
+  await page.getByRole('button', { name: 'Clear housing search' }).click();
+  await expect(search).toHaveValue('');
+  await page.getByRole('button', { name: 'Browse Marketplace', exact: true }).click();
+  await expect(page.getByText('Refine your search', { exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Post marketplace listing' })).toHaveCount(1);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+});
