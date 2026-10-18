@@ -254,7 +254,7 @@ export default function GroupWorkspace({ onAccount }: { onAccount: () => void })
             {loadingMessages ? <ActivityIndicator accessibilityLabel="Loading group discussion" /> : null}
             {messageIssue ? <View style={styles.panel}><Text accessibilityRole="alert" style={styles.issue}>{messageIssue}</Text><Action name="Retry group discussion" onPress={() => setMessagesRevision(v => v + 1)} /></View> : null}
             {!loadingMessages && !messageIssue && !messages.length ? <Text style={styles.muted}>No messages yet. Start the discussion.</Text> : null}
-            {messages.map(m => <View key={m.id} style={styles.message}>
+            {messages.map(m => <View key={m.id} testID="student-group-message" style={styles.message}>
               <View style={styles.messageBody}>
                 <Text style={styles.messageAuthor}>{m.author_id === userId ? 'You' : 'Group member'}</Text>
                 <Text style={styles.body}>{m.body}</Text>
