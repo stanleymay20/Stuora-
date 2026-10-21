@@ -69,6 +69,8 @@ test('two independent staging accounts complete actual listing, messaging and gr
     await expect(owner.getByRole('button', { name: 'Refresh messages' })).toBeVisible();
     await owner.getByRole('button', { name: 'Refresh messages' }).click();
     await expect(owner.getByText(messageText, { exact: true })).toBeVisible();
+    await owner.reload();
+    await expect(owner.getByText(messageText, { exact: true })).toBeVisible();
 
     await owner.goto(STAGING + '/?stuora=groups');
     await owner.getByRole('button', { name: 'Create a group' }).click();
@@ -88,6 +90,10 @@ test('two independent staging accounts complete actual listing, messaging and gr
     await student.getByLabel('Message to group').fill(groupText);
     await student.getByRole('button', { name: 'Send group message' }).click();
     await expect(student.getByTestId('student-group-message').getByText(groupText, { exact: true })).toBeVisible();
+    await student.reload();
+    await expect(student.getByRole('button', { name: 'Open group ' + groupName })).toBeVisible();
+    await student.getByRole('button', { name: 'Open group ' + groupName }).click();
+    await expect(student.getByTestId('student-group-message').getByText(groupText, { exact: true })).toBeVisible();
 
     await owner.getByRole('button', { name: 'Refresh group discussion' }).click();
     await expect(owner.getByTestId('student-group-message').getByText(groupText, { exact: true })).toBeVisible();
@@ -102,7 +108,7 @@ test('two independent staging accounts complete actual listing, messaging and gr
         await owner.getByRole('button', { name: 'Open group ' + groupName }).click();
         await owner.getByRole('button', { name: 'Delete group', exact: true }).click();
         await owner.getByRole('button', { name: 'Confirm delete group' }).click();
-        await expect(owner.getByText('No student groups found.')).toBeVisible({ timeout: 5000 });
+        await expect(owner.getByRole('button', { name: 'Open group ' + groupName })).toHaveCount(0);
       } catch { /* Leave explicitly labeled staging fixture for manual cleanup. */ }
     }
     if (listingCreated) {
