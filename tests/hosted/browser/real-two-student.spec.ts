@@ -40,7 +40,9 @@ test('two independent staging accounts complete actual listing, messaging and gr
   const messageText = 'STAGING TEST Is the room still available? ' + stamp;
   const groupText = 'STAGING TEST Study meetup ' + stamp;
   let listingCreated = false;
+  let photoAttached = false;
   let groupCreated = false;
+  const cleanupIssues: string[] = [];
 
   try {
     // No route interception: all HTTP calls go to the real dedicated staging backend.
@@ -56,10 +58,32 @@ test('two independent staging accounts complete actual listing, messaging and gr
     await expect(owner.getByText('Listing saved. Add up to six real photos below.')).toBeVisible();
     listingCreated = true;
 
+    // Exercise the real Storage upload and public image retrieval path; no mocks.
+    const fileChooserPromise = owner.waitForEvent('filechooser');
+    await owner.getByRole('button', { name: 'Add photo (0/6)' }).click();
+    const fileChooser = await fileChooserPromise;
+    await fileChooser.setFiles({
+      name: 'stuora-staging-acceptance.png',
+      mimeType: 'image/png',
+      buffer: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9Zuz0AAAAASUVORK5CYII=', 'base64'),
+    });
+    await expect(owner.getByText('Photo uploaded and attached to this listing.')).toBeVisible();
+    photoAttached = true;
+    await expect(owner.getByLabel(listingTitle + ' photo 1')).toHaveJSProperty('naturalWidth', 1);
+    await owner.goto(STAGING + '/?stuora=housing');
+    await owner.getByRole('button', { name: 'My listings', exact: true }).click();
+    await owner.getByRole('button', { name: 'View ' + listingTitle }).click();
+    await expect(owner.getByLabel(listingTitle + ' photo 1')).toHaveJSProperty('naturalWidth', 1);
+
     await student.goto(STAGING + '/?stuora=housing');
     await student.getByRole('button', { name: 'View ' + listingTitle, exact: true }).click();
     await expect(student.getByText('STAGING TEST ONLY — verify with professor; not an actual available room.')).toBeVisible();
+    await expect(student.getByLabel(listingTitle + ' photo 1')).toHaveJSProperty('naturalWidth', 1);
+    await expect(student.getByRole('button', { name: 'Remove photo 1' })).toHaveCount(0);
     await expect(student.getByRole('button', { name: 'Edit listing', exact: true })).toHaveCount(0);
+    await student.reload();
+    await student.getByRole('button', { name: 'View ' + listingTitle, exact: true }).click();
+    await expect(student.getByLabel(listingTitle + ' photo 1')).toHaveJSProperty('naturalWidth', 1);
     await student.getByRole('button', { name: 'Message owner', exact: true }).click();
     await student.getByRole('textbox', { name: 'Message', exact: true }).fill(messageText);
     await student.getByRole('button', { name: 'Send message', exact: true }).click();
@@ -109,18 +133,28 @@ test('two independent staging accounts complete actual listing, messaging and gr
         await owner.getByRole('button', { name: 'Delete group', exact: true }).click();
         await owner.getByRole('button', { name: 'Confirm delete group' }).click();
         await expect(owner.getByRole('button', { name: 'Open group ' + groupName })).toHaveCount(0);
-      } catch { /* Leave explicitly labeled staging fixture for manual cleanup. */ }
+      } catch { cleanupIssues.push('group deletion'); }
     }
     if (listingCreated) {
       try {
         await owner.goto(STAGING + '/?stuora=housing');
         await owner.getByRole('button', { name: 'My listings', exact: true }).click();
         await owner.getByRole('button', { name: 'View ' + listingTitle }).click();
+        if (photoAttached) {
+          await owner.getByRole('button', { name: 'Remove photo 1' }).click();
+          await expect(owner.getByText('Photo removed.', { exact: true })).toBeVisible();
+          await expect(owner.getByLabel(listingTitle + ' photo 1')).toHaveCount(0);
+        }
         await owner.getByRole('button', { name: 'Archive listing', exact: true }).click();
         await owner.getByRole('button', { name: 'Confirm archive', exact: true }).click();
-      } catch { /* Leave explicitly labeled staging fixture for manual cleanup. */ }
+      } catch { cleanupIssues.push('listing photo removal or listing archival'); }
     }
     await ownerContext.close();
     await studentContext.close();
+    // A cleanup problem is an acceptance failure, not a silent green run.
+    // Retain fixture labels in the error so operators can investigate manually.
+    if (cleanupIssues.length) {
+      throw new Error('Staging cleanup incomplete (' + cleanupIssues.join(', ') + '). Inspect ' + listingTitle + ' and ' + groupName + ' in dedicated staging.');
+    }
   }
 });
