@@ -133,21 +133,29 @@ test('two independent staging accounts complete actual listing, messaging and gr
         await owner.getByRole('button', { name: 'Delete group', exact: true }).click();
         await owner.getByRole('button', { name: 'Confirm delete group' }).click();
         await expect(owner.getByRole('button', { name: 'Open group ' + groupName })).toHaveCount(0);
-      } catch { cleanupIssues.push('group deletion'); }
+        await student.goto(STAGING + '/?stuora=groups');
+        await expect(student.getByRole('button', { name: 'Open group ' + groupName })).toHaveCount(0);
+      } catch { cleanupIssues.push('group deletion or outsider visibility'); }
     }
     if (listingCreated) {
       try {
         await owner.goto(STAGING + '/?stuora=housing');
         await owner.getByRole('button', { name: 'My listings', exact: true }).click();
         await owner.getByRole('button', { name: 'View ' + listingTitle }).click();
-        if (photoAttached) {
-          await owner.getByRole('button', { name: 'Remove photo 1' }).click();
+        // Even an earlier assertion failure may happen after upload succeeds;
+        // inspect persisted state rather than relying only on the in-memory flag.
+        const removePhoto = owner.getByRole('button', { name: 'Remove photo 1' });
+        if (photoAttached) await expect(removePhoto).toBeVisible();
+        if (await removePhoto.isVisible().catch(() => false)) {
+          await removePhoto.click();
           await expect(owner.getByText('Photo removed.', { exact: true })).toBeVisible();
           await expect(owner.getByLabel(listingTitle + ' photo 1')).toHaveCount(0);
         }
         await owner.getByRole('button', { name: 'Archive listing', exact: true }).click();
         await owner.getByRole('button', { name: 'Confirm archive', exact: true }).click();
-      } catch { cleanupIssues.push('listing photo removal or listing archival'); }
+        await student.goto(STAGING + '/?stuora=housing');
+        await expect(student.getByRole('button', { name: 'View ' + listingTitle, exact: true })).toHaveCount(0);
+      } catch { cleanupIssues.push('photo removal, listing archival, or public discoverability after archive'); }
     }
     await ownerContext.close();
     await studentContext.close();
