@@ -15,6 +15,36 @@ const ready = approved && aEmail.includes('@') && bEmail.includes('@') &&
   aEmail.toLowerCase() !== bEmail.toLowerCase() && aPassword.length >= 8 && bPassword.length >= 8;
 const stamp = Date.now().toString(36);
 
+// React Native Web's accessible Image may be a wrapper rather than an HTML <img>.
+// Verify the rendered source URL, actual Storage response and browser decoding.
+async function assertStagingPhotoLoads(page: Page, label: string) {
+  const photo = page.getByLabel(label);
+  await expect(photo).toBeVisible();
+  const imageUrl = await photo.evaluate(node => {
+    const candidates = [node, ...Array.from(node.querySelectorAll('*'))];
+    for (const element of candidates) {
+      if (element instanceof HTMLImageElement && element.currentSrc) return element.currentSrc;
+      const background = window.getComputedStyle(element).backgroundImage;
+      const match = background.match(/^url\((?:"|')?(.*?)(?:"|')?\)$/);
+      if (match?.[1]) return new URL(match[1], window.location.href).href;
+    }
+    return '';
+  });
+  expect(imageUrl).toMatch(/^https:\/\/uptjcspizukpjcoayhtn\.supabase\.co\/storage\/v1\/object\/public\/listing-media\//);
+  const response = await page.request.get(imageUrl);
+  expect(response.status()).toBe(200);
+  expect(response.headers()['content-type']).toMatch(/^image\/png(?:;|$)/i);
+  const bytes = await response.body();
+  expect(bytes.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))).toBe(true);
+  const decoded = await page.evaluate(url => new Promise<boolean>(resolve => {
+    const image = new Image();
+    image.onload = () => resolve(image.naturalWidth === 1 && image.naturalHeight === 1);
+    image.onerror = () => resolve(false);
+    image.src = url;
+  }), imageUrl);
+  expect(decoded).toBe(true);
+}
+
 async function signIn(page: Page, email: string, password: string, displayName: string) {
   await page.goto(STAGING + '/?stuora=profile');
   await page.getByLabel('Email', { exact: true }).fill(email);
@@ -69,21 +99,21 @@ test('two independent staging accounts complete actual listing, messaging and gr
     });
     await expect(owner.getByText('Photo uploaded and attached to this listing.')).toBeVisible();
     photoAttached = true;
-    await expect(owner.getByLabel(listingTitle + ' photo 1')).toHaveJSProperty('naturalWidth', 1);
+    await assertStagingPhotoLoads(owner, listingTitle + ' photo 1');
     await owner.goto(STAGING + '/?stuora=housing');
     await owner.getByRole('button', { name: 'My listings', exact: true }).click();
     await owner.getByRole('button', { name: 'View ' + listingTitle }).click();
-    await expect(owner.getByLabel(listingTitle + ' photo 1')).toHaveJSProperty('naturalWidth', 1);
+    await assertStagingPhotoLoads(owner, listingTitle + ' photo 1');
 
     await student.goto(STAGING + '/?stuora=housing');
     await student.getByRole('button', { name: 'View ' + listingTitle, exact: true }).click();
     await expect(student.getByText('STAGING TEST ONLY — verify with professor; not an actual available room.')).toBeVisible();
-    await expect(student.getByLabel(listingTitle + ' photo 1')).toHaveJSProperty('naturalWidth', 1);
+    await assertStagingPhotoLoads(student, listingTitle + ' photo 1');
     await expect(student.getByRole('button', { name: 'Remove photo 1' })).toHaveCount(0);
     await expect(student.getByRole('button', { name: 'Edit listing', exact: true })).toHaveCount(0);
     await student.reload();
     await student.getByRole('button', { name: 'View ' + listingTitle, exact: true }).click();
-    await expect(student.getByLabel(listingTitle + ' photo 1')).toHaveJSProperty('naturalWidth', 1);
+    await assertStagingPhotoLoads(student, listingTitle + ' photo 1');
     await student.getByRole('button', { name: 'Message owner', exact: true }).click();
     await student.getByRole('textbox', { name: 'Message', exact: true }).fill(messageText);
     await student.getByRole('button', { name: 'Send message', exact: true }).click();
