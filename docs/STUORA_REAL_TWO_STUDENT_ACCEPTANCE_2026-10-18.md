@@ -5,11 +5,11 @@
 ## What is tested
 - Two separate **real, verified test student** accounts use independent Playwright browser contexts.
 - Existing signed-in accounts must work against the **approved staging origin only** (no production calls).
-- A publishes an explicitly marked staging Housing listing, and B discovers it without gaining owner edit controls.
+- A publishes an explicitly marked staging Housing listing, uploads a PNG through real staging Storage, and verifies the image decodes after revisiting the listing. B discovers the same persisted listing and image without gaining owner edit or photo-removal controls; B reloads and fetches the image again.
 - B starts a persisted owner conversation, sends a message, and A receives it in Messages.
 - A creates a public group, B cannot access discussion before joining, B joins and sends a message, A reads it, and B leaves.
-- The suite attempts to delete the group and archive the staged Housing listing in `finally`. It **does not assert all cleanup succeeded**; manually inspect staging afterward.
-- No mocked Supabase requests, no false student verification flags, no live money, no Stripe, no student-deals code.
+- The suite attempts to **remove the uploaded photo before archiving the listing** and delete the group in `finally`. Cleanup failures **fail the acceptance run** with staging fixture labels; manually verify storage objects and staging data afterward. An interrupted process can still leave fixtures requiring manual cleanup.
+- No mocked Supabase requests, no false student verification flags, no live money, no Stripe, no student-deals code. A passing image-decode check proves fetchability of the staged PNG in Chromium, **not** cross-user raw Storage API denial, MIME-content security, public-object revocation, device gallery permissions, or permanent deletion guarantees.
 
 ## Prerequisites — private and local
 1. Two distinct email inboxes with accessible, already-confirmed, **dedicated staging** Stuora accounts. Don't use real customer identities, your real accounts, your professor's details or any email accounts you cannot independently access.
@@ -37,6 +37,6 @@ Remove-Item Env:STUORA_STAGING_ACCEPTANCE,Env:STUORA_TEST_STUDENT_A_EMAIL,Env:ST
 ## Unresolved items
 - Real email confirmation and recovery need separate, supervised qualification.
 - Native iOS and Android devices need physical testing; bundle exports alone are insufficient.
-- Housing image upload/download and storage ownership need a separate real browser acceptance case.
+- Housing photo upload, public decoding and UI owner-only removal are now included in this **unexecuted** two-student suite. Still separately test negative raw Storage API writes/reads, disallowed MIME/size inputs, image privacy after archival, and clean up any orphaned Storage objects.
 - Moderator/report and account-block controls, accessible keyboard flows, and global errors still need real user checks.
 - Billing and AI model inference remain off. Discounts/deals integrations are explicitly deferred.
