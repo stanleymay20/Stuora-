@@ -40,8 +40,6 @@ jobs:
       - name: Validate build environment
         run: npm run check:environment
 
-      - name: Check Expo dependency compatibility
-        run: npx expo install --check
 
       - name: Test database authorization
         run: npm run test:database
@@ -60,3 +58,8 @@ jobs:
 
       - name: Export native bundles
         run: npx expo export --platform ios --platform android --output-dir native-build
+
+      # A published-SDK/version-index skew must never hide independent test failures.
+      # Keep this a mandatory failing gate; evaluate it after all independent checks.
+      - name: Check Expo dependency compatibility
+        run: npx expo install --check
