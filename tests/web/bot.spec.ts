@@ -134,3 +134,46 @@ test('floating Stuora Bot launcher stays above navigation, opens read-only searc
   await page.goto('/?stuora=groups');
   await expect(launcher).toBeVisible();
 });
+
+
+test('Stuora Bot 2.0 renders a full transparent vector character without a cropped photo', async ({ page }) => {
+  await backend(page);
+  await page.goto('/');
+  const launcher = page.getByRole('button', { name: 'Open Stuora Bot' });
+  const rig = page.getByTestId('stuora-mascot-rig');
+  await expect(launcher).toBeVisible();
+  await expect(rig).toBeVisible();
+  await expect(page.getByTestId('stuora-mascot-body')).toBeVisible();
+  await expect(page.getByTestId('stuora-mascot-eyes')).toBeVisible();
+  await expect(page.getByTestId('stuora-mascot-arm')).toBeVisible();
+  await expect(page.getByTestId('stuora-mascot-shadow')).toBeVisible();
+  expect(await launcher.locator('svg').count()).toBeGreaterThanOrEqual(3);
+  await expect(launcher.locator('img')).toHaveCount(0);
+  const l = await launcher.boundingBox();
+  const c = await rig.boundingBox();
+  expect(l).not.toBeNull(); expect(c).not.toBeNull();
+  expect(c!.x).toBeGreaterThanOrEqual(l!.x - 1);
+  expect(c!.x + c!.width).toBeLessThanOrEqual(l!.x + l!.width + 1);
+  expect(c!.y).toBeGreaterThanOrEqual(l!.y - 1);
+  expect(c!.y + c!.height).toBeLessThanOrEqual(l!.y + l!.height + 1);
+  // The animated mascot is a child of the unchanged accessible press target.
+  await launcher.click();
+  await expect(page.getByText('Connected search beta · Read-only')).toBeVisible();
+});
+
+test('Stuora Bot 2.0 blinks independently of hover motion when animations are enabled', async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
+  await backend(page);
+  await page.goto('/');
+  await expect(page.getByTestId('stuora-mascot-eyes')).toBeVisible();
+  // Distinct from a bouncing bitmap: the two vector eyes physically narrow
+  // while the complete body remains separately mounted and interactive.
+  await page.waitForFunction(() => {
+    const eyes = document.querySelector('[data-testid="stuora-mascot-eyes"]');
+    if (!eyes) return false;
+    const transform = getComputedStyle(eyes).transform;
+    if (transform === 'none') return false;
+    return new DOMMatrixReadOnly(transform).m22 < 0.6;
+  }, undefined, { timeout: 10000, polling: 'raf' });
+  await expect(page.getByRole('button', { name: 'Open Stuora Bot' })).toBeVisible();
+});
