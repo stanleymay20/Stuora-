@@ -1,5 +1,12 @@
 # STUORA — CANONICAL CONTINUATION & RELEASE-SECURITY HANDOFF
 
+> **LIVE CHECKPOINT OVERRIDES STALE HISTORY (2026-10-22, Europe/Berlin).** Read [STUORA_NEXT_CHAT_START_HERE.md](./STUORA_NEXT_CHAT_START_HERE.md) before any older sections below. The earlier `c847...` top checkpoint and old immutable preview details are historical and must NOT be treated as current.
+>
+> Last fully passing CODE commit before this handoff save: `a3dd576da8a7117c63a511b05bcc748c4a7c90ed`, CI [#39842064393](https://github.com/stanleymay20/Stuora-/actions/runs/39842064393) (all three jobs SUCCESS). Vercel exact-code preview READY: `stuora-preview-6zs38mwuo-stanleymay20s-projects.vercel.app`. This documentation-only commit advances HEAD; re-verify the new exact-head run.
+>
+> **Staging media quarantine is APPLIED:** version `20261022191235`, `quarantine_listing_media_untrusted_writes`, auth metadata INSERT=false, legacy media Storage INSERT/UPDATE policies=0, objects/rows/leases=0, avatar INSERT and owner cleanup preserved. The new `scripts/verify-stuora-media-quarantine.mjs` dual-user HTTP runner is only mocked/CI verified; real student JWT/API acceptance is UNEXECUTED. **Production unchanged; PR #23 DRAFT; internal alpha.**
+
+
 **Checked 2026-10-22, Europe/Berlin.** The live refs, status and commit references below are a timestamped checkpoint. **Always read actual HEAD, CI, migrations, deployment and policy state before editing or making readiness claims.** This document SUPERSEDES earlier next-chat prompts and outdated progress sections in `docs/STUORA_CONTROLLED_HANDOFF_2026-10-22.md`.
 
 ## Objective and project identity

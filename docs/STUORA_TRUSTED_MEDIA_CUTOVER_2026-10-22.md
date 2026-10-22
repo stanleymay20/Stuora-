@@ -1,6 +1,6 @@
 # Stuora trusted listing-media processing — staged cutover plan (2026-10-22)
 
-**Classification:** implementation candidate on draft PR #23 — **NOT DEPLOYED**, no staging or production Edge Function is active. No Storage bucket policy or public-facing preview alias has been changed by this work.
+**CURRENT VERIFIED CHECKPOINT (2026-10-22):** staging Edge `listing-photo-intake` **IS DEPLOYED v2**, JWT=true but compile-time **photo WRITES DISABLED**. The source migration `20261022211000_quarantine_listing_media_untrusted_writes.sql` **WAS APPLIED to staging**, hosted history `20261022191235`; direct authenticated media writes are denied by policy. The original paragraph below reflects an older pre-deployment plan; consult [STUORA_NEXT_CHAT_START_HERE.md](./STUORA_NEXT_CHAT_START_HERE.md) and current hosted policy evidence. **Production unchanged; this is still internal alpha.**
 
 ## Independent evidence
 
