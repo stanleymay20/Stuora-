@@ -7,22 +7,25 @@
 - **Fail-closed backend origin guard** on both browser contexts, installed before login: only `uptjcspizukpjcoayhtn.supabase.co` may receive Supabase network requests. A wrong Supabase project is aborted, and both contexts must show actual staging requests. The guard never prints authorization headers, credentials or tokens, and does not mock responses.
 - After each account signs in (creating a profile only when needed), the test reloads the page and verifies the authenticated profile and display name persist.
 - Existing signed-in accounts must work against the **approved staging origin only** (no production calls).
-- A publishes an explicitly marked staging Housing listing, uploads a PNG through real staging Storage, and verifies the image decodes after revisiting the listing. B discovers the same persisted listing and image without gaining owner edit or photo-removal controls; B reloads and fetches the image again.
+- A publishes an explicitly marked staging Housing listing, and B discovers it after persistence/reload without owner edit controls. **No photo upload is performed** by core acceptance: direct public Storage intake is not approved until the trusted-media service is activated and qualified in a separate security gate.
 - B starts a persisted owner conversation, sends a message, and A receives it in Messages.
 - A creates a public group, B cannot access discussion before joining, B joins and sends a message, A reads it, and B leaves. **After reloading**, B must again be a nonmember and cannot read the former group discussion or post messages.
-- The suite attempts to **remove the uploaded photo before archiving the listing** and delete the group in `finally`. Cleanup failures **fail the acceptance run** with staging fixture labels; manually verify storage objects and staging data afterward. An interrupted process can still leave fixtures requiring manual cleanup.
-- No mocked Supabase requests, no false student verification flags, no live money, no Stripe, no student-deals code. A passing image-decode check proves fetchability of the staged PNG in Chromium, **not** cross-user raw Storage API denial, MIME-content security, public-object revocation, device gallery permissions, or permanent deletion guarantees. A host-only guard catches unexpected `*.supabase.co` requests but does not replace direct two-token REST/Storage negative authorization tests or validate custom-domain external destinations.
+- The suite archives its test listing and deletes its group in `finally`. Cleanup failures **fail the acceptance run** with staging fixture labels; manually verify storage objects and staging data afterward. An interrupted process can still leave fixtures requiring manual cleanup.
+- No mocked Supabase requests, no false student verification flags, no live money, no Stripe, no student-deals code. The separate trusted-media acceptance plan must prove image decoding, MIME-content security, cross-user raw Storage API denial, private-object access and revocation once the service is enabled. A host-only guard catches unexpected `*.supabase.co` requests but does not replace direct two-token REST/Storage negative authorization tests or validate custom-domain external destinations.
 
 ## Prerequisites — private and local
 1. Two distinct email inboxes with accessible, already-confirmed, **dedicated staging** Stuora accounts. Don't use real customer identities, your real accounts, your professor's details or any email accounts you cannot independently access.
 2. Owner explicitly authorizes creating and removing clearly labeled test records in the dedicated Stuora staging project.
-3. The expected draft commit has passed CI, the Vercel deployment is READY, and the **exact approved preview alias** maps to that commit. Rehearse in an English-language desktop browser. Only use dedicated test accounts.
+3. The checked-out draft commit must have passed CI. Independently verify from the connected Vercel project deployment details that the immutable URL is **READY** and its full 40-character `githubCommitSha` matches `git rev-parse HEAD`. Then set the exact URL and SHA in session-only environment variables below. The guard checks hostname/origin and consistency with checked-out HEAD, but cannot independently attest Vercel without the operator's verified deployment readback. No stale preview aliases or production.
 4. GitHub checkout is the actual PR branch. Node.js 22+ and `npm ci`; Playwright Chromium installed via `npx playwright install chromium`.
 
 ## PowerShell (Windows): run one explicit acceptance pass
 Use temporary environment variables for the shell session only. No passwords in Git, Playwright config, browser recordings, screenshots, logs, ChatGPT, or URLs.
 
 ```powershell
+$env:STUORA_STAGING_PREVIEW_URL = Read-Host "Exact current Stuora Vercel deployment URL (no trailing slash)"
+$env:STUORA_VERIFIED_DEPLOYMENT_SHA = Read-Host "Full 40-character commit SHA verified from this Vercel deployment"
+git rev-parse HEAD # Must match the Vercel deployment SHA above
 $env:STUORA_STAGING_ACCEPTANCE = "I_APPROVE_STAGING_TEST_WRITES"
 $env:STUORA_TEST_STUDENT_A_EMAIL = Read-Host "Staging student A email"
 $env:STUORA_TEST_STUDENT_B_EMAIL = Read-Host "Staging student B email"
@@ -31,7 +34,7 @@ $b = Read-Host "Staging student B password" -AsSecureString
 $env:STUORA_TEST_STUDENT_A_PASSWORD = [System.Net.NetworkCredential]::new("", $a).Password
 $env:STUORA_TEST_STUDENT_B_PASSWORD = [System.Net.NetworkCredential]::new("", $b).Password
 npx playwright test -c playwright.hosted.config.ts
-Remove-Item Env:STUORA_STAGING_ACCEPTANCE,Env:STUORA_TEST_STUDENT_A_EMAIL,Env:STUORA_TEST_STUDENT_B_EMAIL,Env:STUORA_TEST_STUDENT_A_PASSWORD,Env:STUORA_TEST_STUDENT_B_PASSWORD -ErrorAction SilentlyContinue
+Remove-Item Env:STUORA_STAGING_ACCEPTANCE,Env:STUORA_STAGING_PREVIEW_URL,Env:STUORA_VERIFIED_DEPLOYMENT_SHA,Env:STUORA_TEST_STUDENT_A_EMAIL,Env:STUORA_TEST_STUDENT_B_EMAIL,Env:STUORA_TEST_STUDENT_A_PASSWORD,Env:STUORA_TEST_STUDENT_B_PASSWORD -ErrorAction SilentlyContinue
 ```
 
 **Important:** A failed test should be treated as a blocker even if automated mocks pass. Playwright tracing, screenshots and video are explicitly disabled for this suite to avoid recording passwords. Check the terminal and staging data afterward. Never run it with production credentials or a production URL.
@@ -39,6 +42,11 @@ Remove-Item Env:STUORA_STAGING_ACCEPTANCE,Env:STUORA_TEST_STUDENT_A_EMAIL,Env:ST
 ## Unresolved items
 - Real email confirmation and recovery need separate, supervised qualification.
 - Native iOS and Android devices need physical testing; bundle exports alone are insufficient.
-- Housing photo upload, public decoding and UI owner-only removal are now included in this **unexecuted** two-student suite. Still separately test negative raw Storage API writes/reads, disallowed MIME/size inputs, image privacy after archival, and clean up any orphaned Storage objects.
+- Housing photo upload and public decoding are **explicitly excluded** from this core suite. The source-level locked, disabled trusted-media Edge Function requires separate hosted resource tests and an approved secure Storage/client cutover before any photo-upload acceptance. After cutover, test raw Storage negative authorization, MIME/size failures, revocation after archival, and orphan cleanup.
 - Moderator/report and account-block controls, accessible keyboard flows, and global errors still need real user checks.
 - Billing and AI model inference remain off. Discounts/deals integrations are explicitly deferred.
+
+## 2026-10-22 — Exact preview identity and split media acceptance
+- Hardcoded historic preview was removed from both hosted Playwright config and test. Each opted-in run requires an immutable `https://stuora-preview-<deployment>-stanleymay20s-projects.vercel.app` origin, a separately Vercel-verified full commit SHA matching the actual checked-out Git HEAD, and two distinct staging-only test accounts. A mismatched or non-Stuora preview fails **before any login or writes**. There is no default live host.
+- **Operator responsibility:** independently read the Vercel deployment details (URL, Git SHA, READY) and enter both values. This source guard validates supplied identity/checkout consistency; it does **not** cryptographically query Vercel to prove the supplied SHA came from the URL. Exact preview identity must be independently recorded in the acceptance evidence.
+- Removed public Storage photo upload from the core two-account run while the trusted-media service is compiled-off; photo security has its own mandatory gated acceptance path. The core suite still tests real listing publication, two-account discovery, messaging, groups, revocations, cleanup and role separation. No test accounts, user records or uploads were created by this source change.

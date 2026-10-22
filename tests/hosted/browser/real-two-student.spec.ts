@@ -1,17 +1,20 @@
 import { expect, test, type BrowserContext, type Page } from '@playwright/test';
+import { approvedPreviewFromEnvironment } from '../previewIdentity';
 
 /**
  * Never run automatically. Requires two separately owned/verified staging accounts,
  * supplied via environment variables. No service-role credentials, no mocks, no production.
  * Nothing here signs students up or creates fake verified student identities.
  */
-const STAGING = 'https://stuora-preview-git-fix-ga-recover-ca508b-stanleymay20s-projects.vercel.app';
 const approved = process.env.STUORA_STAGING_ACCEPTANCE === 'I_APPROVE_STAGING_TEST_WRITES';
+const reviewedPreview = approvedPreviewFromEnvironment();
+if (approved && !reviewedPreview) throw new Error('Stuora staging preview must be independently verified against checked-out exact Git SHA. No writes attempted.');
+const STAGING = reviewedPreview ?? 'https://staging-approval-required.invalid';
 const aEmail = process.env.STUORA_TEST_STUDENT_A_EMAIL || '';
 const bEmail = process.env.STUORA_TEST_STUDENT_B_EMAIL || '';
 const aPassword = process.env.STUORA_TEST_STUDENT_A_PASSWORD || '';
 const bPassword = process.env.STUORA_TEST_STUDENT_B_PASSWORD || '';
-const ready = approved && aEmail.includes('@') && bEmail.includes('@') &&
+const ready = approved && !!reviewedPreview && aEmail.includes('@') && bEmail.includes('@') &&
   aEmail.toLowerCase() !== bEmail.toLowerCase() && aPassword.length >= 8 && bPassword.length >= 8;
 const stamp = Date.now().toString(36);
 const STAGING_BACKEND_HOST = 'uptjcspizukpjcoayhtn.supabase.co';
@@ -45,35 +48,8 @@ async function restrictToStagingBackend(context: BrowserContext) {
   };
 }
 
-// React Native Web's accessible Image may be a wrapper rather than an HTML <img>.
-// Verify the rendered source URL, actual Storage response and browser decoding.
-async function assertStagingPhotoLoads(page: Page, label: string) {
-  const photo = page.getByLabel(label);
-  await expect(photo).toBeVisible();
-  const imageUrl = await photo.evaluate(node => {
-    const candidates = [node, ...Array.from(node.querySelectorAll('*'))];
-    for (const element of candidates) {
-      if (element instanceof HTMLImageElement && element.currentSrc) return element.currentSrc;
-      const background = window.getComputedStyle(element).backgroundImage;
-      const match = background.match(/^url\((?:"|')?(.*?)(?:"|')?\)$/);
-      if (match?.[1]) return new URL(match[1], window.location.href).href;
-    }
-    return '';
-  });
-  expect(imageUrl).toMatch(/^https:\/\/uptjcspizukpjcoayhtn\.supabase\.co\/storage\/v1\/object\/public\/listing-media\//);
-  const response = await page.request.get(imageUrl);
-  expect(response.status()).toBe(200);
-  expect(response.headers()['content-type']).toMatch(/^image\/png(?:;|$)/i);
-  const bytes = await response.body();
-  expect(bytes.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))).toBe(true);
-  const decoded = await page.evaluate(url => new Promise<boolean>(resolve => {
-    const image = new Image();
-    image.onload = () => resolve(image.naturalWidth === 1 && image.naturalHeight === 1);
-    image.onerror = () => resolve(false);
-    image.src = url;
-  }), imageUrl);
-  expect(decoded).toBe(true);
-}
+// Image/Storage qualification is intentionally separate from the core two-student
+// test while the hardened media Edge Function remains compiled write-disabled.
 
 async function signIn(page: Page, email: string, password: string, displayName: string) {
   await page.goto(STAGING + '/?stuora=profile');
@@ -114,7 +90,6 @@ test('two independent staging accounts complete actual listing, messaging and gr
   const messageText = 'STAGING TEST Is the room still available? ' + stamp;
   const groupText = 'STAGING TEST Study meetup ' + stamp;
   let listingCreated = false;
-  let photoAttached = false;
   let groupCreated = false;
   const cleanupIssues: string[] = [];
 
@@ -134,32 +109,19 @@ test('two independent staging accounts complete actual listing, messaging and gr
     await expect(owner.getByText('Listing saved. Add up to six real photos below.')).toBeVisible();
     listingCreated = true;
 
-    // Exercise the real Storage upload and public image retrieval path; no mocks.
-    const fileChooserPromise = owner.waitForEvent('filechooser');
-    await owner.getByRole('button', { name: 'Add photo (0/6)' }).click();
-    const fileChooser = await fileChooserPromise;
-    await fileChooser.setFiles({
-      name: 'stuora-staging-acceptance.png',
-      mimeType: 'image/png',
-      buffer: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9Zuz0AAAAASUVORK5CYII=', 'base64'),
-    });
-    await expect(owner.getByText('Photo uploaded and attached to this listing.')).toBeVisible();
-    photoAttached = true;
-    await assertStagingPhotoLoads(owner, listingTitle + ' photo 1');
+    // Do not exercise the current direct-to-public Storage upload path.
+    // Media security requires a separate future trusted-intake cutover gate.
     await owner.goto(STAGING + '/?stuora=housing');
     await owner.getByRole('button', { name: 'My listings', exact: true }).click();
     await owner.getByRole('button', { name: 'View ' + listingTitle }).click();
-    await assertStagingPhotoLoads(owner, listingTitle + ' photo 1');
 
     await student.goto(STAGING + '/?stuora=housing');
     await student.getByRole('button', { name: 'View ' + listingTitle, exact: true }).click();
     await expect(student.getByText('STAGING TEST ONLY — verify with professor; not an actual available room.')).toBeVisible();
-    await assertStagingPhotoLoads(student, listingTitle + ' photo 1');
     await expect(student.getByRole('button', { name: 'Remove photo 1' })).toHaveCount(0);
     await expect(student.getByRole('button', { name: 'Edit listing', exact: true })).toHaveCount(0);
     await student.reload();
     await student.getByRole('button', { name: 'View ' + listingTitle, exact: true }).click();
-    await assertStagingPhotoLoads(student, listingTitle + ' photo 1');
     await student.getByRole('button', { name: 'Message owner', exact: true }).click();
     await student.getByRole('textbox', { name: 'Message', exact: true }).fill(messageText);
     await student.getByRole('button', { name: 'Send message', exact: true }).click();
@@ -257,20 +219,13 @@ test('two independent staging accounts complete actual listing, messaging and gr
         await owner.goto(STAGING + '/?stuora=housing');
         await owner.getByRole('button', { name: 'My listings', exact: true }).click();
         await owner.getByRole('button', { name: 'View ' + listingTitle }).click();
-        // Even an earlier assertion failure may happen after upload succeeds;
-        // inspect persisted state rather than relying only on the in-memory flag.
-        const removePhoto = owner.getByRole('button', { name: 'Remove photo 1' });
-        if (photoAttached) await expect(removePhoto).toBeVisible();
-        if (await removePhoto.isVisible().catch(() => false)) {
-          await removePhoto.click();
-          await expect(owner.getByText('Photo removed.', { exact: true })).toBeVisible();
-          await expect(owner.getByLabel(listingTitle + ' photo 1')).toHaveCount(0);
-        }
+        // No photo is uploaded in the core acceptance run; the trusted-media
+        // service stays compiled-off until isolated hosted media qualification.
         await owner.getByRole('button', { name: 'Archive listing', exact: true }).click();
         await owner.getByRole('button', { name: 'Confirm archive', exact: true }).click();
         await student.goto(STAGING + '/?stuora=housing');
         await expect(student.getByRole('button', { name: 'View ' + listingTitle, exact: true })).toHaveCount(0);
-      } catch { cleanupIssues.push('photo removal, listing archival, or public discoverability after archive'); }
+      } catch { cleanupIssues.push('listing archival or public discoverability after archive'); }
     }
     await ownerContext.close();
     await studentContext.close();
