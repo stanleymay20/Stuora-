@@ -18,3 +18,22 @@
 - Expo SDK compatibility issue #24 remains a hard failing CI gate until a compatible published package/lockfile update passes. No staging alias promotion until all checks are green.
 
 **Explicitly unchanged:** Supabase schema/data/RLS, billing/Stripe, student deals, Qwen/OpenAI integrations, business model, job/event/trip publishing, production and all three PR merge states.
+
+
+## Stuora Bot 2.0 — layered, blinking vector mascot (follow-on implementation)
+
+The user reported that the first launcher still looked like a **cropped static picture**. New code on draft PR #23 replaces the **launcher artwork only** with an independently animated, fully vector-drawn transparent character. This does not upgrade the read-only deterministic Bot into a generative assistant.
+
+### Actual implementation
+- `src/ai/AnimatedStuoraMascot.tsx` is a layered, scalable, full-body 2.5D vector rig built with **existing** `react-native-svg` and React Native `Animated`. It depicts a white/blue/purple robot, dark visor, independently drawn glowing eyes, head fins, hands, hover engine and elliptical ground shadow. No new animation library, image CDN or runtime dependency.
+- Independent animations: body floats up to 6px on a 3.6-second loop, eyes visibly blink by narrowing the eye layer at staggered intervals (including a double blink), one waving arm gently rotates, body breathes slightly, and the shadow scales/changes opacity.
+- All motion is disabled when the operating system requests reduced motion or before its preference is known. Animations stop and clean up when the launcher is unmounted/hidden.
+- `src/ai/FloatingStuoraBot.tsx` now renders the entire transparent rig with `overflow: visible`, not a circular `Image` cropped to 67×67; it preserves the single stationary, accessible `Pressable`, readable `Ask Stuora` / `SEARCH BETA` and current Home/Explore visibility restrictions.
+- The full-screen `StuoraBotOverlay` and its search queries, limits, error handling and public-result restrictions are unchanged. It retains an older static header avatar, which can be swapped in a separately reviewed improvement.
+- The newly generated full-body concept served as design reference; the rig is an original vector approximation, **not** a textured 3D object or the concept image automatically rigged into limbs.
+
+### Release and acceptance
+- `tests/web/bot.spec.ts` now checks the presence of real SVG body/eye/arm/shadow layers, lack of a launcher `img`, visible uncropped bounds and an actual independent eye squish/blink on desktop and mobile web. All earlier navigation, modal, RLS-scoped search and positioning regressions must keep passing.
+- Still require **exact-head CI**: clean `npm ci`, dependency security, backend isolation, PGlite RLS, TypeScript, web export, desktop/mobile Playwright, native JS bundles and `npx expo install --check`.
+- Preview origin lock remains exact: only `https://stuora-preview-git-fix-ga-recover-ca508b-stanleymay20s-projects.vercel.app` is approved with staging Supabase `uptjcspizukpjcoayhtn`. New branch aliases can load blank deliberately. Promote staging alias only after verifying the reviewed build and keep production unchanged.
+- Physical iOS/Android device motion, screen reader and real two-user hosted acceptance remain **unverified** until actually exercised; do not call commercial GA.
