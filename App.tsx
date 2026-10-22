@@ -410,7 +410,7 @@ export default function App({ onOpenSavings }: { onOpenSavings: () => void }) {
           </View>
         ) : (
           <>
-            <View style={styles.mobileTopBar}><BrandMark /><View style={styles.mobileTopActions}>
+            <View style={styles.mobileTopBar}><BrandMark compact={width < 390} /><View style={styles.mobileTopActions}>
               <Pressable accessibilityRole="button" accessibilityLabel="Choose student city" onPress={showCityPicker}
                 style={({ pressed }) => [styles.locationChipMobile, pressed && styles.pressed]}>
                 <Text style={styles.locationChipText} numberOfLines={1}>{preferredCity || 'All cities'}</Text>
