@@ -451,7 +451,7 @@ const styles = StyleSheet.create({
   miniAvatar: { width: 36, height: 36, borderRadius: 12, backgroundColor: BRAND.purple, alignItems: 'center', justifyContent: 'center' },
   miniAvatarText: { color: BRAND.white, fontWeight: '900' },
   page: { width: '100%', padding: 16, paddingBottom: 112, gap: 16 },
-  pageDesktop: { maxWidth: 1180, alignSelf: 'center', padding: 28, paddingBottom: 60 },
+  pageDesktop: { maxWidth: 1440, alignSelf: 'center', paddingHorizontal: 36, paddingVertical: 28, paddingBottom: 192 },
   mobileWelcomeRow: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 14 },
   greeting: { color: BRAND.muted, fontSize: 12, fontWeight: '700' },
   mobileHeading: { color: BRAND.ink, fontSize: 23, lineHeight: 28, fontWeight: '900', letterSpacing: -0.7, maxWidth: 260, marginTop: 3 },
