@@ -269,8 +269,9 @@ export default function App({ onOpenSavings }: { onOpenSavings: () => void }) {
       {tab === 'home' && (
         <ScrollView testID="home-scroll" style={styles.pageScroll} contentContainerStyle={[styles.page, isDesktop && styles.pageDesktop]} showsVerticalScrollIndicator={true}>
           <View style={[styles.hero, isDesktop ? styles.heroDesktop : styles.heroMobile]}>
-            <Image source={require('./assets/berlin-skyline.jpg')} resizeMode="cover" style={[StyleSheet.absoluteFill, { width: '100%', height: '100%' }]} accessibilityLabel="Berlin skyline at sunset" />
-            <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(17,22,47,0.56)' }]} />
+            {/* Global student platform: never imply a particular city when none was selected. */}
+            <View pointerEvents="none" style={styles.heroOrbOne} />
+            <View pointerEvents="none" style={styles.heroOrbTwo} />
             {width >= 1280 ? (
               <EditorialImage kind="Community" style={styles.heroCommunityPhoto} label="Stuora promotional artwork depicting university students spending time together; not actual Stuora profiles" />
             ) : null}
