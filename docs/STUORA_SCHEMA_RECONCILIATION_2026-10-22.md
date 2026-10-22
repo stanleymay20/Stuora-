@@ -60,3 +60,13 @@ Prior staging changes were installed via MCP apply_migration, which generated de
 - Applied only `gate_unreleased_community_writes` via the Stuora staging Supabase connection to `uptjcspizukpjcoayhtn`; Supabase returned success; migration stored as `20261022052123`.
 - Read-back of `pg_proc` + `has_function_privilege` confirms anonymous and authenticated roles have **no EXECUTE** on `public.save_community_listing`, `public.listing_participation`, `public.review_job_application`, or private counterparts.
 - No production writes, no staging alias promotion; hosted JWT-negative tests still pending. Earlier timestamp migration versions must not be blindly replayed.
+
+
+## Listing integrity closure — staging
+
+- Forward-only `supabase/migrations/20261022140000_enforce_complete_listing_integrity.sql` committed at [`769fcf67`](https://github.com/stanleymay20/Stuora-/commit/769fcf67b0c1e4967705f7363118b55e984a7886).
+- Exact-head GitHub [CI #39728278272](https://github.com/stanleymay20/Stuora-/actions/runs/39728278272) passed both `verify` and independent `rls-authorization` jobs; automated Postgres tests cover missing/whitespace cities, required public prices, mismatch between rent and parent price, detail deletion, archived reopen denial and normal atomic RPC editing.
+- Applied **staging only** to `uptjcspizukpjcoayhtn` via reviewed migration with name `enforce_complete_listing_integrity`, stored version `20261022053705`. Staging had zero profiles/listings at preflight.
+- Verified live `pg_constraint` readback: `profiles_city_nonblank`, `listings_city_nonblank`, `listings_published_price_required`. Verified live `pg_trigger` readback: `listings_publish_requires_details`, `housing_details_preserve_published_integrity`, `marketplace_details_preserve_published_integrity`, and existing `listings_safety` rate limiter preserved.
+- Deferred commit-time checks read the final parent-child state so atomic listing/rent edits remain valid. **Not a claim of hosted real-account acceptance**. Keep draft PR #23, main/prod unchanged and approved staging alias on last previously qualified preview. Fresh-database CI tests and staging schema checks passed; full JWT and concurrency qualification remains.
+- Historical migration versions remain noncanonical; do **not** run automatic `supabase db push` against staging.
