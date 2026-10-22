@@ -97,8 +97,8 @@ export default function ListingWorkspace({ category, mode = 'browse', search = '
     }
     let current = true;
     setSavedState('loading');
-    void supabase.from('saved_listings').select('listing_id')
-      .eq('user_id', userId).eq('listing_id', selected.id).maybeSingle()
+    void Promise.resolve(supabase.from('saved_listings').select('listing_id')
+      .eq('user_id', userId).eq('listing_id', selected.id).maybeSingle())
       .then(({ data, error: issue }) => {
         if (current) setSavedState(issue ? 'error' : data ? 'saved' : 'unsaved');
       }).catch(() => { if (current) setSavedState('error'); });
