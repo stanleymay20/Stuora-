@@ -26,10 +26,12 @@ function chunk(name:string,data:Uint8Array):Uint8Array {
 // Old 1x1 base64 fixtures in mock tests fail libpng's actual zlib checksum.
 async function createPixelPng():Promise<Uint8Array> {
   const scanline=Uint8Array.of(0,255,0,0,0); // filter None, transparent red RGBA
-  const stream=new ReadableStream<Uint8Array>({
-    start(controller){controller.enqueue(scanline);controller.close();}
-  }).pipeThrough(new CompressionStream('deflate'));
-  const compressed=new Uint8Array(await new Response(stream).arrayBuffer());
+  const compressor=new CompressionStream('deflate');
+  const readCompressed=new Response(compressor.readable).arrayBuffer();
+  const writer=compressor.writable.getWriter();
+  await writer.write(scanline);
+  await writer.close();
+  const compressed=new Uint8Array(await readCompressed);
   const signature=Uint8Array.of(137,80,78,71,13,10,26,10);
   const ihdr=concat(be32(1),be32(1),Uint8Array.of(8,6,0,0,0));
   return concat(signature,chunk('IHDR',ihdr),chunk('IDAT',compressed),chunk('IEND',new Uint8Array()));
