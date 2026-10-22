@@ -26,6 +26,23 @@ jobs:
       - name: Test database authorization
         run: npm run test:database
 
+  # Independent Deno runtime gate. Expo's TypeScript settings do not understand
+  # Deno's npm:/jsr: module specifiers and cannot prove Edge Function readiness.
+  trusted-media-edge:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Install Deno
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+      - name: Typecheck trusted media Edge Function
+        run: deno check --config supabase/functions/listing-photo-intake/deno.json supabase/functions/listing-photo-intake/index.ts
+
   verify:
     runs-on: ubuntu-latest
     timeout-minutes: 15
