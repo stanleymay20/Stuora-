@@ -196,6 +196,13 @@ test('two independent staging accounts complete actual listing, messaging and gr
     await expect(owner.getByTestId('student-group-message').getByText(groupText, { exact: true })).toBeVisible();
     await student.getByRole('button', { name: 'Leave group' }).click();
     await expect(student.getByLabel('Message to group')).toHaveCount(0);
+    // Confirm leave is persisted server-side, not just optimistic local UI.
+    // A departed member must not recover the private discussion on reload.
+    await student.reload();
+    await student.getByRole('button', { name: 'Open group ' + groupName }).click();
+    await expect(student.getByText('Join this group to read and post messages.')).toBeVisible();
+    await expect(student.getByLabel('Message to group')).toHaveCount(0);
+    await expect(student.getByTestId('student-group-message')).toHaveCount(0);
     assertOwnerStaging();
     assertStudentStaging();
   } finally {
