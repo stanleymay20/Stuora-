@@ -15,8 +15,9 @@ const listKinds: Record<Exclude<BotDomain, 'groups'>, 'housing'|'marketplace'|'j
   housing: 'housing', marketplace: 'marketplace', jobs: 'job', events: 'event', trips: 'trip',
 };
 
-async function searchStuora(prompt: string, signal: AbortSignal): Promise<BotReply> {
+async function searchStuora(prompt: string, signal: AbortSignal, preferredCity = ''): Promise<BotReply> {
   const intent = parseBotIntent(prompt);
+  const city = intent.city || preferredCity.trim();
   if (!intent.domain) return { prompt, answer: botGuidance(), results: [], domain: null };
   let results: BotResult[] = [];
   if (intent.domain === 'groups') {
@@ -24,7 +25,7 @@ async function searchStuora(prompt: string, signal: AbortSignal): Promise<BotRep
       .select('id,name,city,topic,description')
       .order('created_at', { ascending: false }).order('id').limit(PAGE_SIZE)
       .abortSignal(signal);
-    if (intent.city) query = query.ilike('city', '%' + safeLike(intent.city) + '%');
+    if (city) query = query.ilike('city', '%' + safeLike(city) + '%');
     if (intent.search) query = query.ilike('name', '%' + safeLike(intent.search) + '%');
     const { data, error } = await query;
     if (error) throw error;
@@ -38,7 +39,7 @@ async function searchStuora(prompt: string, signal: AbortSignal): Promise<BotRep
       .eq('kind', listKinds[intent.domain]).eq('status', 'active')
       .order('created_at', { ascending: false }).order('id').limit(PAGE_SIZE)
       .abortSignal(signal);
-    if (intent.city) query = query.ilike('city', '%' + safeLike(intent.city) + '%');
+    if (city) query = query.ilike('city', '%' + safeLike(city) + '%');
     if (intent.maxPriceCents !== null) query = query.lte('price_cents', intent.maxPriceCents);
     if (intent.search) query = query.ilike('title', '%' + safeLike(intent.search) + '%');
     const { data, error } = await query;
@@ -49,7 +50,7 @@ async function searchStuora(prompt: string, signal: AbortSignal): Promise<BotRep
         ? ' · ' + euroFromCents(listing.price_cents, listing.currency) : ''),
     }));
   }
-  const area = intent.city ? ' in ' + intent.city : '';
+  const area = city ? ' in ' + city : '';
   const budget = intent.maxPriceCents !== null ? ' within your maximum price' : '';
   const plural = resultCategories[intent.domain].toLowerCase();
   return {
@@ -69,8 +70,8 @@ function Action({ title, onPress, subtle = false, disabled = false }: {
   </Pressable>;
 }
 
-export default function StuoraBotOverlay({ open, onClose, onNavigate }: {
-  open: boolean; onClose: () => void; onNavigate: (category: Category) => void;
+export default function StuoraBotOverlay({ open, preferredCity = '', onClose, onNavigate }: {
+  open: boolean; preferredCity?: string; onClose: () => void; onNavigate: (category: Category) => void;
 }) {
   const { width } = useWindowDimensions();
   const desktop = width >= 960;
@@ -100,7 +101,7 @@ export default function StuoraBotOverlay({ open, onClose, onNavigate }: {
     controller.current = ac;
     requests.current += 1; setBusy(true); setFailure('');
     try {
-      const reply = await searchStuora(text, ac.signal);
+      const reply = await searchStuora(text, ac.signal, preferredCity);
       if (ac.signal.aborted) return;
       setReplies(old => [...old.slice(-9), reply]); setInput('');
     } catch {
@@ -114,7 +115,11 @@ export default function StuoraBotOverlay({ open, onClose, onNavigate }: {
   }
 
   const navigate = (domain: BotDomain) => { onClose(); onNavigate(resultCategories[domain]); };
-  const suggestions = ['Housing in Berlin under €650', 'Working-student jobs in Berlin', 'Study groups in Potsdam'];
+  const suggestions = [
+    preferredCity ? `Housing in ${preferredCity}` : 'Browse housing',
+    preferredCity ? `Working-student jobs in ${preferredCity}` : 'Working-student jobs',
+    preferredCity ? `Study groups in ${preferredCity}` : 'Study groups',
+  ];
   return <Modal visible={open} animationType={desktop ? 'fade' : 'slide'} transparent={desktop} onRequestClose={onClose}>
     <View style={[styles.modalHost, desktop && styles.desktopModalHost]}>
       {desktop ? <Pressable
