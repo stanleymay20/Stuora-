@@ -72,20 +72,33 @@ function deps(): TrustedMediaDeps {
     },
   };
 }
-async function boundedMultipart(req: Request, limit: number): Promise<FormData> {
+// Gen-3 audit N-04: a slow upload must never hold scarce decoder capacity.
+// The body is read under a hard deadline BEFORE any processing lease exists.
+export const BODY_READ_DEADLINE_MS = 15_000;
+async function boundedMultipart(req: Request, limit: number, deadlineMs = BODY_READ_DEADLINE_MS): Promise<FormData> {
   if (!req.body) throw new MediaRejection("INVALID_BODY", 400, "Photo request body missing");
   const reader = req.body.getReader();
   const chunks: Uint8Array[] = [];
   let received = 0;
+  const deadline = Date.now() + deadlineMs;
   try {
     while (true) {
-      const { done, value } = await reader.read();
+      const remaining = deadline - Date.now();
+      if (remaining <= 0) throw new MediaRejection("SLOW_UPLOAD", 408, "Photo upload took too long");
+      let timer: number | undefined;
+      const timeout = new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new MediaRejection("SLOW_UPLOAD", 408, "Photo upload took too long")), remaining);
+      });
+      const { done, value } = await Promise.race([reader.read(), timeout]).finally(() => clearTimeout(timer));
       if (done) break;
       received += value.byteLength;
       if (received > limit)
         throw new MediaRejection("SIZE_LIMIT", 413, "Photo request exceeds the upload limit");
       chunks.push(value);
     }
+  } catch (err) {
+    await reader.cancel().catch(() => {});
+    throw err;
   } finally {
     reader.releaseLock();
   }
@@ -123,6 +136,8 @@ Deno.serve(async req => {
     // This RPC is a separate committed database request. Unlike a limiter
     // called within the eventual metadata INSERT, its counters survive failed
     // multipart parsing, decoder rejection and storage/metadata errors.
+    // Since 20261023010000 it charges the caller's own windows first and
+    // verifies listing ownership before any shared window (N-01/N-02).
     const routeListingId = new URL(req.url).searchParams.get("listingId");
     const { data: attemptAllowed, error: attemptError } = await admin.rpc("consume_listing_photo_attempt", {
       p_student: user.id,
@@ -132,8 +147,24 @@ Deno.serve(async req => {
       throw new MediaRejection("LIMIT_UNAVAILABLE", 503, "Photo upload temporarily unavailable");
     if (!attemptAllowed)
       throw new MediaRejection("UPLOAD_RATE_LIMIT", 429, "Too many photo uploads. Try again later");
+    const declared = Number(req.headers.get("content-length") ?? 0);
+    if (declared > MAX_INPUT_BYTES + 32_768)
+      throw new MediaRejection("SIZE_LIMIT", 413, "Photo exceeds the 5 MB upload limit");
+    const type = req.headers.get("content-type") ?? "";
+    if (!type.toLowerCase().startsWith("multipart/form-data;"))
+      throw new MediaRejection("INVALID_BODY", 415, "Multipart form data required");
+    // Read and bound the whole body first (N-04); no lease is held yet.
+    const form = await boundedMultipart(req, MAX_INPUT_BYTES + 32_768);
+    const listingId = form.get("listingId");
+    const file = form.get("file");
+    if (!validUuid(listingId) || !validUuid(routeListingId) ||
+      listingId.toLowerCase() !== routeListingId.toLowerCase() ||
+      !(file instanceof File) || file.size > MAX_INPUT_BYTES)
+      throw new MediaRejection("INVALID_UPLOAD", 400, "Invalid listing or photo");
+    const raw = new Uint8Array(await file.arrayBuffer());
     // Independent committed RPC lease limits concurrent WASM allocations,
-    // including requests across separate Edge isolates and replicas.
+    // including requests across separate Edge isolates and replicas. It now
+    // covers only decode/encode/store, never network upload time.
     const requestId = crypto.randomUUID();
     const { data: leaseAllowed, error: leaseError } = await admin.rpc("acquire_listing_photo_processing_lease", {
       p_student: user.id, p_request: requestId,
@@ -143,21 +174,7 @@ Deno.serve(async req => {
     if (!leaseAllowed)
       throw new MediaRejection("CAPACITY_BUSY", 429, "Photo processing is busy. Try again later");
     processingLease = { studentId: user.id, requestId };
-    const declared = Number(req.headers.get("content-length") ?? 0);
-    if (declared > MAX_INPUT_BYTES + 32_768)
-      throw new MediaRejection("SIZE_LIMIT", 413, "Photo exceeds the 5 MB upload limit");
-    const type = req.headers.get("content-type") ?? "";
-    if (!type.toLowerCase().startsWith("multipart/form-data;"))
-      throw new MediaRejection("INVALID_BODY", 415, "Multipart form data required");
-    const form = await boundedMultipart(req, MAX_INPUT_BYTES + 32_768);
-    const listingId = form.get("listingId");
-    const file = form.get("file");
-    if (!validUuid(listingId) || !validUuid(routeListingId) ||
-      listingId.toLowerCase() !== routeListingId.toLowerCase() ||
-      !(file instanceof File) || file.size > MAX_INPUT_BYTES)
-      throw new MediaRejection("INVALID_UPLOAD", 400, "Invalid listing or photo");
-    const result = await publishListingPhoto(deps(), user.id, listingId, new Uint8Array(await file.arrayBuffer()),
-      () => crypto.randomUUID());
+    const result = await publishListingPhoto(deps(), user.id, listingId, raw, () => crypto.randomUUID());
     return response(201, { photo: result }, origin);
   } catch (err) {
     if (err instanceof MediaRejection)
