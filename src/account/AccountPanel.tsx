@@ -27,6 +27,9 @@ export default function AccountPanel() {
   const [issue, setIssue] = useState('');
   // Preserve the password-reset confirmation across the forced SIGNED_OUT event.
   const preserveRecoveryNotice = useRef(false);
+  // A local one-minute hold prevents accidental repeat requests. The Auth
+  // provider independently enforces its server-side delivery limits.
+  const lastConfirmationRequest = useRef(0);
 
   useEffect(() => {
     setName(profile?.display_name ?? ''); setCity(profile?.city ?? '');
@@ -71,6 +74,37 @@ export default function AccountPanel() {
       setNotice('If an account exists for that email, a password reset link has been sent.');
     } catch { setIssue('Unable to connect. Please try again.'); }
     finally { setBusy(false); }
+  }
+
+  async function resendConfirmation() {
+    const validation = emailError(email);
+    if (validation) { setIssue(validation); return; }
+    // The action is available even after a reload or another device login;
+    // email confirmation state must not be stored as a public client flag.
+    if (Date.now() - lastConfirmationRequest.current < 60_000) {
+      setIssue('');
+      setNotice('Please wait a minute before requesting another confirmation email.');
+      return;
+    }
+    setBusy(true); setIssue(''); setNotice('');
+    // Apply the local cooldown before the request to prevent double-click
+    // retries if the connection fails or the backend rate-limits delivery.
+    lastConfirmationRequest.current = Date.now();
+    try {
+      const { error: resendError } = await supabase.auth.resend({
+        type: 'signup',
+        email: email.trim(),
+        options: { emailRedirectTo: authRedirectUrl() },
+      });
+      if (resendError) {
+        // Do not reveal whether this address belongs to an existing account.
+        setNotice('If your account is awaiting confirmation, please check your inbox. You can try again later.');
+      } else {
+        setNotice('If your account is awaiting confirmation, check your inbox for a new Stuora email.');
+      }
+    } catch {
+      setIssue('Unable to connect. Please try again later.');
+    } finally { setBusy(false); }
   }
 
   async function updateRecoveredPassword() {
@@ -172,6 +206,7 @@ export default function AccountPanel() {
         <TextInput accessibilityLabel="Password" autoComplete={signup ? 'new-password' : 'current-password'} secureTextEntry value={password} onChangeText={setPassword} editable={!busy} style={styles.input} />
         {button(signup ? 'Create account' : 'Sign in', () => void authenticate())}
         {!signup ? <Pressable accessibilityRole="button" disabled={busy} onPress={() => { setForgot(true); setIssue(''); setNotice(''); setPassword(''); }}><Text style={styles.link}>Forgot password?</Text></Pressable> : null}
+        {!signup ? <Pressable accessibilityRole="button" accessibilityLabel="Resend confirmation email" disabled={busy} onPress={() => void resendConfirmation()}><Text style={styles.link}>Didn't get your confirmation email? Resend</Text></Pressable> : null}
         <Pressable accessibilityRole="button" disabled={busy} onPress={() => { setSignup(v => !v); setForgot(false); setIssue(''); setNotice(''); }}><Text style={styles.link}>{signup ? 'Already have an account? Sign in' : 'New here? Create an account'}</Text></Pressable>
       </>}
     </> : <>

@@ -159,3 +159,7 @@ Files newly added on draft PR #23:
 ## 2026-10-22 — Native auth callback hardening
 - Added `src/account/nativeAuthCallback.ts`: strict `stuora://auth-callback` allowlist and token-ambiguity rejection before `AuthProvider` calls `supabase.auth.setSession`. New required `tests/native-auth-callback.test.mjs` compiles the TS parser for pure Node hostile-link cases. No credentials, backend, hosted auth settings or real devices required.
 - This guards unrelated deep links, but it is not full PKCE/state binding or real-device acceptance. Do NOT claim GA Auth from pure parser tests. Existing signup/recovery/confirmation flows remain unchanged for legitimate implicit callback URLs. PR draft, production unaffected.
+
+## 2026-10-22 — Student signup confirmation resend candidate
+- Added resilient `supabase.auth.resend({type:'signup', email, options:{emailRedirectTo}})` to signed-out `AccountPanel` with branded neutral success/error text and one-minute accidental-repeat hold. No user-enumeration API or privileged key.
+- Existing `tests/web/account-fixtures.ts` now mocks the documented `/auth/v1/resend` contract; `tests/web/account.spec.ts` tests signup->resend, duplicate hold, invalid address, 429 and hidden raw provider errors. New exact-head CI required before acceptance. Hosted SMTP templates and production remain unchanged.
