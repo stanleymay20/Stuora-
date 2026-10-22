@@ -167,6 +167,23 @@ for (const inheritedGrants of [false, true]) {
       await count('anon', null, `select * from public.listing_media where listing_id = '${draft}'`, 0);
       await count('authenticated', a, `select * from public.listing_media where listing_id = '${draft}'`, 1);
       await count('authenticated', b, `delete from public.listing_media where listing_id = '${house}' returning *`, 0);
+      // Quota must be enforced inside Postgres, including direct REST writes
+      // that bypass the app's displayed six-photo limit.
+      for (let i = 1; i < 6; i++) {
+        await count('authenticated', a,
+          `insert into public.listing_media (listing_id,object_path,sort_order)
+          values ('${house}','${a}/${house}/room-${i}.jpg',${i}) returning id`, 1);
+      }
+      await deny(a,
+        `insert into public.listing_media (listing_id,object_path,sort_order)
+         values ('${house}','${a}/${house}/seventh.jpg',6)`, '23514');
+      await count('authenticated', a, `select * from public.listing_media where listing_id='${house}'`, 6);
+      await count('authenticated', a,
+        `delete from public.listing_media where listing_id='${house}' and sort_order=3 returning id`, 1);
+      await count('authenticated', a,
+        `insert into public.listing_media (listing_id,object_path,sort_order)
+         values ('${house}','${a}/${house}/replacement.jpg',3) returning id`, 1);
+
 
       // Hosted Supabase owns these tables; the harness grants authenticated CRUD
       // so the same storage.objects policies can be exercised locally.
