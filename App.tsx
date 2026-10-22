@@ -154,6 +154,7 @@ export default function App({ onOpenSavings }: { onOpenSavings: () => void }) {
   const [search, setSearch] = useState('');
   const [botOpen, setBotOpen] = useState(false);
   const cityStorageKey = 'stuora.selected-city.' + (session?.user.id ?? 'guest');
+  const citySelectionVersion = useRef(0);
   const [cityPreference, setCityPreference] = useState('');
   const [cityPickerOpen, setCityPickerOpen] = useState(false);
   const [cityDraft, setCityDraft] = useState('');
@@ -163,10 +164,11 @@ export default function App({ onOpenSavings }: { onOpenSavings: () => void }) {
   useEffect(() => {
     // Only store a coarse city preference. No location permission, IP or GPS inference.
     let alive = true;
+    const readVersion = ++citySelectionVersion.current;
     setCityPreference('');
     void AsyncStorage.getItem(cityStorageKey)
       .then(value => {
-        if (alive && value && (value === '__all__' || (value.length <= 120 && value.length >= 2))) {
+        if (alive && readVersion === citySelectionVersion.current && value && (value === '__all__' || (value.length <= 120 && value.length >= 2))) {
           setCityPreference(value);
         }
       })
@@ -175,6 +177,7 @@ export default function App({ onOpenSavings }: { onOpenSavings: () => void }) {
   }, [cityStorageKey]);
   const showCityPicker = () => { setCityDraft(preferredCity); setCityError(''); setCityPickerOpen(true); };
   const setSelectedCity = (city: string) => {
+    citySelectionVersion.current += 1;
     setCityPreference(city);
     setCityPickerOpen(false);
     void AsyncStorage.setItem(cityStorageKey, city).catch(() => {
@@ -182,8 +185,8 @@ export default function App({ onOpenSavings }: { onOpenSavings: () => void }) {
     });
   };
   const saveCity = () => {
-    const city = cityDraft.trim().replace(/\\s+/g, ' ');
-    if (city.length < 2 || city.length > 120 || !/^[\\p{L}\\p{M} .'-]+$/u.test(city)) {
+    const city = cityDraft.trim().replace(/\s+/g, ' ');
+    if (city.length < 2 || city.length > 120 || !/^[\p{L}\p{M} .'-]+$/u.test(city)) {
       setCityError('Enter a city name between 2 and 120 characters.');
       return;
     }
