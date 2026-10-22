@@ -248,6 +248,23 @@ for (const inheritedGrants of [false, true]) {
       await expectCount('authenticated', b, `select * from public.student_group_messages where id = '${messageId}'`, 1);
       await expectCount('authenticated', a, `select * from public.student_group_messages where id = '${messageId}'`, 1);
       await expectCount('authenticated', c, `select * from public.student_group_messages where id = '${messageId}'`, 0);
+      // Cross-tenant RLS regression: the reader belongs to a DIFFERENT group.
+      // A policy using unqualified "m.group_id = group_id" silently binds both
+      // sides to the membership row and previously leaked every discussion.
+      const { rows: otherCreated } = await as('authenticated', c,
+        "select public.create_student_group('Charlie Private Circle', '', 'Aachen', 'Hobbies') id");
+      const otherGroupId = otherCreated[0].id;
+      const { rows: otherSent } = await as('authenticated', c,
+        `select public.send_student_group_message('${otherGroupId}', 'Charlie-only message') id`);
+      const otherMessageId = otherSent[0].id;
+      await expectCount('authenticated', c, `select * from public.student_group_messages where id = '${otherMessageId}'`, 1);
+      await expectCount('authenticated', c, `select * from public.student_group_messages where id = '${messageId}'`, 0);
+      await expectCount('authenticated', a, `select * from public.student_group_messages where id = '${otherMessageId}'`, 0);
+      await expectCount('authenticated', c, 'select * from public.student_group_messages', 1);
+      // Bob's membership elsewhere must NOT preserve access after owner removal.
+      await expectCount('authenticated', b,
+        `insert into public.student_group_members (group_id, user_id) values ('${otherGroupId}', '${b}') returning group_id`, 1);
+      await expectCount('authenticated', b, `select * from public.student_group_messages where id = '${otherMessageId}'`, 1);
       await assert.rejects(as('authenticated', b,
         `insert into public.student_group_messages (group_id,author_id,body) values ('${groupId}','${b}','Bypass limits')`), e => e.code === '42501');
       await expectCount('authenticated', b,
@@ -260,6 +277,8 @@ for (const inheritedGrants of [false, true]) {
       await expectCount('authenticated', a,
         `delete from public.student_group_members where group_id = '${groupId}' and user_id = '${b}' returning user_id`, 1);
       await expectCount('authenticated', b, `select * from public.student_group_messages where id = '${messageId}'`, 0);
+      await expectCount('authenticated', b, `select * from public.student_group_messages where id = '${otherMessageId}'`, 1);
+      await expectCount('authenticated', b, 'select * from public.student_group_messages', 1);
       await expectCount('authenticated', a, `select * from public.student_group_messages where id = '${messageId}'`, 1);
       await expectCount('authenticated', b,
         `delete from public.student_groups where id = '${groupId}' returning id`, 0);
