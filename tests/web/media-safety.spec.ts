@@ -35,7 +35,10 @@ test('JPEG strips APP1 EXIF/XMP payloads but preserves compressed image segments
     Buffer.concat([Buffer.from([0xff, marker, (payload.length + 2) >>> 8, (payload.length + 2) & 255]), payload]);
   const frame = segment(0xc0, Buffer.from([8, 0, 1, 0, 1, 1, 1, 0x11, 0]));
   const scan = segment(0xda, Buffer.from([1, 1, 0, 0, 0x3f, 0]));
-  const gps = Buffer.from('Exif\0\0GPSLatitude=12.345,67.890', 'utf8');
+  const gps = Buffer.concat([
+    Buffer.from([0x45,0x78,0x69,0x66,0,0,0x49,0x49,0x2a,0,8,0,0,0,0,0,0,0,0,0]),
+    Buffer.from('GPSLatitude=12.345,67.890', 'utf8'),
+  ]);
   const input = Buffer.concat([
     Buffer.from([0xff, 0xd8]),
     segment(0xe1, gps), frame, scan, Buffer.from([0, 1, 2, 0xff, 0xd9]),
