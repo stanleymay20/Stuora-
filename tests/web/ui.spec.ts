@@ -386,3 +386,28 @@ test('responsive UI audit: 320px phone through 1600px desktop preserve usable na
     }
   }
 });
+
+test('wide desktop homepage uses the available canvas without hiding controls behind floating bot', async ({ page }) => {
+  test.skip(test.info().project.name !== 'desktop', 'Wide desktop visual layout');
+  await page.setViewportSize({ width: 1600, height: 900 });
+  await backend(page);
+  await page.goto('/');
+  const hero = page.getByLabel('Berlin skyline at sunset').locator('..');
+  await expect(hero).toBeVisible();
+  const bounds = await hero.boundingBox();
+  expect(bounds).not.toBeNull();
+  // Use more of the viewport while retaining comfortable content gutters.
+  expect(bounds!.width).toBeGreaterThan(1250);
+  expect(bounds!.x).toBeGreaterThan(24);
+  expect(bounds!.x + bounds!.width).toBeLessThan(1576);
+  const launcher = page.getByRole('button', { name: 'Open Stuora Bot' });
+  const botBounds = await launcher.boundingBox();
+  expect(botBounds).not.toBeNull();
+  expect(botBounds!.x).toBeGreaterThan(bounds!.x + bounds!.width - 150);
+  // All discovery actions are still visible and the character stays tappable.
+  await expect(page.getByRole('button', { name: 'Browse Housing' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Browse Groups' })).toBeVisible();
+  await launcher.click();
+  await expect(page.getByText('Connected search beta · Read-only')).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+});
