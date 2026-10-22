@@ -24,8 +24,12 @@ function chunk(name:string,data:Uint8Array):Uint8Array {
 }
 // Build a standards-conformant RGBA PNG (valid deflate checksum and PNG CRCs).
 // Old 1x1 base64 fixtures in mock tests fail libpng's actual zlib checksum.
-async function createPixelPng():Promise<Uint8Array> {
-  const scanline=Uint8Array.of(0,255,0,0,0); // filter None, transparent red RGBA
+async function createPixelPng(width=1,height=1):Promise<Uint8Array> {
+  const scanline=new Uint8Array(height*(1+4*width)); // RGBA, filter None
+  for(let y=0;y<height;y++)for(let x=0;x<width;x++){
+    const pos=y*(1+4*width)+1+x*4;
+    scanline.set(Uint8Array.of(255,0,0,0),pos); // transparent red pixel
+  }
   const compressor=new CompressionStream('deflate');
   const readCompressed=new Response(compressor.readable).arrayBuffer();
   const writer=compressor.writable.getWriter();
@@ -33,7 +37,7 @@ async function createPixelPng():Promise<Uint8Array> {
   await writer.close();
   const compressed=new Uint8Array(await readCompressed);
   const signature=Uint8Array.of(137,80,78,71,13,10,26,10);
-  const ihdr=concat(be32(1),be32(1),Uint8Array.of(8,6,0,0,0));
+  const ihdr=concat(be32(width),be32(height),Uint8Array.of(8,6,0,0,0));
   return concat(signature,chunk('IHDR',ihdr),chunk('IDAT',compressed),chunk('IEND',new Uint8Array()));
 }
 const png=await createPixelPng();
@@ -73,11 +77,9 @@ Deno.test("real PNG decode removes EXIF-like GPS tEXt from the stored output byt
   assert.ok(!listChunks(result.data).includes("tEXt"));
   assert.ok(!listChunks(result.data).includes("eXIf"));
 });
-Deno.test("real JPEG decode strips EXIF and auto-orients dimensions",()=>{
-  const scaled=ImageMagick.read(png,img=>{
-    img.resize(2,1);
-    return img.write(MagickFormat.Jpeg,bytes=>Uint8Array.from(bytes));
-  });
+Deno.test("real JPEG decode strips EXIF and auto-orients dimensions",async ()=>{
+  const wide=await createPixelPng(2,1);
+  const scaled=magickTranscode(wide,MagickFormat.Jpeg);
   const tagged=exifRotate(scaled);
   assert.deepEqual(inspectImageHeader(tagged),{format:'jpeg',width:2,height:1});
   const result=decodeAndEncode(tagged);
