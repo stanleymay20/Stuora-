@@ -134,3 +134,6 @@ Files newly added on draft PR #23:
 ## 2026-10-22 — Canonical brand source and parity gate
 - Added `assets/stuora-mark.svg`, the **identical three existing ribbon paths and four gradient stops** from `src/ui/Brand.tsx`; no rebrand or fake logo. Added `docs/STUORA_BRAND_SYSTEM.md` showing source/live parity and explicit unimplemented native icon/favicon, sender, domain and hosted email-template surfaces.
 - `tests/auth-branding.test.mjs` now verifies canonical path/color parity. Does not claim native launcher icons or branded SMTP are active. Both require separate controlled implementation/hosted verification.
+
+## 2026-10-22 — Stuora web favicon configured in Expo
+- New static `assets/stuora-favicon.png` (64×64 PNG, derived from established Stuora mark), `app.json` now sets `web.favicon`, `web.name`, `web.shortName`, `web.themeColor`. Node brand validation checks correct source and PNG signature. **Hosted browser favicon not proven until exact-head CI web export and deployed-site readback**. Native iOS/Android launch icons and splash still pending 1024px original-quality raster assets and device QA.

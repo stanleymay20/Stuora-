@@ -24,7 +24,11 @@
       "package": "com.stuora.app"
     },
     "web": {
-      "bundler": "metro"
+      "bundler": "metro",
+      "favicon": "./assets/stuora-favicon.png",
+      "name": "Stuora",
+      "shortName": "Stuora",
+      "themeColor": "#17152F"
     }
   }
 }

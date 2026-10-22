@@ -35,3 +35,14 @@ test('canonical vector mark mirrors the three ribbon shapes and gradients from t
  }
  assert.match(svg,/viewBox="0 0 64 64"/);
 });
+
+test('Expo uses the Stuora favicon rather than Expo default branding',()=>{
+ const app=JSON.parse(readFileSync('app.json','utf8')).expo;
+ assert.equal(app.web.favicon,'./assets/stuora-favicon.png');
+ assert.equal(app.web.themeColor,'#17152F');
+ assert.equal(app.name,'Stuora');
+ const bytes=readFileSync('assets/stuora-favicon.png');
+ assert.deepEqual([...bytes.subarray(0,8)],[137,80,78,71,13,10,26,10]);
+ assert.equal(bytes.readUInt32BE(16),64);
+ assert.equal(bytes.readUInt32BE(20),64);
+});

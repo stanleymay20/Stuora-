@@ -10,7 +10,7 @@
 | Email sender and From display name | **Not configured/verified** | Verified sender domain, SMTP, SPF/DKIM/DMARC, deliverability |
 | Verification and password-reset links | Existing provider confirmation links | Approved Stuora web origin, exact redirects; optional custom Auth domain |
 | App icon and native splash | App is named Stuora but no icon files in Expo config | Generate 1024px PNGs from canonical vector; add to `app.json`, verify Android adaptive safe zone and iOS |
-| Browser favicon / PWA icons | Not configured in Expo | Export PNG favicon from canonical vector and wire `web.favicon`; avoid SVG in `web.favicon` because Expo image utility may reject it |
+| Browser favicon | Branded 64×64 PNG asset committed and `web.favicon` configured in Expo | CI export and hosted favicon/metadata readback |
 | Website/social share cards | Standalone landing page separate | Real public domain and verified social preview assets |
 | Support/legal sender links | Unknown/unverified | Real Stuora-controlled support/privacy/terms URLs, never invent |
 
