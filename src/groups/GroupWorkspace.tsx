@@ -6,6 +6,8 @@ import type { Database } from '../backend/database.types';
 
 type Group = Database['public']['Tables']['student_groups']['Row'];
 type GroupMessage = Database['public']['Tables']['student_group_messages']['Row'];
+type GroupMember = Pick<Database['public']['Tables']['student_group_members']['Row'], 'user_id' | 'joined_at'>;
+type GroupBan = Pick<Database['public']['Tables']['student_group_bans']['Row'], 'user_id' | 'banned_at'>;
 const TOPICS = ['Study', 'University', 'Housing', 'Career', 'Travel', 'Culture', 'Hobbies', 'Other'] as const;
 const PAGE = 24;
 function escapedLike(value: string) { return value.replace(/[\\%_]/g, '\\$&'); }
@@ -57,6 +59,12 @@ export default function GroupWorkspace({ onAccount }: { onAccount: () => void })
   const [showCreate, setShowCreate] = useState(false);
   const [editing, setEditing] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [ownerMembers, setOwnerMembers] = useState<GroupMember[]>([]);
+  const [ownerBans, setOwnerBans] = useState<GroupBan[]>([]);
+  const [moderationRevision, setModerationRevision] = useState(0);
+  const [moderationLoading, setModerationLoading] = useState(false);
+  const [moderationIssue, setModerationIssue] = useState('');
+  const [confirmRemoveUser, setConfirmRemoveUser] = useState<string | null>(null);
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [groupCity, setGroupCity] = useState('');
@@ -118,6 +126,61 @@ export default function GroupWorkspace({ onAccount }: { onAccount: () => void })
       .finally(() => { clearTimeout(timer); if (!ac.signal.aborted) setLoadingMessages(false); });
     return () => { clearTimeout(timer); ac.abort(); };
   }, [selectedId, joined, userId, messagePages, messagesRevision]);
+
+  // Membership records and ban list are owner-only; no private student profile
+  // fields are requested. Clear cached moderator state when the group changes.
+  useEffect(() => {
+    setOwnerMembers([]); setOwnerBans([]); setModerationIssue('');
+    setConfirmRemoveUser(null);
+    if (!selectedId || !owner || !userId) { setModerationLoading(false); return; }
+    const ac = new AbortController();
+    setModerationLoading(true);
+    void Promise.all([
+      supabase.from('student_group_members').select('user_id,joined_at').eq('group_id', selectedId).abortSignal(ac.signal),
+      supabase.from('student_group_bans').select('user_id,banned_at').eq('group_id', selectedId).abortSignal(ac.signal),
+    ]).then(([members, bans]) => {
+      if (ac.signal.aborted) return;
+      if (members.error || bans.error) {
+        setModerationIssue('Could not load group moderation data.');
+        return;
+      }
+      setOwnerMembers(members.data ?? []);
+      setOwnerBans(bans.data ?? []);
+    }).catch(() => {
+      if (!ac.signal.aborted) setModerationIssue('Could not load group moderation data.');
+    }).finally(() => { if (!ac.signal.aborted) setModerationLoading(false); });
+    return () => ac.abort();
+  }, [selectedId, owner, userId, moderationRevision]);
+
+  async function removeGroupMember(memberId: string) {
+    if (!chosen || !owner || !userId || memberId === userId || confirmRemoveUser !== memberId || busy) return;
+    setBusy(true); setActionIssue(''); setNotice('');
+    try {
+      const { error } = await supabase.rpc('remove_student_group_member', {
+        p_group_id: chosen.id, p_user_id: memberId,
+      });
+      if (error) throw error;
+      setNotice('Student removed. They cannot rejoin unless you restore access.');
+      setConfirmRemoveUser(null); setModerationRevision(v => v + 1);
+    } catch {
+      setActionIssue('Could not remove this member. Retry or contact support.');
+    } finally { setBusy(false); }
+  }
+
+  async function restoreGroupMember(memberId: string) {
+    if (!chosen || !owner || !userId || busy) return;
+    setBusy(true); setActionIssue(''); setNotice('');
+    try {
+      const { error } = await supabase.rpc('restore_student_group_member', {
+        p_group_id: chosen.id, p_user_id: memberId,
+      });
+      if (error) throw error;
+      setNotice('Access restored. The student must choose to join again.');
+      setModerationRevision(v => v + 1);
+    } catch {
+      setActionIssue('Could not restore membership eligibility.');
+    } finally { setBusy(false); }
+  }
 
   function openCreate() {
     if (!userId || !profile) { onAccount(); return; }
@@ -239,6 +302,35 @@ export default function GroupWorkspace({ onAccount }: { onAccount: () => void })
         {owner ? <>
           <Text style={styles.ownerLabel}>You created this group.</Text>
           <Action name="Edit group" secondary onPress={() => editGroup(chosen)} />
+          <View style={styles.moderationPanel}>
+            <Text style={styles.subtitle}>Member moderation</Text>
+            <Text style={styles.muted}>Removing a student blocks rejoining until you restore access. Leaving voluntarily does not block rejoining.</Text>
+            {moderationLoading ? <ActivityIndicator accessibilityLabel="Loading group members" /> : null}
+            {moderationIssue ? <Text accessibilityRole="alert" style={styles.issue}>{moderationIssue}</Text> : null}
+            {moderationIssue ? <Action name="Retry group moderation" secondary onPress={() => setModerationRevision(v => v + 1)} /> : null}
+            {!moderationIssue && !moderationLoading ? <>
+              {ownerMembers.filter(member => member.user_id !== userId).length === 0
+                ? <Text style={styles.muted}>No other members yet.</Text> : null}
+              {ownerMembers.filter(member => member.user_id !== userId).map(member =>
+                <View key={member.user_id} style={styles.moderationRow}>
+                  <Text style={styles.muted}>Student · {member.user_id.slice(0, 8)}</Text>
+                  {confirmRemoveUser === member.user_id ? <>
+                    <Text style={styles.issue}>Remove this student and block rejoining?</Text>
+                    <Action name="Confirm remove member" label={`Confirm remove member ${member.user_id}`}
+                      disabled={busy} onPress={() => void removeGroupMember(member.user_id)} />
+                    <Action name="Cancel member removal" secondary
+                      onPress={() => setConfirmRemoveUser(null)} />
+                  </> : <Action name="Remove member" label={`Remove member ${member.user_id}`}
+                    secondary disabled={busy} onPress={() => setConfirmRemoveUser(member.user_id)} />}
+                </View>)}
+              {ownerBans.length ? <Text style={styles.subtitle}>Removed students</Text> : null}
+              {ownerBans.map(ban => <View key={ban.user_id} style={styles.moderationRow}>
+                <Text style={styles.muted}>Student · {ban.user_id.slice(0, 8)} · rejoining blocked</Text>
+                <Action name="Restore access" label={`Restore group access ${ban.user_id}`}
+                  secondary disabled={busy} onPress={() => void restoreGroupMember(ban.user_id)} />
+              </View>)}
+            </> : null}
+          </View>
           {confirmDelete ? <>
             <Text style={styles.issue}>Deleting the group also removes memberships and discussions.</Text>
             <Action name="Confirm delete group" disabled={busy} onPress={() => void deleteGroup()} />
@@ -327,6 +419,8 @@ const styles = StyleSheet.create({
   actionSecondaryText: { color: '#7048FF' },
   actions: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 9 },
   ownerLabel: { color: '#1B8E65', fontSize: 12, fontWeight: '800' },
+  moderationPanel: { borderWidth: 1, borderColor: '#E4E4F4', borderRadius: 15, padding: 13, gap: 9 },
+  moderationRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 8, paddingVertical: 8, borderTopWidth: 1, borderTopColor: '#EDEDF6' },
   disabled: { opacity: 0.45 },
   pressed: { opacity: 0.72 },
   message: { borderWidth: 1, borderColor: '#E9EAF1', backgroundColor: '#FAFAFD', borderRadius: 14, padding: 12, flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
