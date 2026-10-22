@@ -13,7 +13,7 @@
     "web": "expo start --web",
     "typecheck": "tsc --noEmit",
     "export:web": "expo export --platform web --output-dir dist",
-    "test:database": "node --test tests/database.test.mjs",
+    "test:database": "node --test tests/database.test.mjs tests/database-gen3.test.mjs",
     "test:web": "playwright test",
     "check:environment": "node scripts/check-environment.mjs",
     "prestart": "npm run check:environment",
