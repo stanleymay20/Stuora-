@@ -121,7 +121,7 @@ export default function GroupWorkspace({ onAccount }: { onAccount: () => void })
 
   function openCreate() {
     if (!userId || !profile) { onAccount(); return; }
-    setName(''); setDescription(''); setGroupCity(profile.city || 'Berlin'); setGroupTopic('Study');
+    setName(''); setDescription(''); setGroupCity(profile.city?.trim() || ''); setGroupTopic('Study');
     setActionIssue(''); setNotice(''); setShowCreate(true); setEditing(false);
   }
   function editGroup(group: Group) {
@@ -217,7 +217,7 @@ export default function GroupWorkspace({ onAccount }: { onAccount: () => void })
     {notice ? <Text style={styles.success}>{notice}</Text> : null}
     {showCreate ? <View style={styles.panel}>
       <Text style={styles.subtitle}>{editing ? 'Edit your group' : 'Start a student group'}</Text>
-      <Field label="Group name" value={name} onChange={setName} maxLength={80} placeholder="e.g. Berlin Study Circle" />
+      <Field label="Group name" value={name} onChange={setName} maxLength={80} placeholder="e.g. Campus study circle" />
       <Field label="Group description" value={description} onChange={setDescription} maxLength={1000} multiline placeholder="Tell students what you plan to do together" />
       <Field label="Group city" value={groupCity} onChange={setGroupCity} maxLength={120} />
       <Text style={styles.fieldLabel}>Topic</Text>
