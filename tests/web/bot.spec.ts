@@ -91,3 +91,44 @@ test('Stuora Bot interprets German and international thousands separators as eur
     await expect.poll(() => filtered.filter(price => price === expected).length).toBe(1);
   }
 });
+
+test('floating Stuora Bot launcher stays above navigation, opens read-only search, and clears form space', async ({ page }) => {
+  await backend(page);
+  await page.goto('/');
+  const launcher = page.getByRole('button', { name: 'Open Stuora Bot' });
+  await expect(launcher).toHaveCount(1);
+  await expect(launcher).toBeVisible();
+  await expect(page.getByText('SEARCH BETA', { exact: true })).toBeVisible();
+
+  const bounds = await launcher.boundingBox();
+  const viewport = page.viewportSize();
+  expect(bounds).not.toBeNull();
+  expect(viewport).not.toBeNull();
+  // A fixed viewport launcher must not push content sideways or cover bottom navigation.
+  expect(bounds!.x).toBeGreaterThan(viewport!.width / 2);
+  expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(viewport!.width);
+  expect(bounds!.y).toBeGreaterThan(viewport!.height / 2);
+  expect(bounds!.y + bounds!.height).toBeLessThan(viewport!.height);
+  if (test.info().project.name === 'mobile-web') {
+    const nav = await page.getByRole('button', { name: 'Messages', exact: true }).boundingBox();
+    expect(nav).not.toBeNull();
+    expect(bounds!.y + bounds!.height).toBeLessThanOrEqual(nav!.y);
+  }
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+
+  await launcher.click();
+  await expect(page.getByText('Connected search beta · Read-only')).toBeVisible();
+  await expect(launcher).toHaveCount(0);
+  await page.getByRole('button', { name: 'Close Stuora Bot' }).click();
+  await expect(launcher).toBeVisible();
+
+  // Do not overlay compose controls, publish actions or private account inputs.
+  await page.goto('/?stuora=create-housing');
+  await expect(launcher).toHaveCount(0);
+  await page.goto('/?stuora=messages');
+  await expect(launcher).toHaveCount(0);
+  await page.goto('/?stuora=profile');
+  await expect(launcher).toHaveCount(0);
+  await page.goto('/?stuora=groups');
+  await expect(launcher).toBeVisible();
+});
