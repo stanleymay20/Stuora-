@@ -177,3 +177,27 @@ test('Stuora Bot 2.0 blinks independently of hover motion when animations are en
   }, undefined, { timeout: 10000, polling: 'raf' });
   await expect(page.getByRole('button', { name: 'Open Stuora Bot' })).toBeVisible();
 });
+
+
+test('desktop assistant is a bounded side panel; mobile remains a full-screen modal', async ({ page }) => {
+  await backend(page);
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open Stuora Bot' }).click();
+  const panel = page.getByTestId('stuora-bot-panel');
+  await expect(panel).toBeVisible();
+  await expect(page.getByText('Connected search beta · Read-only')).toBeVisible();
+  const bounds = await panel.boundingBox();
+  const viewport = page.viewportSize();
+  expect(bounds).not.toBeNull(); expect(viewport).not.toBeNull();
+  if (test.info().project.name === 'desktop') {
+    expect(bounds!.width).toBeLessThanOrEqual(500);
+    expect(bounds!.x + bounds!.width).toBeGreaterThan(viewport!.width - 45);
+    await expect(page.getByRole('button', { name: 'Close Stuora Bot backdrop' })).toBeVisible();
+    await page.getByRole('button', { name: 'Close Stuora Bot backdrop' }).click({ position: { x: 12, y: 12 } });
+  } else {
+    expect(bounds!.width).toBeGreaterThanOrEqual(viewport!.width - 2);
+    await expect(page.getByRole('button', { name: 'Close Stuora Bot backdrop' })).toHaveCount(0);
+    await page.getByRole('button', { name: 'Close Stuora Bot' }).click();
+  }
+  await expect(page.getByRole('button', { name: 'Open Stuora Bot' })).toBeVisible();
+});
