@@ -331,7 +331,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
-          city?: string
+          city: string
           created_at?: string
           currency?: string
           description?: string
@@ -451,7 +451,7 @@ export type Database = {
           account_kind?: Database["public"]["Enums"]["account_kind"]
           avatar_path?: string | null
           bio?: string
-          city?: string
+          city: string
           created_at?: string
           display_name: string
           id: string
