@@ -3,6 +3,7 @@ import { strict as assert } from "node:assert";
 import { ImageMagick, MagickFormat } from "npm:@imagemagick/magick-wasm@0.0.44";
 import { decodeAndEncode } from "./processor.ts";
 import { inspectImageHeader } from "./imagePreflight.ts";
+import { STAGING_API_URL, TRUSTED_MEDIA_WRITES_COMPILED_IN, trustedMediaWriteGate } from "./releaseGate.ts";
 
 
 const be32=(n:number)=>Uint8Array.of((n>>>24)&255,(n>>>16)&255,(n>>>8)&255,n&255);
@@ -109,4 +110,14 @@ Deno.test("animated WebP and animated PNG headers fail before WASM",()=>{
   assert.throws(()=>inspectImageHeader(vp8x),{code:'ANIMATED'});
   const apng=concat(png.slice(0,33),chunk('acTL',Uint8Array.of(0,0,0,2,0,0,0,0)),png.slice(33));
   assert.throws(()=>inspectImageHeader(apng),{code:'ANIMATED'});
+});
+
+Deno.test("staging Edge build is immutable-disabled regardless of activation secrets",()=>{
+  assert.equal(TRUSTED_MEDIA_WRITES_COMPILED_IN,false);
+  for (const activation of [undefined,"STAGING_APPROVED","PRODUCTION"]) {
+    for (const origin of [undefined,"https://stuora-preview-acez6tl63-stanleymay20s-projects.vercel.app"]) {
+      assert.equal(trustedMediaWriteGate(activation,STAGING_API_URL,origin),false);
+      assert.equal(trustedMediaWriteGate(activation,"https://mljmifovcthvtuquvyzf.supabase.co",origin),false);
+    }
+  }
 });

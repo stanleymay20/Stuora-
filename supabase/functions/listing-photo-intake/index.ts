@@ -4,6 +4,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.117.3";
 import { decodeAndEncode } from "./processor.ts";
+import { STAGING_API_URL, trustedMediaWriteGate } from "./releaseGate.ts";
 import {
   MAX_INPUT_BYTES, MediaRejection, publishListingPhoto, removeListingPhoto, validUuid,
   type TrustedMediaDeps, type MediaRecord,
@@ -13,8 +14,10 @@ const url = Deno.env.get("SUPABASE_URL");
 const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
 const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
 const allowedOrigin = Deno.env.get("STUORA_ALLOWED_WEB_ORIGIN") ?? "";
-if (!url || !anonKey || !serviceKey || !/^https:\/\//.test(allowedOrigin))
-  throw new Error("Missing required trusted media configuration");
+// Missing custom browser-origin configuration is acceptable for DISABLED
+// staging startup; never let it silently authorize mutations.
+if (url !== STAGING_API_URL || !anonKey || !serviceKey)
+  throw new Error("Trusted media is allowed on dedicated Stuora staging only");
 const admin = createClient(url, serviceKey, { auth: { persistSession: false, autoRefreshToken: false } });
 
 function response(status: number, body: object, origin: string | null) {
@@ -97,7 +100,7 @@ Deno.serve(async req => {
   const origin = req.headers.get("Origin");
   // Fail closed until private staging integration tests, durable request quotas
   // and the coordinated client/Storage migration have been approved.
-  if (Deno.env.get("STUORA_TRUSTED_MEDIA_ACTIVATION") !== "STAGING_APPROVED")
+  if (!trustedMediaWriteGate(Deno.env.get("STUORA_TRUSTED_MEDIA_ACTIVATION"), url, allowedOrigin))
     return response(503, { code: "FEATURE_DISABLED", error: "Trusted uploads are not enabled" }, origin);
   if (origin && origin !== allowedOrigin) return response(403, { error: "Unapproved origin" }, null);
   if (req.method === "OPTIONS") return response(200, { ok: true }, origin);
