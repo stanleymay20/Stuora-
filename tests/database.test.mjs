@@ -202,6 +202,30 @@ for (const inheritedGrants of [false, true]) {
       await count('anon', null, `select * from public.marketplace_details where listing_id = '${liveMarket}'`, 0);
       await count('authenticated', a, `select * from public.listings where id = '${liveMarket}'`, 1);
       await deny(a, save(liveMarket, 'marketplace', 'Reopen archived'));
+      // A caller with a valid JWT must not bypass the publishing RPC by
+      // inserting a public housing/marketplace parent without detail rows.
+      await deny(a, `insert into public.listings
+        (owner_id, kind, status, title, city, price_cents)
+        values ('${a}', 'housing', 'active', 'No house details', 'Aachen', 100)`, '23514');
+      await deny(a, `insert into public.listings
+        (owner_id, kind, status, title, city, price_cents)
+        values ('${a}', 'marketplace', 'active', 'No item details', 'Aachen', 100)`, '23514');
+      await deny(a, `insert into public.listings
+        (owner_id, kind, status, title, city, price_cents, currency)
+        values ('${a}', 'housing', 'active', 'Wrong currency', 'Aachen', 100, 'USD')`, '23514');
+      await deny(a, `update public.listings set currency = 'USD'
+        where id = '${house}'`, '23514');
+      // The database owns created_at even if a direct request attempts 2099.
+      const { rows: spoofedDate } = await as('authenticated', a,
+        `insert into public.listings
+          (owner_id, kind, status, title, city, created_at)
+          values ('${a}', 'housing', 'draft', 'Future-pinned draft', 'Aachen', '2099-01-01')
+          returning id, created_at`);
+      assert.equal(spoofedDate.length, 1);
+      assert.ok(new Date(spoofedDate[0].created_at).getUTCFullYear() < 2099); assertions += 2;
+      await deny(a, `update public.listings set status = 'active'
+        where id = '${spoofedDate[0].id}'`, '23514');
+
       // New profile defaults are private and neither profile nor listing can
       // be created with an invented city when callers omit that field.
       const { rows: defaults } = await db.query(`select table_name, column_name, column_default
