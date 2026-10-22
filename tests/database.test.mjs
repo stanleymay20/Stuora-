@@ -161,8 +161,8 @@ for (const inheritedGrants of [false, true]) {
       // Media metadata follows listing visibility and ownership.
       await count('authenticated', a, `insert into public.listing_media (listing_id, object_path, sort_order) values ('${house}', '${a}/${house}/room.jpg', 0) returning *`, 1);
       await count('anon', null, `select * from public.listing_media where listing_id = '${house}'`, 1);
-      await deny(b, `insert into public.listing_media (listing_id, object_path) values ('${house}', '${b}/${house}/attack.jpg')`);
-      await deny(a, `insert into public.listing_media (listing_id, object_path) values ('${house}', '${a}/${job}/wrong-listing.jpg')`);
+      await deny(b, `insert into public.listing_media (listing_id, object_path) values ('${house}', '${b}/${house}/attack.jpg')`, '23514');
+      await deny(a, `insert into public.listing_media (listing_id, object_path) values ('${house}', '${a}/${job}/wrong-listing.jpg')`, '23514');
       await count('authenticated', a, `insert into public.listing_media (listing_id, object_path) values ('${draft}', '${a}/${draft}/draft.jpg') returning *`, 1);
       await count('anon', null, `select * from public.listing_media where listing_id = '${draft}'`, 0);
       await count('authenticated', a, `select * from public.listing_media where listing_id = '${draft}'`, 1);
