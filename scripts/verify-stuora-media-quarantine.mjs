@@ -21,18 +21,22 @@ export function validateInputs(env){
  const key=env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY || env.STUORA_STAGING_PUBLISHABLE_KEY;
  if(typeof key!=='string'||!key.startsWith('sb_publishable_')||key.length<20)
     halt('An explicit Stuora STAGING publishable key is required; no service-role/secret key is accepted');
- return {emails,passwords,key};
+ const listings=[env.STUORA_TEST_STUDENT_A_LISTING_ID,env.STUORA_TEST_STUDENT_B_LISTING_ID];
+ if(!listings.every(id=>typeof id==='string'&&USER_ID.test(id))||listings[0]===listings[1])
+    halt('Two distinct existing staging-owned listing IDs are required');
+ return {emails,passwords,key,listings};
 }
 const readJson=async response=>{
  const body=await response.text();
  try{return JSON.parse(body.slice(0,8192));}catch{return {};}
 };
 export async function probeMediaQuarantine({env,fetchImpl=fetch,uuid=randomUUID}){
- const {emails,passwords,key}=validateInputs(env);
+ const {emails,passwords,key,listings}=validateInputs(env);
  const probe=uuid();
  if(!USER_ID.test(probe))halt('Invalid local test ID');
  // Never follow redirects: 307/308 can replay password or probe bodies off staging.
  const outcomes=[];
+ const accounts=[];
  for(let i=0;i<2;i++){
   const baseHeaders={apikey:key,'Content-Type':'application/json'};
   const login=await fetchImpl(BASE+'/auth/v1/token?grant_type=password',{
@@ -52,10 +56,24 @@ export async function probeMediaQuarantine({env,fetchImpl=fetch,uuid=randomUUID}
   const owner=await readJson(user);
   if(!USER_ID.test(owner.id||'')||owner.is_anonymous===true)
     halt('Dedicated staging account is not a normal verified user');
-  if(outcomes.some(o=>o.userId===owner.id))
+  if(accounts.some(o=>o.owner.id===owner.id))
     halt('Staging accounts must represent two different authenticated users');
   if(owner.email_confirmed_at===null||owner.email_confirmed_at===undefined)
     halt('Staging accounts must have confirmed email addresses');
+
+  // A nonexistent path also fails the OLD owner policy, so it cannot prove quarantine.
+  const fixture=await fetchImpl(BASE+'/rest/v1/listings?id=eq.'+listings[i]+'&select=id,owner_id,kind,status',{
+   method:'GET',redirect:'error',headers:authHeaders,signal:AbortSignal.timeout(20000),
+  });
+  const rows=await readJson(fixture);
+  if(!fixture.ok||!Array.isArray(rows)||rows.length!==1||rows[0].id!==listings[i]||
+     rows[0].owner_id!==owner.id||!['housing','marketplace'].includes(rows[0].kind)||
+     rows[0].status!=='active')halt('Existing active staging listing must belong to its test account');
+  accounts.push({owner,authHeaders,listing:listings[i]});
+ }
+ // Resolve BOTH accounts and fixtures before any media write probes.
+ for(let i=0;i<accounts.length;i++){
+  const {owner,authHeaders,listing:storageListing}=accounts[i];
 
   // Unique nonexistent listing gives the metadata endpoint no possible
   // legitimate insert target. The expected result is specifically 42501,
@@ -75,7 +93,8 @@ export async function probeMediaQuarantine({env,fetchImpl=fetch,uuid=randomUUID}
   // One tiny, constant safe pixel: no identifying data. A successful Storage
   // response is a stop-ship security failure; attempt prompt cleanup in that
   // exceptional case only, without hiding the primary failure.
-  const storage=await fetchImpl(BASE+'/storage/v1/object/listing-media/'+path,{
+  const storagePath=owner.id+'/'+storageListing+'/stuora-denial-'+probe+'-'+i+'.png';
+  const storage=await fetchImpl(BASE+'/storage/v1/object/listing-media/'+storagePath,{
    method:'POST',redirect:'error',
    headers:{...authHeaders,'Content-Type':'image/png','x-upsert':'false'},
    body:PIXEL,signal:AbortSignal.timeout(20000),
@@ -85,7 +104,7 @@ export async function probeMediaQuarantine({env,fetchImpl=fetch,uuid=randomUUID}
    try{
     await fetchImpl(BASE+'/storage/v1/object/listing-media',{
      method:'DELETE',redirect:'error',headers:{...authHeaders,'Content-Type':'application/json'},
-     body:JSON.stringify({prefixes:[path]}),signal:AbortSignal.timeout(10000),
+     body:JSON.stringify({prefixes:[storagePath]}),signal:AbortSignal.timeout(10000),
     });
    }catch{}
    halt('P0 FAIL: direct listing-photo Storage upload unexpectedly succeeded. Check for orphaned object in staging.');
@@ -95,7 +114,7 @@ export async function probeMediaQuarantine({env,fetchImpl=fetch,uuid=randomUUID}
      !/row.level|security policy|permission|not.authorized|unauthorized|access.denied/i.test(reason))
     halt('P0 FAIL: Storage rejection was not an RLS/authorization denial for account '+(i+1));
 
-  const publicLookup=await fetchImpl(BASE+'/storage/v1/object/public/listing-media/'+path,{
+  const publicLookup=await fetchImpl(BASE+'/storage/v1/object/public/listing-media/'+storagePath,{
    method:'GET',redirect:'error',headers:{apikey:key},signal:AbortSignal.timeout(20000),
   });
   if(publicLookup.ok||publicLookup.status!==404)

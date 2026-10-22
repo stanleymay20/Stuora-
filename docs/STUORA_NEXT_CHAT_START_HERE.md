@@ -1,5 +1,11 @@
 # STUORA — START HERE IN A NEW CHAT
 
+## 2026-10-23 — Storage denial fixture correction
+- The earlier nonexistent-listing Storage probe could also be rejected by the legacy owner policy; it could not independently demonstrate quarantine. No real acceptance had run or passed.
+- The runner now requires distinct `STUORA_TEST_STUDENT_A_LISTING_ID` and `STUORA_TEST_STUDENT_B_LISTING_ID`: existing active Housing/Marketplace listings owned by the corresponding dedicated staging accounts. Both identities and listing fixtures are checked through authenticated HTTP before any media write probes. Storage upload/public-lookup/exceptional-cleanup use the verified owned listing paths. Metadata grant-denial retains a random nonexistent listing to avoid inserting valid metadata unexpectedly.
+- Source regression tests cover absent/wrong-owner/wrong-kind/closed fixtures, both-account preflight, distinct tokens, and verified Storage path selection. These are mocked/loopback checks, NOT hosted acceptance. No staging or production mutation was performed.
+- Previous source `c137c23a87c7fbd4ce533dd8aaa0a9583586df07` passed all three jobs in Actions #39856033965 and its exact preview is READY. This successor requires its own CI. PR #23 remains draft; internal alpha; real two-account acceptance pending secure operator credentials, valid fixtures and opt-in.
+
 ## 2026-10-22 continuation — redirect-safe acceptance probes
 - Reverified base `f66a03718c2c5c46173deb00b8952ac899c60d14`: PR #23 still draft; Actions #39843246492 has `verify`, `rls-authorization`, and `trusted-media-edge` SUCCESS. Exact-base preview `stuora-preview-cyvev3bdc-stanleymay20s-projects.vercel.app` READY. These identities predate this successor commit; recheck successor CI/deployment.
 - Staging readback: metadata authenticated INSERT=false, metadata rows=0, listing-media objects=0; quarantine migration `20261022191235` present. Storage policies retain owner SELECT/DELETE and avatar policies, with no listing-media INSERT/UPDATE policy. Edge intake remains v2, ACTIVE, verify_jwt=true; no redeployment or activation performed.

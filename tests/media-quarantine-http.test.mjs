@@ -12,12 +12,14 @@ const okEnv={
  STUORA_TEST_STUDENT_A_PASSWORD:'fixture-password-a',
  STUORA_TEST_STUDENT_B_PASSWORD:'fixture-password-b',
  STUORA_STAGING_PUBLISHABLE_KEY:key,
+ STUORA_TEST_STUDENT_A_LISTING_ID:'20000000-0000-4000-8000-000000000001',
+ STUORA_TEST_STUDENT_B_LISTING_ID:'20000000-0000-4000-8000-000000000002',
 };
 const ids=['10000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000002'];
 const listingId='10000000-0000-4000-8000-000000000099';
 const sampleId='10000000-0000-4000-8000-000000000088';
 const tkn=['eyJ.owned-fixture-one.sig','eyJ.owned-fixture-two.sig'];
-function fixture({metaCode=42501,storageStatus=403,storageMessage='new row violates row-level security policy',duplicate=false,successUpload=false}={}){
+function fixture({metaCode=42501,storageStatus=403,storageMessage='new row violates row-level security policy',duplicate=false,successUpload=false,invalidListing=false}={}){
  const hits=[];
  const respond=(status,obj)=>({ok:status>=200&&status<300,status,text:async()=>JSON.stringify(obj)});
  const impl=async (url,opts)=>{
@@ -28,6 +30,7 @@ function fixture({metaCode=42501,storageStatus=403,storageMessage='new row viola
   const idx=Math.max(0,signIns-1);
   if(u.pathname==='/auth/v1/token')return respond(200,{access_token:tkn[idx]});
   if(u.pathname==='/auth/v1/user')return respond(200,{id:ids[duplicate?0:idx],email_confirmed_at:'2026-10-01T10:00:00Z'});
+  if(u.pathname==='/rest/v1/listings')return respond(200,invalidListing?[]:[{id:u.searchParams.get('id').slice(3),owner_id:ids[idx],kind:'housing',status:'active'}]);
   if(u.pathname==='/rest/v1/listing_media')return respond(metaCode===42501?403:409,{code:String(metaCode),message:'forbidden'});
   if(u.pathname.startsWith('/storage/v1/object/public/'))return respond(404,{error:'not_found'});
   if(u.pathname==='/storage/v1/object/listing-media')return respond(200,{message:'removed'});
@@ -95,5 +98,46 @@ test('native fetch rejects 307/308 without replaying the fixture password body',
    server.closeAllConnections();
    await new Promise(resolve=>server.close(resolve));
   }
+ }
+});
+
+test('missing or invalid listing fixtures stop before all media write probes',async()=>{
+ assert.throws(()=>validateInputs({...okEnv,STUORA_TEST_STUDENT_A_LISTING_ID:undefined}),/listing IDs/);
+ for(const invalidAccount of [0,1]){
+  const m=fixture();let users=0;
+  await assert.rejects(probeMediaQuarantine({env:okEnv,uuid:()=>listingId,
+   fetchImpl:async(url,opts)=>{
+    if(url.includes('/auth/v1/user'))users++;
+    if(url.includes('/rest/v1/listings?')&&users===invalidAccount+1)
+      return {ok:true,status:200,text:async()=>JSON.stringify([])};
+    return m.impl(url,opts);
+   }}),/listing must belong/);
+  assert.equal(m.hits.filter(h=>h.url.includes('/storage/')||h.url.endsWith('/rest/v1/listing_media')).length,0);
+ }
+});
+test('Storage probes use verified owned listings that the legacy policy could accept',async()=>{
+ const m=fixture();await probeMediaQuarantine({env:okEnv,fetchImpl:m.impl,uuid:()=>listingId});
+ const writes=m.hits.filter(h=>h.method==='POST'&&h.url.includes('/storage/'));
+ assert.equal(writes.length,2);
+ for(let i=0;i<2;i++){
+  const id=okEnv[i===0?'STUORA_TEST_STUDENT_A_LISTING_ID':'STUORA_TEST_STUDENT_B_LISTING_ID'];
+  assert.ok(writes[i].url.includes('/'+ids[i]+'/'+id+'/'));
+  assert.equal(writes[i].headers.Authorization,'Bearer '+tkn[i]);
+ }
+ const firstWrite=m.hits.findIndex(h=>h.url.endsWith('/rest/v1/listing_media'));
+ assert.equal(m.hits.slice(0,firstWrite).filter(h=>h.url.includes('/rest/v1/listings?')).length,2);
+});
+
+test('wrong-owner, archived and unsupported fixture listings are rejected without probes',async()=>{
+ for(const patch of [{owner_id:ids[1]},{status:'closed'},{kind:'job'},{id:listingId}]){
+  const m=fixture();
+  await assert.rejects(probeMediaQuarantine({env:okEnv,uuid:()=>listingId,
+   fetchImpl:async(url,opts)=>{
+    if(url.includes('/rest/v1/listings?'))return {ok:true,status:200,text:async()=>JSON.stringify([
+     {id:okEnv.STUORA_TEST_STUDENT_A_LISTING_ID,owner_id:ids[0],kind:'housing',status:'active',...patch}
+    ])};
+    return m.impl(url,opts);
+   }}),/listing must belong/);
+  assert.equal(m.hits.filter(h=>h.url.includes('/storage/')||h.url.endsWith('/rest/v1/listing_media')).length,0);
  }
 });
