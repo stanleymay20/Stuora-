@@ -56,13 +56,13 @@ async function database(inheritedGrants) {
   for (const f of files) await db.exec(readFileSync(new URL(`../supabase/migrations/${f}`, import.meta.url), 'utf8'));
   await db.exec(`
     insert into auth.users values ('${a}'), ('${b}'), ('${c}');
-    insert into public.profiles (id, display_name, is_discoverable)
-      values ('${a}', 'Alice', true), ('${b}', 'Bob', true), ('${c}', 'Private Charlie', false);
-    insert into public.listings (id, owner_id, kind, status, title) values
-      ('${house}', '${a}', 'housing', 'active', 'Room in Berlin'),
-      ('${draft}', '${a}', 'marketplace', 'draft', 'Private draft'),
-      ('${job}', '${a}', 'job', 'active', 'Student job'),
-      ('${trip}', '${a}', 'trip', 'active', 'Prague trip');
+    insert into public.profiles (id, display_name, city, is_discoverable)
+      values ('${a}', 'Alice', 'Aachen', true), ('${b}', 'Bob', 'Aachen', true), ('${c}', 'Private Charlie', 'Aachen', false);
+    insert into public.listings (id, owner_id, kind, status, title, city) values
+      ('${house}', '${a}', 'housing', 'active', 'Room for students', 'Aachen'),
+      ('${draft}', '${a}', 'marketplace', 'draft', 'Private draft', 'Aachen'),
+      ('${job}', '${a}', 'job', 'active', 'Student job', 'Aachen'),
+      ('${trip}', '${a}', 'trip', 'active', 'Prague trip', 'Aachen');
     insert into public.housing_details (listing_id, housing_type, rent_cents) values ('${house}', 'room', 62000);
     insert into public.marketplace_details (listing_id) values ('${draft}');
     insert into public.trip_details (listing_id, destination, starts_at, capacity) values ('${trip}', 'Prague', now(), 2);
@@ -202,6 +202,27 @@ for (const inheritedGrants of [false, true]) {
       await count('anon', null, `select * from public.marketplace_details where listing_id = '${liveMarket}'`, 0);
       await count('authenticated', a, `select * from public.listings where id = '${liveMarket}'`, 1);
       await deny(a, save(liveMarket, 'marketplace', 'Reopen archived'));
+      // New profile defaults are private and neither profile nor listing can
+      // be created with an invented city when callers omit that field.
+      const { rows: defaults } = await db.query(`select table_name, column_name, column_default
+        from information_schema.columns where table_schema='public'
+        and (table_name='profiles' and column_name in ('city','is_discoverable')
+             or table_name='listings' and column_name='city')`);
+      assert.equal(defaults.length, 3);
+      assert.equal(defaults.find(row => row.table_name === 'profiles' && row.column_name === 'is_discoverable')?.column_default, 'false');
+      assert.equal(defaults.find(row => row.table_name === 'profiles' && row.column_name === 'city')?.column_default, null);
+      assert.equal(defaults.find(row => row.table_name === 'listings' && row.column_name === 'city')?.column_default, null);
+      assertions += 4;
+      const newId = id(99);
+      await db.exec(`insert into auth.users (id) values ('${newId}')`);
+      const { rows: privateNew } = await as('authenticated', newId,
+        `insert into public.profiles (id, display_name, city) values ('${newId}', 'Opt In Only', 'Köln') returning is_discoverable`);
+      assert.equal(privateNew[0].is_discoverable, false); assertions++;
+      const { rows: preservedOptIn } = await as('authenticated', b,
+        `select is_discoverable from public.profiles where id='${b}'`);
+      assert.equal(preservedOptIn[0].is_discoverable, true); assertions++;
+      await deny(newId, `insert into public.listings (owner_id, kind, title) values ('${newId}', 'housing', 'No city')`, '23502');
+      await deny(newId, `insert into public.listings (owner_id, kind, title, city) values ('${newId}', 'housing', 'Wrong city', null)`, '23502');
       const { rows: rls } = await db.query("select relname from pg_class join pg_namespace on pg_namespace.oid = relnamespace where nspname = 'public' and relkind = 'r' and not relrowsecurity");
       assert.deepEqual(rls, []); assertions++;
       t.diagnostic(`${assertions} authorization assertions passed against Postgres`);
