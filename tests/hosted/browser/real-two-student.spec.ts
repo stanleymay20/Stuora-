@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type BrowserContext, type Page } from '@playwright/test';
 
 /**
  * Never run automatically. Requires two separately owned/verified staging accounts,
@@ -14,6 +14,36 @@ const bPassword = process.env.STUORA_TEST_STUDENT_B_PASSWORD || '';
 const ready = approved && aEmail.includes('@') && bEmail.includes('@') &&
   aEmail.toLowerCase() !== bEmail.toLowerCase() && aPassword.length >= 8 && bPassword.length >= 8;
 const stamp = Date.now().toString(36);
+const STAGING_BACKEND_HOST = 'uptjcspizukpjcoayhtn.supabase.co';
+
+/**
+ * Fail closed if an incorrectly configured preview ever contacts a different
+ * Supabase project. The guard runs BEFORE login or fixture creation and never
+ * logs requests, headers, tokens, passwords, or email addresses.
+ *
+ * No mocked responses: allowed requests continue to the real staging backend.
+ * This is a security boundary check, not a replacement for RLS tests.
+ */
+async function restrictToStagingBackend(context: BrowserContext) {
+  let stagingRequests = 0;
+  const rejectedHosts = new Set<string>();
+  await context.route('**/*', async route => {
+    const hostname = new URL(route.request().url()).hostname.toLowerCase();
+    if (hostname.endsWith('.supabase.co')) {
+      if (hostname !== STAGING_BACKEND_HOST) {
+        rejectedHosts.add(hostname);
+        await route.abort('blockedbyclient');
+        return;
+      }
+      stagingRequests += 1;
+    }
+    await route.continue();
+  });
+  return () => {
+    expect([...rejectedHosts], 'All Supabase browser requests must target dedicated Stuora staging').toEqual([]);
+    expect(stagingRequests, 'No dedicated staging backend requests observed').toBeGreaterThan(0);
+  };
+}
 
 // React Native Web's accessible Image may be a wrapper rather than an HTML <img>.
 // Verify the rendered source URL, actual Storage response and browser decoding.
@@ -57,12 +87,23 @@ async function signIn(page: Page, email: string, password: string, displayName: 
     await page.getByRole('button', { name: 'Create profile', exact: true }).click();
     await expect(page.getByText('Your profile has been saved.')).toBeVisible();
   }
+  // Actual authenticated persistence, not just an in-memory profile or mock.
+  await expect(page.getByRole('button', { name: 'Save profile', exact: true })).toBeVisible();
+  const persistedName = await name.inputValue();
+  expect(persistedName.trim().length).toBeGreaterThan(1);
+  await page.reload();
+  await expect(page.getByText('Your Stuora Passport', { exact: true })).toBeVisible();
+  await expect(page.getByLabel('Display name')).toHaveValue(persistedName);
+  await expect(page.getByRole('button', { name: 'Save profile', exact: true })).toBeVisible();
 }
 
 test('two independent staging accounts complete actual listing, messaging and group interactions', async ({ browser }) => {
   test.skip(!ready, 'Requires explicit staging-write approval and two verified staging account credentials in local environment.');
   const ownerContext = await browser.newContext();
   const studentContext = await browser.newContext();
+  // Set guards on both independent browser contexts BEFORE any authenticated activity.
+  const assertOwnerStaging = await restrictToStagingBackend(ownerContext);
+  const assertStudentStaging = await restrictToStagingBackend(studentContext);
   const owner = await ownerContext.newPage();
   const student = await studentContext.newPage();
   const listingTitle = 'STAGING TEST Housing ' + stamp;
@@ -78,6 +119,8 @@ test('two independent staging accounts complete actual listing, messaging and gr
     // No route interception: all HTTP calls go to the real dedicated staging backend.
     await signIn(owner, aEmail, aPassword, 'Staging Test Student A');
     await signIn(student, bEmail, bPassword, 'Staging Test Student B');
+    assertOwnerStaging();
+    assertStudentStaging();
 
     await owner.goto(STAGING + '/?stuora=create-housing');
     await owner.getByRole('button', { name: 'Post Housing', exact: true }).click();
@@ -153,6 +196,8 @@ test('two independent staging accounts complete actual listing, messaging and gr
     await expect(owner.getByTestId('student-group-message').getByText(groupText, { exact: true })).toBeVisible();
     await student.getByRole('button', { name: 'Leave group' }).click();
     await expect(student.getByLabel('Message to group')).toHaveCount(0);
+    assertOwnerStaging();
+    assertStudentStaging();
   } finally {
     // Best-effort cleanup. All records are clearly marked staging-only; failures
     // remain visible for investigation rather than falsely claiming deletion.
