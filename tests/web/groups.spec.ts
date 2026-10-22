@@ -4,6 +4,7 @@ import { account, backend, session, signin } from './account-fixtures';
 const ownerId = session().user.id;
 const groupId = '00000000-0000-0000-0000-000000000091';
 const messageId = '00000000-0000-0000-0000-000000000092';
+const memberId = '00000000-0000-0000-0000-000000000093';
 
 test('students can discover groups anonymously but creating requires a completed account', async ({ page }) => {
   await backend(page);
@@ -26,6 +27,8 @@ test('a real saved group is discoverable, editable and discussed through its con
   const groups: Group[] = [];
   const messages: Message[] = [];
   const memberIds = new Set<string>();
+  const roster = new Set<string>([ownerId, memberId]);
+  const removed = new Set<string>();
   const now = new Date().toISOString();
   let creation = 0;
   let sends = 0;
@@ -60,7 +63,24 @@ test('a real saved group is discoverable, editable and discussed through its con
       memberIds.delete(url.searchParams.get('group_id')?.replace('eq.', '') || '');
       return route.fulfill({ status: 204 });
     }
+    if (url.searchParams.has('group_id')) {
+      return route.fulfill({ json: [...roster].map(id => ({ user_id: id, joined_at: now })) });
+    }
     return route.fulfill({ json: [...memberIds].map(id => ({ group_id: id })) });
+  });
+  await page.route('**/rest/v1/student_group_bans?*', async route =>
+    route.fulfill({ json: [...removed].map(id => ({ user_id: id, banned_at: now })) }));
+  await page.route('**/rest/v1/rpc/remove_student_group_member', async route => {
+    const args = route.request().postDataJSON();
+    expect(args).toEqual({ p_group_id: groupId, p_user_id: memberId });
+    roster.delete(memberId); removed.add(memberId);
+    return route.fulfill({ json: null });
+  });
+  await page.route('**/rest/v1/rpc/restore_student_group_member', async route => {
+    const args = route.request().postDataJSON();
+    expect(args).toEqual({ p_group_id: groupId, p_user_id: memberId });
+    removed.delete(memberId);
+    return route.fulfill({ json: null });
   });
   await page.route('**/rest/v1/rpc/create_student_group', async route => {
     creation++;
@@ -105,6 +125,20 @@ test('a real saved group is discoverable, editable and discussed through its con
   await expect.poll(() => creation).toBe(1);
   await expect(page.getByText('Berlin Physics Study Group', { exact: true })).toBeVisible();
   await expect(page.getByText('You created this group.', { exact: true })).toBeVisible();
+  // Owner-only moderation has a confirmation step, blocks rejoining until
+  // restored, and does not silently re-enrol a previously removed student.
+  await expect(page.getByRole('button', { name: `Remove member ${memberId}` })).toBeVisible();
+  await page.getByRole('button', { name: `Remove member ${memberId}` }).click();
+  await expect(page.getByText('Remove this student and block rejoining?')).toBeVisible();
+  await page.getByRole('button', { name: 'Cancel member removal' }).click();
+  await expect(page.getByText('Remove this student and block rejoining?')).toHaveCount(0);
+  await page.getByRole('button', { name: `Remove member ${memberId}` }).click();
+  await page.getByRole('button', { name: `Confirm remove member ${memberId}` }).click();
+  await expect(page.getByText('Student removed. They cannot rejoin unless you restore access.')).toBeVisible();
+  await expect(page.getByRole('button', { name: `Restore group access ${memberId}` })).toBeVisible();
+  await page.getByRole('button', { name: `Restore group access ${memberId}` }).click();
+  await expect(page.getByText('Access restored. The student must choose to join again.')).toBeVisible();
+  await expect(page.getByRole('button', { name: `Restore group access ${memberId}` })).toHaveCount(0);
   await page.getByLabel('Message to group').fill('Tuesday at six in the library');
   await page.getByRole('button', { name: 'Send group message' }).click();
   await expect.poll(() => sends).toBe(1);
