@@ -11,7 +11,8 @@ set search_path = ''
 as $$
 declare v_count integer;
 begin
-  if tg_op = 'UPDATE' and new.listing_id = old.listing_id then
+  if tg_op = 'UPDATE' and new.listing_id = old.listing_id
+     and new.object_path = old.object_path then
     return new;
   end if;
   -- The service-role Edge writer bypasses table RLS, so trigger-level
@@ -45,7 +46,7 @@ $$;
 
 drop trigger if exists listing_media_six_photo_guard on public.listing_media;
 create trigger listing_media_six_photo_guard
-before insert or update of listing_id on public.listing_media
+before insert or update of listing_id, object_path on public.listing_media
 for each row execute function private.guard_listing_media_count();
 
 revoke all on function private.guard_listing_media_count()
