@@ -11,7 +11,7 @@ const ab = id(21), bc = id(22);
 async function database(inheritedGrants) {
   const db = new PGlite();
   await db.exec(`
-    create role anon; create role authenticated;
+    create role anon; create role authenticated; create role service_role;
     create schema auth;
     create table auth.users (id uuid primary key);
     create function auth.uid() returns uuid language sql stable as
@@ -46,6 +46,7 @@ async function database(inheritedGrants) {
     $$;
 
     grant usage on schema public, auth, storage to anon, authenticated;
+    grant usage on schema public to service_role;
     grant execute on function auth.uid() to anon, authenticated;
     grant execute on function storage.foldername(text), storage.filename(text) to anon, authenticated;
     grant select, insert, update, delete on storage.objects to authenticated;
@@ -177,6 +178,19 @@ for (const inheritedGrants of [false, true]) {
       await deny(a,
         `insert into public.listing_media (listing_id,object_path,sort_order)
          values ('${house}','${a}/${house}/seventh.jpg',6)`, '23514');
+      // A privileged service writer must obey the exact path and quota too.
+      await assert.rejects(db.query(
+        `insert into public.listing_media(listing_id,object_path,sort_order)
+         values ('${house}','${b}/${house}/privileged.jpg',6)`), e => e.code === '23514');
+      assertions++;
+      await assert.rejects(db.query(
+        `insert into public.listing_media(listing_id,object_path,sort_order)
+         values ('${house}','${a}/${house}/nested/escape.jpg',6)`), e => e.code === '23514');
+      assertions++;
+      await assert.rejects(db.query(
+        `insert into public.listing_media(listing_id,object_path,sort_order)
+         values ('${house}','${a}/${house}/seventh-admin.jpg',6)`), e => e.code === '23514');
+      assertions++;
       await count('authenticated', a, `select * from public.listing_media where listing_id='${house}'`, 6);
       await count('authenticated', a,
         `delete from public.listing_media where listing_id='${house}' and sort_order=3 returning id`, 1);
@@ -184,6 +198,34 @@ for (const inheritedGrants of [false, true]) {
         `insert into public.listing_media (listing_id,object_path,sort_order)
          values ('${house}','${a}/${house}/replacement.jpg',3) returning id`, 1);
 
+
+      // Upload-attempt admission is service-only and durable across separate
+      // RPC transactions even if no upload or metadata INSERT follows.
+      const { rows: attemptGrants } = await db.query(`select
+        has_function_privilege('anon','public.consume_listing_photo_attempt(uuid,uuid)','EXECUTE') as anon_allowed,
+        has_function_privilege('authenticated','public.consume_listing_photo_attempt(uuid,uuid)','EXECUTE') as student_allowed,
+        has_function_privilege('service_role','public.consume_listing_photo_attempt(uuid,uuid)','EXECUTE') as server_allowed`);
+      assert.deepEqual(attemptGrants[0], { anon_allowed: false, student_allowed: false, server_allowed: true });
+      assertions++;
+      await deny(a, `select public.consume_listing_photo_attempt('${a}','${house}')`, '42501');
+      for (let i=0; i<10; i++) {
+        const { rows } = await as('service_role', a,
+          `select public.consume_listing_photo_attempt('${a}','${house}') as allowed`);
+        assert.equal(rows[0].allowed, true); assertions++;
+      }
+      const { rows: exhausted } = await as('service_role', a,
+        `select public.consume_listing_photo_attempt('${a}','${house}') as allowed`);
+      assert.equal(exhausted[0].allowed, false); assertions++;
+      const { rows: differentListing } = await as('service_role', a,
+        `select public.consume_listing_photo_attempt('${a}','${draft}') as allowed`);
+      assert.equal(differentListing[0].allowed, false); assertions++;
+      const { rows: anotherStudent } = await as('service_role', b,
+        `select public.consume_listing_photo_attempt('${b}','${house}') as allowed`);
+      assert.equal(anotherStudent[0].allowed, true); assertions++;
+      const { rows: persistedAttempts } = await db.query(
+        `select used from private.listing_photo_attempt_windows
+         where scope='student_minute' and scope_key='${a}'`);
+      assert.equal(persistedAttempts[0].used, 12); assertions++;
 
       // Hosted Supabase owns these tables; the harness grants authenticated CRUD
       // so the same storage.objects policies can be exercised locally.

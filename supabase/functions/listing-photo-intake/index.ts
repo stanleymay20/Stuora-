@@ -169,6 +169,18 @@ Deno.serve(async req => {
       await removeListingPhoto(deps(), user.id, body.listingId, body.photoId);
       return response(200, { ok: true }, origin);
     }
+    // This RPC is a separate committed database request. Unlike a limiter
+    // called within the eventual metadata INSERT, its counters survive failed
+    // multipart parsing, decoder rejection and storage/metadata errors.
+    const routeListingId = new URL(req.url).searchParams.get("listingId");
+    const { data: attemptAllowed, error: attemptError } = await admin.rpc("consume_listing_photo_attempt", {
+      p_student: user.id,
+      p_listing: validUuid(routeListingId) ? routeListingId : null,
+    });
+    if (attemptError || typeof attemptAllowed !== "boolean")
+      throw new MediaRejection("LIMIT_UNAVAILABLE", 503, "Photo upload temporarily unavailable");
+    if (!attemptAllowed)
+      throw new MediaRejection("UPLOAD_RATE_LIMIT", 429, "Too many photo uploads. Try again later");
     const declared = Number(req.headers.get("content-length") ?? 0);
     if (declared > MAX_INPUT_BYTES + 32_768)
       throw new MediaRejection("SIZE_LIMIT", 413, "Photo exceeds the 5 MB upload limit");
@@ -178,7 +190,9 @@ Deno.serve(async req => {
     const form = await boundedMultipart(req, MAX_INPUT_BYTES + 32_768);
     const listingId = form.get("listingId");
     const file = form.get("file");
-    if (!validUuid(listingId) || !(file instanceof File) || file.size > MAX_INPUT_BYTES)
+    if (!validUuid(listingId) || !validUuid(routeListingId) ||
+      listingId.toLowerCase() !== routeListingId.toLowerCase() ||
+      !(file instanceof File) || file.size > MAX_INPUT_BYTES)
       throw new MediaRejection("INVALID_UPLOAD", 400, "Invalid listing or photo");
     const result = await publishListingPhoto(deps(), user.id, listingId, new Uint8Array(await file.arrayBuffer()),
       () => crypto.randomUUID());
