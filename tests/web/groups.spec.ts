@@ -91,6 +91,7 @@ test('a real saved group is discoverable, editable and discussed through its con
   await account(page); await signin(page);
   await expect(page.getByLabel('Display name')).toBeVisible();
   await page.getByLabel('Display name').fill('Alice Student');
+  await page.getByLabel('City', { exact: true }).fill('Potsdam');
   await page.getByRole('button', { name: 'Create profile', exact: true }).click();
   await expect(page.getByText('Your profile has been saved.')).toBeVisible();
   await page.goto('/?stuora=groups');
