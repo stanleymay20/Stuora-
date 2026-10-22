@@ -394,6 +394,8 @@ for (const inheritedGrants of [false, true]) {
         `delete from public.student_group_bans where group_id='${groupId}'`), e => e.code === '42501');
       await assert.rejects(as('authenticated', b,
         `insert into public.student_group_members(group_id,user_id) values ('${groupId}','${b}')`), e => e.code === '42501');
+      await assert.rejects(as('authenticated', b,
+        `select public.send_student_group_message('${groupId}','Attempt after removal')`), e => e.code === '42501');
       await expectCount('authenticated', b, `select * from public.student_group_messages where id = '${messageId}'`, 0);
       await expectCount('authenticated', b, `select * from public.student_group_messages where id = '${otherMessageId}'`, 1);
       await expectCount('authenticated', b, 'select * from public.student_group_messages', 1);
