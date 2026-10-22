@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import * as ImagePicker from 'expo-image-picker';
+import { sanitizeListingImage } from './mediaSanitizer';
 import { ActivityIndicator, Image, Platform, Pressable, StyleSheet, Switch, Text, TextInput, useWindowDimensions, View } from 'react-native';
 import { useAuth } from '../account/AuthProvider';
 import { supabase } from '../backend/supabase';
@@ -19,7 +20,6 @@ type Draft = { title: string; description: string; city: string; price: string; 
 const PAGE_SIZE = 24;
 const MAX_PHOTOS = 6;
 const MAX_PHOTO_BYTES = 5 * 1024 * 1024;
-const ALLOWED_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
 const blank = (): Draft => ({ title: '', description: '', city: '', price: '', housingType: 'room', furnished: false, bills: false, condition: 'good' });
 const money = (cents: number | null) => `€${((cents ?? 0) / 100).toFixed(2)}`;
 
@@ -29,17 +29,6 @@ function normalizeItem(raw: unknown): Item {
 }
 function mediaUrl(path: string) {
   return supabase.storage.from('listing-media').getPublicUrl(path).data.publicUrl;
-}
-function imageMime(asset: ImagePicker.ImagePickerAsset, responseType: string | null) {
-  const direct = asset.mimeType?.toLowerCase();
-  if (direct) return direct;
-  const header = responseType?.split(';')[0]?.trim().toLowerCase();
-  if (header) return header;
-  const name = (asset.fileName ?? asset.uri).toLowerCase();
-  if (/\.jpe?g($|\?)/.test(name)) return 'image/jpeg';
-  if (/\.png($|\?)/.test(name)) return 'image/png';
-  if (/\.webp($|\?)/.test(name)) return 'image/webp';
-  return '';
 }
 function extensionFor(mime: string) {
   return mime === 'image/png' ? 'png' : mime === 'image/webp' ? 'webp' : 'jpg';
@@ -192,11 +181,11 @@ export default function ListingWorkspace({ category, mode = 'browse', search = '
       if (!response.ok && Platform.OS === 'web') throw new Error('Could not read selected image');
       const bytes = await response.arrayBuffer();
       if (bytes.byteLength > MAX_PHOTO_BYTES) return setActionError('Choose an image no larger than 5 MB.');
-      const mime = imageMime(asset, response.headers.get('content-type'));
-      if (!ALLOWED_IMAGE_TYPES.has(mime)) return setActionError('Choose a JPEG, PNG or WebP image.');
+      // Validate the true file format and strip EXIF/GPS/XMP before uploading.
+      const { bytes: cleanBytes, mime } = sanitizeListingImage(bytes);
       const token = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
       const path = `${userId}/${selected.id}/${token}.${extensionFor(mime)}`;
-      const { error: uploadIssue } = await supabase.storage.from('listing-media').upload(path, bytes, { contentType: mime, upsert: false, cacheControl: '3600' });
+      const { error: uploadIssue } = await supabase.storage.from('listing-media').upload(path, cleanBytes, { contentType: mime, upsert: false, cacheControl: '3600' });
       if (uploadIssue) throw uploadIssue;
       const nextSort = selected.listing_media.reduce((max, media) => Math.max(max, media.sort_order), -1) + 1;
       const { data: inserted, error: metadataIssue } = await (supabase.from('listing_media') as any)
@@ -210,8 +199,10 @@ export default function ListingWorkspace({ category, mode = 'browse', search = '
       const updated = normalizeItem({ ...selected, listing_media: [...selected.listing_media, inserted] });
       replaceItem(updated);
       setNotice('Photo uploaded and attached to this listing.');
-    } catch {
-      setActionError('Could not upload the photo. Your listing was not changed. Check the image and connection, then retry.');
+    } catch (err) {
+      setActionError(err instanceof Error && /photo|image|JPEG|PNG|WebP|EXIF|animated/i.test(err.message)
+        ? err.message
+        : 'Could not upload the photo. Your listing was not changed. Check the image and connection, then retry.');
     } finally { setBusy(false); }
   }
 
@@ -268,7 +259,7 @@ export default function ListingWorkspace({ category, mode = 'browse', search = '
 
     {form ? initializing || profileLoading ? <ActivityIndicator accessibilityLabel="Loading account" /> : !session || !profile || profileError ? <View style={s.card}><Text style={s.text}>Sign in and complete your profile to publish a listing.</Text><Button title="Open account" onPress={onAccount} /></View> : <View style={s.card}>
       <Text style={s.title}>{editing ? 'Edit listing' : `Publish ${category.toLowerCase()} listing`}</Text>
-      <Text style={s.hint}>Publish the listing first, then attach up to six JPEG, PNG or WebP photos (5 MB each).</Text>
+      <Text style={s.hint}>Publish first, then attach up to six JPEG, PNG or WebP photos (5 MB each). Embedded location and camera metadata are removed before upload. Images in this public bucket can still be accessed by anyone with the URL, even after archiving until the file is deleted. Do not include documents, personal addresses or identifying details in photos.</Text>
       <Field label="Listing title" value={draft.title} onChange={v => change('title', v)} />
       <Field label="Listing description" value={draft.description} onChange={v => change('description', v)} multiline />
       <Field label="Listing city" value={draft.city} onChange={v => change('city', v)} />
