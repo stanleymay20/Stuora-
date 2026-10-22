@@ -152,7 +152,7 @@ test('Stuora paused-photo release blocks direct Storage uploading for owners and
   await page.getByRole('button',{name:'Publish listing',exact:true}).click();
   await expect(page.getByText('Listing saved. Photo uploads are temporarily paused while Stuora completes secure processing.')).toBeVisible();
   await expect(page.getByRole('button',{name:/^Add photo/})).toHaveCount(0);
-  await expect(page.getByText('Photo uploads are temporarily paused while Stuora completes secure processing.')).toBeVisible();
+  await expect(page.getByText('Photo uploads are temporarily paused while Stuora completes secure processing.', { exact: true })).toBeVisible();
   expect(data.uploadedPhotos).toHaveLength(0);
   await page.reload(); await explore(page,'Marketplace');
   await page.getByRole('button',{name:'My listings',exact:true}).click();
