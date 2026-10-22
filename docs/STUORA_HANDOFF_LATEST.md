@@ -147,3 +147,7 @@ Files newly added on draft PR #23:
 - Added `expo-splash-screen@~57.0.10` via exact published npm tarball SHA512 in lockfile (all 3 transitive dependencies were already present); enabled its recommended native config plugin with Stuora brand navy, centered canonical transparent `splash-icon.png`, consistent light/dark. Built-in asset generator remains deterministic.
 - Mandatory native brand validation extended to assert configured package and PNG; CI must pass at exact new head. Never claim physical device/release build splash visuals are verified from Expo bundle export alone.
 - Scope limited to app/lock/config/tests/docs. No hosted email templates, sender SMTP, auth domain, Storage, staging Edge code, production or PR merge touched.
+
+## 2026-10-22 — Controlled Auth branding rollout script (NOT EXECUTED)
+- New source `scripts/stuora-auth-branding.mjs` with six-core template dry-run default, optional seven security templates, hardcoded staging ref, approval+token guard for Management API PATCH, backups of only affected original fields, and exact staged readback. CI `tests/auth-branding-rollout.test.mjs` verifies scope and no unauthorized network call.
+- **No hosted Auth email settings have been updated**, no token requested/disclosed, no SMTP, DNS or Auth redirect change. Real hosted sender and inbox tests still outstanding. This does not affect native splash or staging locked-photo Edge.
