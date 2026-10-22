@@ -7,6 +7,25 @@ on:
     branches: [main]
 
 jobs:
+  # Independent authorization gate: never hide RLS failures behind an npm audit
+  # network timeout. The original audit and full verify gate remain mandatory.
+  rls-authorization:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Use Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22.13.0'
+      - name: Install dependencies
+        run: npm ci
+      - name: Test database authorization
+        run: npm run test:database
+
   verify:
     runs-on: ubuntu-latest
     timeout-minutes: 15
