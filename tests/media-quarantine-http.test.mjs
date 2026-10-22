@@ -54,7 +54,7 @@ test('two confirmed distinct staging JWTs get metadata 42501, Storage RLS denial
  assert.ok(!JSON.stringify(res).includes(ids[0])&&!JSON.stringify(res).includes(tkn[0]));
 });
 test('inconclusive FK/rejected cross-account fixtures and successful uploads fail closed',async()=>{
- await assert.rejects(probeMediaQuarantine({env:okEnv,fetchImpl:fixture({metaCode:23503}).impl,uuid:()=>listingId}),/42501/);
+ await assert.rejects(probeMediaQuarantine({env:okEnv,fetchImpl:fixture({metaCode:23503}).impl,uuid:()=>listingId}),/metadata INSERT was not rejected/);
  await assert.rejects(probeMediaQuarantine({env:okEnv,fetchImpl:fixture({duplicate:true}).impl,uuid:()=>listingId}),/two different/);
  await assert.rejects(probeMediaQuarantine({env:okEnv,fetchImpl:fixture({storageStatus:500}).impl,uuid:()=>listingId}),/RLS\/authorization/);
  const insecure=fixture({successUpload:true});
