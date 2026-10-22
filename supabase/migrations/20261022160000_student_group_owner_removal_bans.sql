@@ -54,6 +54,29 @@ create trigger student_group_members_prevent_banned_join
   before insert on public.student_group_members
   for each row execute function private.guard_student_group_join();
 
+-- A send that started just before removal cannot race in a message after
+-- the owner has committed a ban. Serialize message INSERT with moderation,
+-- then recheck membership and ban state at the actual write boundary.
+create function private.guard_student_group_message_insert()
+returns trigger language plpgsql security definer set search_path = ''
+as $
+begin
+  perform 1 from public.student_groups g
+    where g.id = new.group_id for share;
+  if (select auth.uid()) is distinct from new.author_id
+     or not exists (select 1 from public.student_group_members m
+                    where m.group_id = new.group_id and m.user_id = new.author_id)
+     or exists (select 1 from public.student_group_bans b
+                where b.group_id = new.group_id and b.user_id = new.author_id) then
+    raise exception 'Group posting unavailable' using errcode = '42501';
+  end if;
+  return new;
+end;
+$;
+create trigger student_group_messages_verify_membership_at_insert
+  before insert on public.student_group_messages
+  for each row execute function private.guard_student_group_message_insert();
+
 -- Privileged code lives ONLY in the unexposed private schema. Each action
 -- rechecks the actual current user's ownership; caller-supplied IDs alone
 -- never authorize a removal or a reinstatement.
@@ -112,6 +135,7 @@ create function public.restore_student_group_member(
 as $$ select private.owner_restore_student_group_member(p_group_id, p_user_id) $$;
 
 revoke all on function private.guard_student_group_join() from public, anon, authenticated;
+revoke all on function private.guard_student_group_message_insert() from public, anon, authenticated;
 revoke all on function private.owner_remove_student_group_member(uuid, uuid)
   from public, anon, authenticated;
 revoke all on function private.owner_restore_student_group_member(uuid, uuid)
