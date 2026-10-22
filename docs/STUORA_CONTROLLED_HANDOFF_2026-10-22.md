@@ -1,4 +1,4 @@
-# STUORA — CONTROLLED CONTINUATION HANDOFF
+> **SUPERSEDED SNAPSHOT (2026-10-22):** This document describes an older October checkpoint, including an Expo 57 failure which has since been resolved. **For current verified release/security state, consult [STUORA_HANDOFF_LATEST.md](./STUORA_HANDOFF_LATEST.md) first.** Do not use the outdated next-step orders below without checking today's PR HEAD, CI, migration history and Vercel SHA.\n\n# STUORA — CONTROLLED CONTINUATION HANDOFF
 **Snapshot date:** 2026-10-22 (Europe/Berlin). **Authority:** current GitHub/Supabase/Vercel evidence checked in this session. **Purpose:** allow a subsequent assistant/engineer to resume without losing the vision, replacing the app, misrepresenting verification, or drifting into unrelated features.
 
 > Treat all commit IDs and status descriptions here as a timestamped checkpoint, NOT a substitute for reading live refs and CI. The code branch may advance. After this documentation commit, the latest PR head necessarily differs from the pre-documentation code snapshot.
