@@ -202,6 +202,31 @@ for (const inheritedGrants of [false, true]) {
       await count('anon', null, `select * from public.marketplace_details where listing_id = '${liveMarket}'`, 0);
       await count('authenticated', a, `select * from public.listings where id = '${liveMarket}'`, 1);
       await deny(a, save(liveMarket, 'marketplace', 'Reopen archived'));
+      // The fresh-database baseline MUST contain staging's abuse controls;
+      // PR18 introduced these triggers and they cannot be assumed present.
+      const { rows: limiterTriggers } = await db.query(`select tgname from pg_trigger
+        where not tgisinternal and tgname in
+        ('listings_safety','messages_safety','reports_safety','job_applications_safety')`);
+      assert.deepEqual(limiterTriggers.map(row => row.tgname).sort(),
+        ['job_applications_safety','listings_safety','messages_safety','reports_safety']);
+      assertions++;
+      const { rows: fnGrants } = await db.query(`select
+        has_function_privilege('authenticated','public.save_community_listing(uuid,public.listing_kind,text,text,text,integer,jsonb)','EXECUTE') as publish,
+        has_function_privilege('authenticated','public.listing_participation(uuid,text,text)','EXECUTE') as participation,
+        has_function_privilege('authenticated','public.review_job_application(uuid,public.application_status)','EXECUTE') as review,
+        has_function_privilege('authenticated','private.save_community_listing_impl(uuid,public.listing_kind,text,text,text,integer,jsonb)','EXECUTE') as internal_publish`);
+      for (const value of Object.values(fnGrants[0])) {
+        assert.equal(value, false, 'unfinished community API must not be executable');
+        assertions++;
+      }
+      await deny(a, `select public.save_community_listing(null,'event'::public.listing_kind,
+        'Unauthorized event','', 'Aachen',0,'{}'::jsonb)`, '42501');
+      await deny(a, `select public.listing_participation('${trip}','join')`, '42501');
+      await deny(a, `insert into public.listings(owner_id,kind,status,title,city,price_cents)
+        values ('${a}','event','active','Direct bypass event','Aachen',0)`, '42501');
+      await deny(a, `insert into public.listings(owner_id,kind,status,title,city,price_cents)
+        values ('${a}','trip','draft','Direct bypass trip','Aachen',0)`, '42501');
+
       // A caller with a valid JWT must not bypass the publishing RPC by
       // inserting a public housing/marketplace parent without detail rows.
       await deny(a, `insert into public.listings
