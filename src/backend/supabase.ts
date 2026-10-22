@@ -19,6 +19,9 @@ export const supabase = createClient<Database>(url, key, {
     autoRefreshToken: true,
     persistSession: true,
     detectSessionInUrl: Platform.OS === 'web',
+    // Gen-3 audit: PKCE binds every email link to the device that requested it
+    // (prevents login CSRF via an attacker's implicit-flow #access_token link).
+    flowType: 'pkce',
     lock: processLock,
   },
 });

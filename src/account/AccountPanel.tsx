@@ -5,12 +5,15 @@ import { supabase } from '../backend/supabase';
 import { useAuth } from './AuthProvider';
 import { credentialsError, emailError, newPasswordError, profileError } from './validation';
 import { stuoraAuthError } from './authCopy';
+import AccountDataControls from './AccountDataControls';
+import { LegalLinks, type LegalDocument } from '../legal/LegalPage';
+import { ModerationNotices, ModerationQueue } from '../moderation/ModerationQueue';
 
 const authRedirectUrl = () => Platform.OS === 'web' && typeof window !== 'undefined'
   ? window.location.origin
   : 'stuora://auth-callback';
 
-export default function AccountPanel() {
+export default function AccountPanel({ onLegal }: { onLegal?: (doc: LegalDocument) => void } = {}) {
   const { session, initializing, profile, profileLoading, recoveryMode, error, reloadProfile, finishRecovery } = useAuth();
   const [signup, setSignup] = useState(false);
   const [forgot, setForgot] = useState(false);
@@ -22,6 +25,11 @@ export default function AccountPanel() {
   const [city, setCity] = useState('');
   const [bio, setBio] = useState('');
   const [discoverable, setDiscoverable] = useState(false);
+  const [ageConfirmed, setAgeConfirmed] = useState(false);
+  const [termsAccepted, setTermsAccepted] = useState(false);
+  const [isModerator, setIsModerator] = useState(false);
+  const consentedDiscovery = !!(profile?.is_discoverable && profile.discoverable_consented_at);
+  const legacyDiscovery = !!(profile?.is_discoverable && !profile.discoverable_consented_at);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState('');
   const [issue, setIssue] = useState('');
@@ -33,18 +41,26 @@ export default function AccountPanel() {
 
   useEffect(() => {
     setName(profile?.display_name ?? ''); setCity(profile?.city ?? '');
-    setBio(profile?.bio ?? ''); setDiscoverable(profile?.is_discoverable ?? false);
+    setBio(profile?.bio ?? ''); setDiscoverable(!!(profile?.is_discoverable && profile.discoverable_consented_at));
   }, [profile]);
   useEffect(() => {
     setPassword(''); setNewPassword(''); setConfirmPassword('');
     if (!preserveRecoveryNotice.current) setNotice('');
     setIssue('');
     if (session) { setForgot(false); preserveRecoveryNotice.current = false; }
+    setIsModerator(false);
+    if (session) {
+      void supabase.rpc('am_i_moderator').then(({ data }) => setIsModerator(data === true), () => setIsModerator(false));
+    }
   }, [session?.user.id]);
 
   async function authenticate() {
     const validation = credentialsError(email, password, signup);
     if (validation) { setIssue(validation); return; }
+    if (signup && (!ageConfirmed || !termsAccepted)) {
+      setIssue('Confirm that you are at least 16 and accept the terms of use to create an account.');
+      return;
+    }
     setBusy(true); setIssue(''); setNotice('');
     try {
       const result = signup
@@ -140,17 +156,32 @@ export default function AccountPanel() {
     const validation = profileError(name, city, bio);
     if (validation) { setIssue(validation); return; }
     setBusy(true); setIssue(''); setNotice('');
-    const values = { display_name: name.trim(), city: city.trim(), bio: bio.trim(), is_discoverable: discoverable };
+    // Gen-3 audit R-04: discovery changes go through set_profile_discovery,
+    // which records when consent was given; the column is not client-writable.
+    const values = { display_name: name.trim(), city: city.trim(), bio: bio.trim() };
     try {
       const query = profile
         ? supabase.from('profiles').update(values).eq('id', session.user.id)
-        : supabase.from('profiles').insert({ id: session.user.id, ...values });
+        : supabase.from('profiles').insert({ id: session.user.id, ...values, is_discoverable: discoverable });
       const result = await query.select('*').single();
       if (result.error) { setIssue('Your profile could not be saved. Please retry.'); return; }
+      if (profile && discoverable !== consentedDiscovery) {
+        const { error: consentError } = await supabase.rpc('set_profile_discovery', { p_discoverable: discoverable });
+        if (consentError) { reloadProfile(); setIssue('Your profile was saved, but the discovery setting could not be changed.'); return; }
+      }
       reloadProfile();
       setNotice('Your profile has been saved.');
     } catch { setIssue('Unable to connect. Your changes have not been saved.'); }
     finally { setBusy(false); }
+  }
+
+  async function resolveLegacyDiscovery(keep: boolean) {
+    setBusy(true); setIssue(''); setNotice('');
+    const { error: consentError } = await supabase.rpc('set_profile_discovery', { p_discoverable: keep });
+    setBusy(false);
+    if (consentError) { setIssue('Your choice could not be saved. Please retry.'); return; }
+    reloadProfile();
+    setNotice(keep ? 'Your profile is discoverable again.' : 'Your profile stays private.');
   }
 
   async function logout() {
@@ -204,6 +235,14 @@ export default function AccountPanel() {
       </> : <>
         <Text style={styles.label}>Password</Text>
         <TextInput accessibilityLabel="Password" autoComplete={signup ? 'new-password' : 'current-password'} secureTextEntry value={password} onChangeText={setPassword} editable={!busy} style={styles.input} />
+        {signup ? <>
+          <Pressable accessibilityRole="checkbox" accessibilityState={{ checked: ageConfirmed }} accessibilityLabel="I am at least 16 years old" disabled={busy} onPress={() => setAgeConfirmed(v => !v)} style={styles.check}>
+            <Text style={styles.checkText}>{ageConfirmed ? '☑' : '☐'} I am at least 16 years old</Text>
+          </Pressable>
+          <Pressable accessibilityRole="checkbox" accessibilityState={{ checked: termsAccepted }} accessibilityLabel="I accept the terms of use and have read the privacy notice" disabled={busy} onPress={() => setTermsAccepted(v => !v)} style={styles.check}>
+            <Text style={styles.checkText}>{termsAccepted ? '☑' : '☐'} I accept the terms of use and have read the privacy notice</Text>
+          </Pressable>
+        </> : null}
         {button(signup ? 'Create account' : 'Sign in', () => void authenticate())}
         {!signup ? <Pressable accessibilityRole="button" disabled={busy} onPress={() => { setForgot(true); setIssue(''); setNotice(''); setPassword(''); }}><Text style={styles.link}>Forgot password?</Text></Pressable> : null}
         {!signup ? <Pressable accessibilityRole="button" accessibilityLabel="Resend confirmation email" disabled={busy} onPress={() => void resendConfirmation()}><Text style={styles.link}>Didn't get your confirmation email? Resend</Text></Pressable> : null}
@@ -212,6 +251,15 @@ export default function AccountPanel() {
     </> : <>
       <Text style={styles.description}>{session.user.email}</Text>
       <Text style={styles.trust}>{session.user.email_confirmed_at ? 'Email confirmed' : 'Email not confirmed'} · Student status: {profile?.student_status ?? 'unverified'}</Text>
+      {legacyDiscovery ? (
+        <View style={styles.banner} testID="legacy-discovery-banner">
+          <Text style={styles.bannerText}>Your profile was set to appear in the student directory before Stuora asked for your confirmation. It is hidden until you choose.</Text>
+          <View style={styles.bannerActions}>
+            <Pressable accessibilityRole="button" disabled={busy} onPress={() => void resolveLegacyDiscovery(true)} style={styles.bannerPrimary}><Text style={styles.bannerPrimaryText}>Show my profile</Text></Pressable>
+            <Pressable accessibilityRole="button" disabled={busy} onPress={() => void resolveLegacyDiscovery(false)} style={styles.bannerSecondary}><Text style={styles.bannerSecondaryText}>Keep it private</Text></Pressable>
+          </View>
+        </View>
+      ) : null}
       {profileLoading ? <ActivityIndicator /> : error ? button('Retry profile', reloadProfile) : <>
         <Text style={styles.label}>{profile ? 'Edit your profile' : 'Build your profile'}</Text>
         <Text style={styles.label}>Display name</Text>
@@ -225,7 +273,11 @@ export default function AccountPanel() {
         {button(profile ? 'Save profile' : 'Create profile', () => void save())}
       </>}
       {button('Sign out', () => void logout())}
+      <ModerationNotices userId={session.user.id} />
+      {isModerator ? <ModerationQueue /> : null}
+      {session.user.email ? <AccountDataControls email={session.user.email} /> : null}
     </>}
+    {onLegal ? <LegalLinks onNavigate={onLegal} /> : null}
   </View>;
 }
 
@@ -235,7 +287,7 @@ const styles = StyleSheet.create({
   passportInitial: { fontSize: 34, fontWeight: '900', color: '#FFFFFF' },
   passportInfo: { flex: 1, gap: 6 },
   passportName: { fontSize: 21, fontWeight: '900', color: '#11162F' },
-  passportMeta: { fontSize: 12, color: '#6F7490', fontWeight: '600' },
+  passportMeta: { fontSize: 12, color: '#555C72', fontWeight: '600' },
   passportBio: { fontSize: 12, lineHeight: 19, color: '#252B4A' },
   welcome: { minHeight: 215, borderRadius: 18, overflow: 'hidden', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#11162F' },
   welcomeAura: { position: 'absolute', width: 190, height: 190, top: -85, right: -30, backgroundColor: '#6359B4', opacity: 0.45, borderRadius: 100 },
@@ -243,7 +295,16 @@ const styles = StyleSheet.create({
   welcomeSubtitle: { color: '#FFFFFF', fontSize: 14 },
   card: { padding: 24, backgroundColor: '#fff', borderRadius: 20, borderWidth: 1, borderColor: '#E9EAF1', gap: 12 },
   heading: { color: '#11162F', fontSize: 24, fontWeight: '800' },
-  description: { color: '#747B91', fontSize: 13, lineHeight: 20 },
+  description: { color: '#555C72', fontSize: 13, lineHeight: 20 },
+  check: { minHeight: 44, justifyContent: 'center' },
+  checkText: { color: '#11162F', fontSize: 14 },
+  banner: { backgroundColor: '#FFF4D6', borderRadius: 14, padding: 14, gap: 10 },
+  bannerText: { color: '#5A3E00', fontSize: 13, lineHeight: 19 },
+  bannerActions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  bannerPrimary: { minHeight: 44, paddingHorizontal: 14, borderRadius: 11, backgroundColor: '#5635E7', justifyContent: 'center' },
+  bannerPrimaryText: { color: '#FFFFFF', fontWeight: '800' },
+  bannerSecondary: { minHeight: 44, paddingHorizontal: 14, borderRadius: 11, backgroundColor: '#FFFFFF', justifyContent: 'center' },
+  bannerSecondaryText: { color: '#4325C9', fontWeight: '800' },
   label: { color: '#11162F', fontWeight: '700' },
   input: { backgroundColor: '#F7F7FB', borderColor: '#E9EAF1', borderWidth: 1, borderRadius: 12, padding: 14, color: '#11162F', fontSize: 16 },
   bio: { minHeight: 90, textAlignVertical: 'top' },

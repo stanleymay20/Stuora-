@@ -434,6 +434,26 @@ export type Database = {
           },
         ]
       }
+      account_suspensions: {
+        Row: { reason: string; suspended_at: string; suspended_by: string | null; user_id: string }
+        Insert: never
+        Update: never
+        Relationships: []
+      }
+      moderation_notices: {
+        Row: {
+          created_at: string
+          id: string
+          kind: "report_outcome" | "content_action" | "account_suspended" | "suspension_lifted"
+          message: string
+          read_at: string | null
+          report_id: string | null
+          user_id: string
+        }
+        Insert: never
+        Update: { read_at?: string | null }
+        Relationships: []
+      }
       profiles: {
         Row: {
           account_kind: Database["public"]["Enums"]["account_kind"]
@@ -442,6 +462,7 @@ export type Database = {
           city: string
           created_at: string
           display_name: string
+          discoverable_consented_at: string | null
           id: string
           is_discoverable: boolean
           student_status: Database["public"]["Enums"]["student_verification_status"]
@@ -454,6 +475,7 @@ export type Database = {
           city: string
           created_at?: string
           display_name: string
+          discoverable_consented_at?: string | null
           id: string
           is_discoverable?: boolean
           student_status?: Database["public"]["Enums"]["student_verification_status"]
@@ -466,6 +488,7 @@ export type Database = {
           city?: string
           created_at?: string
           display_name?: string
+          discoverable_consented_at?: string | null
           id?: string
           is_discoverable?: boolean
           student_status?: Database["public"]["Enums"]["student_verification_status"]
@@ -482,6 +505,14 @@ export type Database = {
           reason: Database["public"]["Enums"]["report_reason"]
           reported_user_id: string | null
           reporter_id: string
+          content_snapshot: string | null
+          decided_at: string | null
+          decided_by: string | null
+          decision: string | null
+          decision_reason: string | null
+          group_message_id: string | null
+          message_id: string | null
+          status: "open" | "actioned" | "dismissed"
         }
         Insert: {
           created_at?: string
@@ -491,6 +522,14 @@ export type Database = {
           reason: Database["public"]["Enums"]["report_reason"]
           reported_user_id?: string | null
           reporter_id: string
+          content_snapshot?: string | null
+          decided_at?: string | null
+          decided_by?: string | null
+          decision?: string | null
+          decision_reason?: string | null
+          group_message_id?: string | null
+          message_id?: string | null
+          status?: "open" | "actioned" | "dismissed"
         }
         Update: {
           created_at?: string
@@ -500,6 +539,14 @@ export type Database = {
           reason?: Database["public"]["Enums"]["report_reason"]
           reported_user_id?: string | null
           reporter_id?: string
+          content_snapshot?: string | null
+          decided_at?: string | null
+          decided_by?: string | null
+          decision?: string | null
+          decision_reason?: string | null
+          group_message_id?: string | null
+          message_id?: string | null
+          status?: "open" | "actioned" | "dismissed"
         }
         Relationships: [
           {
@@ -732,6 +779,48 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      am_i_moderator: { Args: Record<string, never>; Returns: boolean }
+      conversation_safety_state: {
+        Args: { p_conversation: string }
+        Returns: { closed: boolean; blocked_by_me: boolean; other_member_left: boolean }
+      }
+      export_my_data: { Args: Record<string, never>; Returns: Json }
+      lift_suspension: { Args: { p_user: string; p_reason: string }; Returns: undefined }
+      moderate_report: {
+        Args: { p_report: string; p_action: "dismiss" | "remove_content" | "suspend_user"; p_reason: string }
+        Returns: undefined
+      }
+      moderation_queue: {
+        Args: { p_status?: "open" | "actioned" | "dismissed"; p_limit?: number }
+        Returns: {
+          id: string
+          created_at: string
+          reason: Database["public"]["Enums"]["report_reason"]
+          details: string
+          status: string
+          target_kind: "listing" | "group_message" | "message" | "user"
+          listing_id: string | null
+          group_message_id: string | null
+          message_id: string | null
+          reported_user_id: string | null
+          content_snapshot: string | null
+          prior_reports: number
+          decision: string | null
+          decision_reason: string | null
+          decided_at: string | null
+        }[]
+      }
+      report_content: {
+        Args: {
+          p_target_kind: "listing" | "group_message" | "message" | "user"
+          p_target_id: string
+          p_reason: Database["public"]["Enums"]["report_reason"]
+          p_details?: string
+        }
+        Returns: string
+      }
+      set_conversation_block: { Args: { p_conversation: string; p_block: boolean }; Returns: undefined }
+      set_profile_discovery: { Args: { p_discoverable: boolean }; Returns: string | null }
       create_student_group: {
         Args: { p_name: string; p_description: string; p_city: string; p_topic: string }
         Returns: string

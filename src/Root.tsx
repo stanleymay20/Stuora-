@@ -4,6 +4,7 @@ import App from '../App';
 import AccountPanel from './account/AccountPanel';
 import { AuthProvider, useAuth } from './account/AuthProvider';
 import StudentSavingsOverlay from './StudentSavingsOverlay';
+import ErrorBoundary from './ui/ErrorBoundary';
 
 // A password-recovery session must not expose the rest of the app.
 function RootContent() {
@@ -20,7 +21,7 @@ function RootContent() {
 }
 
 export default function Root() {
-  return <AuthProvider><RootContent /></AuthProvider>;
+  return <ErrorBoundary><AuthProvider><RootContent /></AuthProvider></ErrorBoundary>;
 }
 
 const styles = StyleSheet.create({

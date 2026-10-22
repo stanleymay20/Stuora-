@@ -1,10 +1,14 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Image, Modal, Pressable, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View } from 'react-native';
 import { supabase } from '../backend/supabase';
+import { useAuth } from '../account/AuthProvider';
+import { features } from '../backend/features';
+import { invokeFunction, ServiceError } from '../backend/externalData';
 import { botGuidance, botWelcome, euroFromCents, parseBotIntent, safeLike, type BotDomain } from './botCore';
 
 type BotResult = { id: string; title: string; description: string; domain: BotDomain };
-type BotReply = { prompt: string; answer: string; results: BotResult[]; domain: BotDomain | null };
+type BotReply = { prompt: string; answer: string; results: BotResult[]; domain: BotDomain | null; sourceLabel: string };
+type AssistantReply = { sourceLabel: string; answer: string; results: BotResult[]; intent: { domain: BotDomain } | null };
 type Category = 'Housing' | 'Marketplace' | 'Trips' | 'Jobs' | 'Events' | 'Groups';
 const PAGE_SIZE = 6;
 const resultCategories: Record<BotDomain, Category> = {
@@ -15,10 +19,17 @@ const listKinds: Record<Exclude<BotDomain, 'groups'>, 'housing'|'marketplace'|'j
   housing: 'housing', marketplace: 'marketplace', jobs: 'job', events: 'event', trips: 'trip',
 };
 
+/** Server-side assistant: an LLM only parses intent; results still come from Stuora under RLS. */
+async function askAssistant(prompt: string, preferredCity: string): Promise<BotReply> {
+  const reply = await invokeFunction<AssistantReply>('stuora-assistant', { query: prompt, selectedCity: preferredCity || null });
+  const results = Array.isArray(reply.results) ? reply.results.slice(0, PAGE_SIZE) : [];
+  return { prompt, answer: String(reply.answer ?? ''), results, domain: reply.intent?.domain ?? null, sourceLabel: String(reply.sourceLabel ?? 'Stuora') };
+}
+
 async function searchStuora(prompt: string, signal: AbortSignal, preferredCity = ''): Promise<BotReply> {
   const intent = parseBotIntent(prompt);
   const city = intent.city || preferredCity.trim();
-  if (!intent.domain) return { prompt, answer: botGuidance(), results: [], domain: null };
+  if (!intent.domain) return { prompt, answer: botGuidance(), results: [], domain: null, sourceLabel: 'Keyword search' };
   let results: BotResult[] = [];
   if (intent.domain === 'groups') {
     let query = supabase.from('student_groups')
@@ -54,7 +65,7 @@ async function searchStuora(prompt: string, signal: AbortSignal, preferredCity =
   const budget = intent.maxPriceCents !== null ? ' within your maximum price' : '';
   const plural = resultCategories[intent.domain].toLowerCase();
   return {
-    prompt, results, domain: intent.domain,
+    prompt, results, domain: intent.domain, sourceLabel: 'Keyword search',
     answer: results.length
       ? 'Here are ' + results.length + ' real ' + plural + ' results' + area + budget + ' returned by Stuora. Open the category for the full details. Results can change.'
       : 'No matching ' + plural + ' were returned' + area + budget + '. Try another city or broader search. I will not invent results.',
@@ -75,6 +86,8 @@ export default function StuoraBotOverlay({ open, preferredCity = '', onClose, on
 }) {
   const { width } = useWindowDimensions();
   const desktop = width >= 960;
+  const { session } = useAuth();
+  const useAssistant = features.aiAssistant && !!session;
   const [input, setInput] = useState('');
   const [replies, setReplies] = useState<BotReply[]>([]);
   const [busy, setBusy] = useState(false);
@@ -101,7 +114,15 @@ export default function StuoraBotOverlay({ open, preferredCity = '', onClose, on
     controller.current = ac;
     requests.current += 1; setBusy(true); setFailure('');
     try {
-      const reply = await searchStuora(text, ac.signal, preferredCity);
+      let reply: BotReply;
+      if (useAssistant) {
+        try { reply = await askAssistant(text, preferredCity); }
+        catch (error) {
+          if (error instanceof ServiceError && error.code === 'RATE_LIMIT') { setFailure(error.message); return; }
+          // Any other assistant failure falls back to the on-device keyword search.
+          reply = await searchStuora(text, ac.signal, preferredCity);
+        }
+      } else reply = await searchStuora(text, ac.signal, preferredCity);
       if (ac.signal.aborted) return;
       setReplies(old => [...old.slice(-9), reply]); setInput('');
     } catch {
@@ -147,19 +168,23 @@ export default function StuoraBotOverlay({ open, preferredCity = '', onClose, on
         {replies.map((reply, index) => <View key={index} style={styles.exchange}>
           <Text style={styles.question}>{reply.prompt}</Text>
           <Text style={styles.answer}>{reply.answer}</Text>
-          {reply.results.map(r => <View key={r.id} style={styles.result}>
+          <Text style={styles.source}>Answered by: {reply.sourceLabel}</Text>
+          {reply.results.map(r => <Pressable key={r.id} accessibilityRole="button" accessibilityLabel={`Open ${resultCategories[r.domain]}: ${r.title}`}
+            onPress={() => navigate(r.domain)} style={({ pressed }) => [styles.result, pressed && styles.pressed]}>
             <Text style={styles.resultTitle}>{r.title}</Text>
             <Text style={styles.resultDescription}>{r.description}</Text>
-          </View>)}
+          </Pressable>)}
           {reply.domain ? <Action title={'Explore ' + resultCategories[reply.domain]} onPress={() => navigate(reply.domain!)} /> : null}
         </View>)}
         {failure ? <Text style={styles.error} accessibilityRole="alert">{failure}</Text> : null}
         {busy ? <ActivityIndicator accessibilityLabel="Searching Stuora" /> : null}
-        <Text style={styles.disclaimer}>Stuora Bot currently searches real public data. It does not use generative AI yet, cannot see private messages, and never publishes, applies or makes purchases.</Text>
+        <Text style={styles.disclaimer}>{useAssistant
+          ? 'Stuora Bot searches real Stuora data. Your question (never your name, email or messages) is sent to an AI service only to understand what you are looking for; results always come from Stuora. It never publishes, applies or makes purchases.'
+          : 'Stuora Bot currently searches real public data. It does not use generative AI, cannot see private messages, and never publishes, applies or makes purchases.'}</Text>
       </ScrollView>
       <View style={styles.composer}>
         <TextInput accessibilityLabel="Ask Stuora Bot" value={input} onChangeText={setInput}
-          placeholder="Ask about housing, jobs or groups…" placeholderTextColor="#8B91A4"
+          placeholder="Ask about housing, jobs or groups…" placeholderTextColor="#646B80"
           maxLength={200} style={styles.input} multiline />
         <Action title="Ask Stuora Bot" onPress={() => void submit()} disabled={busy || !input.trim()} />
       </View>
@@ -188,7 +213,8 @@ const styles = StyleSheet.create({
   avatar: { width: 49, height: 49, borderRadius: 16, backgroundColor: '#EEE9FF' },
   headerCopy: { flex: 1, minWidth: 60, gap: 2 },
   title: { fontSize: 20, fontWeight: '900', color: '#11162F' },
-  eyebrow: { fontSize: 10, color: '#747B91' },
+  eyebrow: { fontSize: 10, color: '#555C72' },
+  source: { fontSize: 11, color: '#555C72', fontWeight: '700' },
   scroll: { flex: 1 },
   body: { width: '100%', maxWidth: 750, alignSelf: 'center', padding: 16, paddingBottom: 40, gap: 15 },
   welcome: { color: '#252B4A', fontSize: 14, lineHeight: 22, padding: 14, borderRadius: 15, backgroundColor: '#EEE9FF' },
@@ -199,8 +225,8 @@ const styles = StyleSheet.create({
   answer: { color: '#252B4A', lineHeight: 21, fontSize: 13 },
   result: { backgroundColor: '#FAFAFD', borderRadius: 12, padding: 12, gap: 4 },
   resultTitle: { fontWeight: '900', color: '#11162F', fontSize: 13 },
-  resultDescription: { color: '#747B91', fontSize: 12, lineHeight: 18 },
-  disclaimer: { color: '#747B91', fontSize: 12, lineHeight: 19 },
+  resultDescription: { color: '#555C72', fontSize: 12, lineHeight: 18 },
+  disclaimer: { color: '#555C72', fontSize: 12, lineHeight: 19 },
   composer: { borderTopWidth: 1, borderTopColor: '#E8E8F1', backgroundColor: '#FFFFFF', padding: 12, gap: 9 },
   input: { width: '100%', minHeight: 47, maxHeight: 94, borderRadius: 13, borderWidth: 1,
     borderColor: '#DEDEE9', backgroundColor: '#FFFFFF', padding: 11, color: '#11162F', fontSize: 14 },

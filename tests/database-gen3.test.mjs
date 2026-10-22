@@ -242,3 +242,25 @@ test('AI and external data quotas are service-only, fair and throttled', async (
   assert.equal((await svc(`select public.external_cache_get('ticketmaster','koeln') p`)).rows[0].p, null);
   await db.close();
 });
+
+test('D-07 UI: conversation safety state and blocking without exposing ids', async () => {
+  const { db } = await harness(); await seed(db);
+  const { as, deny, listing } = actors(db);
+  const l = await listing(A, 'marketplace', 'Desk', 2500);
+  const conv = (await as(B, `select public.start_listing_conversation('${l}') id`)).rows[0].id;
+  const state = async u => (await as(u, `select public.conversation_safety_state('${conv}') s`)).rows[0].s;
+  assert.deepEqual(await state(B), { closed: false, blocked_by_me: false, other_member_left: false });
+  await deny(C, `select public.conversation_safety_state('${conv}')`);
+  await deny(C, `select public.set_conversation_block('${conv}', true)`);
+  await as(B, `select public.set_conversation_block('${conv}', true)`);
+  await as(B, `select public.set_conversation_block('${conv}', true)`); // idempotent
+  assert.equal((await state(B)).blocked_by_me, true);
+  assert.equal((await state(A)).blocked_by_me, false, 'the blocked side only sees its own blocks');
+  assert.equal((await as(B, `select blocked_id from public.user_blocks`)).rows[0].blocked_id, A);
+  await as(B, `select public.set_conversation_block('${conv}', false)`);
+  assert.equal((await state(B)).blocked_by_me, false);
+  await as(A, `update public.listings set status='closed' where id='${l}'`);
+  assert.equal((await state(B)).closed, true);
+  await deny(null, `select public.conversation_safety_state('${conv}')`);
+  await db.close();
+});

@@ -69,17 +69,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             setError('This Stuora sign-in link is invalid or expired. Request a new one.');
           return;
         }
-        const { error: issue } = await supabase.auth.setSession({
-          access_token: callback.accessToken,
-          refresh_token: callback.refreshToken,
-        });
+        // PKCE: the code is only usable with the verifier stored on this device.
+        // A recovery link emits PASSWORD_RECOVERY through onAuthStateChange.
+        const { error: issue } = await supabase.auth.exchangeCodeForSession(callback.code);
         if (!active) return;
         if (issue) {
-          setError('This sign-in link could not be used. Request a new one.');
+          setError('Open this link on the device where you requested it, or request a new one.');
           return;
         }
         setError('');
-        if (callback.recovery) setRecoveryMode(true);
       } catch {
         if (active) setError('This sign-in link could not be read. Request a new one.');
       }

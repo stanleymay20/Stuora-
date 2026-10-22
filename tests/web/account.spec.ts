@@ -16,7 +16,8 @@ test('profile creation, editing, privacy, reload persistence and logout', async 
   await page.getByLabel('Bio', { exact: true }).fill('Looking for flatmates');
   await page.getByRole('switch', { name: 'Profile discoverable' }).click();
   await page.getByRole('button', { name: 'Save profile', exact: true }).click();
-  await expect.poll(api.writes).toBe(2);
+  // Profile PATCH (without is_discoverable) plus the consent RPC.
+  await expect.poll(api.writes).toBe(3);
   await page.reload();
   await page.getByText('You', { exact: true }).click();
   await expect(page.getByLabel('Display name')).toHaveValue('Alice Student');
@@ -42,6 +43,10 @@ test('confirmation-required signup never shows a signed-in account', async ({ pa
   await page.getByLabel('Email', { exact: true }).fill('new@example.invalid');
   await page.getByLabel('Password', { exact: true }).fill('signup-password');
   await page.getByRole('button', { name: 'Create account', exact: true }).click();
+  await expect(page.getByText('Confirm that you are at least 16 and accept the terms of use to create an account.')).toBeVisible();
+  await page.getByRole('checkbox', { name: 'I am at least 16 years old' }).click();
+  await page.getByRole('checkbox', { name: 'I accept the terms of use and have read the privacy notice' }).click();
+  await page.getByRole('button', { name: 'Create account', exact: true }).click();
   await expect(page.getByText('Check your email and confirm your account, then return to Stuora.')).toBeVisible();
   await expect(page.getByLabel('Display name')).toHaveCount(0);
 });
@@ -51,6 +56,8 @@ test('Stuora resend-confirmation is available after signup and rate-limits accid
   await page.getByRole('button', { name: 'New here? Create an account' }).click();
   await page.getByLabel('Email', { exact: true }).fill('pending@example.invalid');
   await page.getByLabel('Password', { exact: true }).fill('valid-password');
+  await page.getByRole('checkbox', { name: 'I am at least 16 years old' }).click();
+  await page.getByRole('checkbox', { name: 'I accept the terms of use and have read the privacy notice' }).click();
   await page.getByRole('button', { name: 'Create account', exact: true }).click();
   await expect(page.getByText('Check your email and confirm your account, then return to Stuora.')).toBeVisible();
   await page.getByRole('button', { name: 'Resend confirmation email' }).click();
@@ -141,4 +148,21 @@ test('signing out cancels a stalled profile read and its timeout', async ({ page
   await page.clock.fastForward(15001);
   await expect(page.getByText(/Could not load your profile/)).toHaveCount(0);
   await expect(page.getByLabel('Display name')).toHaveCount(0);
+});
+
+test('account data controls are available and deletion needs explicit confirmation', async ({ page }) => {
+  const api = await backend(page);
+  await account(page);
+  await signin(page);
+  await page.getByLabel('Display name').fill('Alice Student');
+  await page.getByLabel('City', { exact: true }).fill('Aachen');
+  await page.getByRole('button', { name: 'Create profile', exact: true }).click();
+  await expect(page.getByText('Your profile has been saved.')).toBeVisible();
+  await expect(page.getByTestId('legacy-discovery-banner')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Download my data' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Delete account' })).toBeVisible();
+  await page.getByRole('button', { name: 'Delete account' }).click();
+  await page.getByRole('button', { name: 'Permanently delete' }).click();
+  await expect(page.getByText('Type DELETE MY ACCOUNT to confirm.')).toBeVisible();
+  expect(api.writes()).toBe(1);
 });

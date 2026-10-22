@@ -5,6 +5,8 @@ import { supabase } from '../backend/supabase';
 import { Icon } from '../ui/Brand';
 import { EditorialImage } from '../ui/EditorialImage';
 import type { Database } from '../backend/database.types';
+import ReportButton from '../moderation/ReportButton';
+import { useDebouncedValue } from '../hooks/useDebouncedValue';
 
 type Row = Database['public']['Tables']['listings']['Row'];
 type Housing = Database['public']['Tables']['housing_details']['Row'];
@@ -42,7 +44,7 @@ function Photo({ media, title, index, removable, disabled, onRemove }: { media: 
   </View>;
 }
 
-export default function ListingWorkspace({ category, mode = 'browse', search = '', preferredCity = '', preview = false, onAccount, onMessage, onCreate, onClearSearch }: { category: 'Housing' | 'Marketplace'; mode?: 'browse' | 'create'; search?: string; preferredCity?: string; preview?: boolean; onAccount: () => void; onMessage?: (conversationId: string) => void; onCreate?: () => void; onClearSearch?: () => void }) {
+export default function ListingWorkspace({ category, mode = 'browse', search: searchInput = '', preferredCity = '', preview = false, onAccount, onMessage, onCreate, onClearSearch }: { category: 'Housing' | 'Marketplace'; mode?: 'browse' | 'create'; search?: string; preferredCity?: string; preview?: boolean; onAccount: () => void; onMessage?: (conversationId: string) => void; onCreate?: () => void; onClearSearch?: () => void }) {
   const { session, profile, profileLoading, initializing, error: profileError } = useAuth();
   const { width } = useWindowDimensions();
   const compactWideEmpty = preview && width >= 760;
@@ -59,6 +61,10 @@ export default function ListingWorkspace({ category, mode = 'browse', search = '
   useEffect(() => { setCityFilter(preferredCity); }, [preferredCity]);
   const [maxPrice, setMaxPrice] = useState('');
   const hasListingFilters = Boolean(cityFilter.trim() || maxPrice.trim());
+  // Debounce typed search and filters so each keystroke is not a database query.
+  const search = useDebouncedValue(searchInput, 300);
+  const cityQuery = useDebouncedValue(cityFilter, 300);
+  const priceQuery = useDebouncedValue(maxPrice, 300);
   const [revision, setRevision] = useState(0);
   const [pages, setPages] = useState(1);
   const [more, setMore] = useState(false);
@@ -129,7 +135,7 @@ export default function ListingWorkspace({ category, mode = 'browse', search = '
 
   useEffect(() => {
     setPages(1); setSelected(null); setEditing(false); setDraft(blank()); setNotice(''); setActionError(''); setConfirmArchive(false);
-  }, [kind, mode, userId, own, search, cityFilter, maxPrice]);
+  }, [kind, mode, userId, own, search, cityQuery, priceQuery]);
 
   useEffect(() => {
     if (mode === 'create') { setLoading(false); return; }
@@ -163,8 +169,8 @@ export default function ListingWorkspace({ category, mode = 'browse', search = '
     if (!embedded) query = own && userId ? query.eq('owner_id', userId) : query.eq('status', 'active');
     const field = (name: string) => embedded ? 'listings.' + name : name;
     if (search.trim()) query = query.ilike(field('title'), '%' + search.trim().replace(/[\\%_]/g, '\\$&') + '%');
-    if (cityFilter.trim()) query = query.ilike(field('city'), '%' + cityFilter.trim().replace(/[\\%_]/g, '\\$&') + '%');
-    if (maxPrice.trim()) query = query.lte(field('price_cents'), Math.round(Number(maxPrice) * 100));
+    if (cityQuery.trim()) query = query.ilike(field('city'), '%' + cityQuery.trim().replace(/[\\%_]/g, '\\$&') + '%');
+    if (priceQuery.trim()) query = query.lte(field('price_cents'), Math.round(Number(priceQuery) * 100));
     void Promise.resolve(query).then((result: any) => {
       if (ac.signal.aborted) return;
       if (result.error) setError('Could not load listings. Check your connection and retry.');
@@ -178,7 +184,7 @@ export default function ListingWorkspace({ category, mode = 'browse', search = '
       if (!ac.signal.aborted) { setError('Could not load listings. Check your connection and retry.'); setLoading(false); }
     }).finally(() => clearTimeout(timeout));
     return () => { clearTimeout(timeout); ac.abort(); };
-  }, [kind, userId, own, savedOnly, revision, pages, search, cityFilter, maxPrice, mode]);
+  }, [kind, userId, own, savedOnly, revision, pages, search, cityQuery, priceQuery, mode]);
 
   const change = <K extends keyof Draft>(key: K, value: Draft[K]) => setDraft(d => ({ ...d, [key]: value }));
   function replaceItem(item: Item) {
@@ -306,6 +312,7 @@ export default function ListingWorkspace({ category, mode = 'browse', search = '
             ? <><Text accessibilityRole="alert" style={s.error}>Could not check saved status.</Text><Button title="Retry saved status" onPress={() => setSavedRevision(v => v + 1)} /></>
             : <Button title={savedState === 'saved' ? 'Remove from saved' : savedState === 'loading' ? 'Checking saved status…' : 'Save listing'}
                 onPress={() => void toggleSaved()} disabled={busy || savedState === 'loading' || savedState === 'idle'} />}
+        {session && profile && !profileError ? <ReportButton kind="listing" targetId={selected.id} label="Report listing" /> : null}
       </> : null}
       {selected.owner_id === userId && selected.status === 'active' ? <><Button title="Edit listing" onPress={() => edit(selected)} disabled={busy} />{confirmArchive ? <><Text>Archive this listing? It will disappear from public discovery.</Text><Button title="Confirm archive" onPress={() => void archive()} disabled={busy} /><Button title="Keep listing" onPress={() => setConfirmArchive(false)} disabled={busy} /></> : <Button title="Archive listing" onPress={() => setConfirmArchive(true)} disabled={busy} />}</> : null}
       <Button title={mode === 'create' ? 'Create another listing' : 'Back to listings'} onPress={() => { setSelected(null); setConfirmArchive(false); setActionError(''); setNotice(''); }} disabled={busy} />
@@ -334,11 +341,11 @@ export default function ListingWorkspace({ category, mode = 'browse', search = '
           <View style={s.filterFields}>
             <View style={s.filterField}>
               <Text style={s.filterLabel}>City</Text>
-              <TextInput accessibilityLabel="Filter listings by city" value={cityFilter} onChangeText={setCityFilter} placeholder="All cities" placeholderTextColor="#8B91A4" style={s.filterInput} />
+              <TextInput accessibilityLabel="Filter listings by city" value={cityFilter} onChangeText={setCityFilter} placeholder="All cities" placeholderTextColor="#646B80" style={s.filterInput} />
             </View>
             <View style={s.filterField}>
               <Text style={s.filterLabel}>Maximum {kind === 'housing' ? 'monthly rent' : 'price'} (EUR)</Text>
-              <TextInput accessibilityLabel="Maximum listing price (EUR)" inputMode="decimal" value={maxPrice} onChangeText={value => { if (/^\d{0,7}(\.\d{0,2})?$/.test(value)) setMaxPrice(value); }} placeholder="No maximum" placeholderTextColor="#8B91A4" style={s.filterInput} />
+              <TextInput accessibilityLabel="Maximum listing price (EUR)" inputMode="decimal" value={maxPrice} onChangeText={value => { if (/^\d{0,7}(\.\d{0,2})?$/.test(value)) setMaxPrice(value); }} placeholder="No maximum" placeholderTextColor="#646B80" style={s.filterInput} />
             </View>
           </View>
           {hasListingFilters ? <View style={s.clearFilters}><Button title="Clear listing filters" onPress={() => { setCityFilter(''); setMaxPrice(''); }} /></View> : null}
@@ -373,7 +380,7 @@ export default function ListingWorkspace({ category, mode = 'browse', search = '
             <View style={s.listingDetails}>
               <Text style={s.title} numberOfLines={2}>{item.title}</Text>
               <Text style={s.price}>{money(item.price_cents)}{kind === 'housing' ? ' / month' : ''}</Text>
-              <View style={s.listingMeta}><Icon name="location" size={15} color="#747B91" /><Text style={s.metaText}>{item.city} · {item.status}</Text></View>
+              <View style={s.listingMeta}><Icon name="location" size={15} color="#555C72" /><Text style={s.metaText}>{item.city} · {item.status}</Text></View>
             </View>
           </Pressable>;
         })}</View>
@@ -394,14 +401,14 @@ const s = StyleSheet.create({
   clearFilters: { alignSelf: 'flex-start' },
   resultsHeading: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 9 },
   resultsTitle: { color: '#11162F', fontWeight: '900', fontSize: 17 },
-  resultsCaption: { color: '#747B91', fontWeight: '700', fontSize: 12 },
+  resultsCaption: { color: '#555C72', fontWeight: '700', fontSize: 12 },
   filterField: { flexGrow: 1, flexBasis: 180, minWidth: 150, gap: 7 },
   filterLabel: { fontSize: 12, fontWeight: '800', color: '#252B4A' },
   filterInput: { backgroundColor: '#FAFAFD', borderColor: '#D5D7E2', borderWidth: 1, borderRadius: 11, paddingHorizontal: 12, paddingVertical: 11, fontSize: 14, color: '#11162F' },
   card: { backgroundColor: '#FFFFFF', padding: 20, borderRadius: 18, borderWidth: 1, borderColor: '#E9EAF1', gap: 14 },
   title: { fontSize: 18, fontWeight: '700', color: '#11162F' },
   text: { fontSize: 15, lineHeight: 23, color: '#252B4A' },
-  hint: { color: '#747B91', fontSize: 13, lineHeight: 20 },
+  hint: { color: '#555C72', fontSize: 13, lineHeight: 20 },
   label: { fontSize: 14, fontWeight: '600', color: '#252B4A', marginBottom: 7 },
   input: { borderWidth: 1, borderColor: '#D5D7E2', borderRadius: 12, padding: 12, fontSize: 16, color: '#11162F', backgroundColor: '#FFF' },
   description: { minHeight: 100, textAlignVertical: 'top' },
@@ -419,7 +426,7 @@ const s = StyleSheet.create({
   coverWrap: { backgroundColor: '#F4F1FF' },
   listingDetails: { padding: 16, gap: 8 },
   listingMeta: { flexDirection: 'row', alignItems: 'center', gap: 5 },
-  metaText: { fontSize: 12, color: '#747B91', flexShrink: 1 },
+  metaText: { fontSize: 12, color: '#555C72', flexShrink: 1 },
   visual: { height: 174, backgroundColor: '#F4F1FF', alignItems: 'center', justifyContent: 'center', gap: 8 },
   cardImage: { width: '100%', height: 174, backgroundColor: '#F4F1FF' },
   price: { fontWeight: '900', color: '#11162F', fontSize: 18 },
@@ -434,7 +441,7 @@ const s = StyleSheet.create({
   emptyCaptionWide: { textAlign: 'left' },
   emptyIcon: { width: 64, height: 64, borderRadius: 21, backgroundColor: '#F1EDFF', justifyContent: 'center', alignItems: 'center' },
   emptyTitle: { color: '#11162F', fontSize: 16, fontWeight: '800', textAlign: 'center' },
-  emptyCaption: { color: '#747B91', fontSize: 12, lineHeight: 18, textAlign: 'center', maxWidth: 420 },
+  emptyCaption: { color: '#555C72', fontSize: 12, lineHeight: 18, textAlign: 'center', maxWidth: 420 },
   photoGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   photoWrap: { width: 160, gap: 6 },
   photo: { width: 160, height: 130, borderRadius: 12, backgroundColor: '#F4F1FF' },

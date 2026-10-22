@@ -3,8 +3,8 @@ import { ActivityIndicator, Modal, Pressable, SafeAreaView, ScrollView, StyleShe
 import { supabase } from './backend/supabase';
 import type { Database } from './backend/database.types';
 type Benefit = Database['public']['Tables']['student_benefits']['Row'];
-function euro(cents: number, currency: string) { return new Intl.NumberFormat('de-DE', { style: 'currency', currency }).format(cents / 100); }
-function date(value: string | null) { return value ? new Date(value).toLocaleDateString('de-DE', { timeZone: 'Europe/Berlin' }) : 'No end date specified'; }
+function euro(cents: number, currency: string) { return new Intl.NumberFormat(undefined, { style: 'currency', currency }).format(cents / 100); }
+function date(value: string | null) { return value ? new Date(value).toLocaleDateString(undefined, { timeZone: 'Europe/Berlin' }) : 'No end date specified'; }
 export default function StudentSavingsOverlay({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
   const [benefits, setBenefits] = useState<Benefit[]>([]);
   const [loading, setLoading] = useState(false);
