@@ -142,3 +142,8 @@ Files newly added on draft PR #23:
 - Added `app.config.js` for deterministic on-config offline generation of 1024px branded native PNGs from the committed canonical `assets/stuora-mark.svg`; `app.json` now points to top-level/iOS icon and Android adaptive foreground with navy `#17152F` background.
 - Generator is zero external dependencies, emits ignored `assets/generated-stuora/` including a prepared but not yet activated splash-icon. Tests `tests/native-branding.test.mjs` verify generated output and Expo refs, required by CI. Native launch/device visual acceptance pending; `expo-splash-screen` not yet installed/activated.
 - Changes affect source only, draft PR #23; no Supabase Auth templates installed, SMTP/domain configured, Edge uploads enabled, production or payment changes.
+
+## 2026-10-22 — SDK 57 Stuora native splash configured (not device-qualified)
+- Added `expo-splash-screen@~57.0.10` via exact published npm tarball SHA512 in lockfile (all 3 transitive dependencies were already present); enabled its recommended native config plugin with Stuora brand navy, centered canonical transparent `splash-icon.png`, consistent light/dark. Built-in asset generator remains deterministic.
+- Mandatory native brand validation extended to assert configured package and PNG; CI must pass at exact new head. Never claim physical device/release build splash visuals are verified from Expo bundle export alone.
+- Scope limited to app/lock/config/tests/docs. No hosted email templates, sender SMTP, auth domain, Storage, staging Edge code, production or PR merge touched.
