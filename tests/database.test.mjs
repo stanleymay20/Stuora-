@@ -58,11 +58,11 @@ async function database(inheritedGrants) {
     insert into auth.users values ('${a}'), ('${b}'), ('${c}');
     insert into public.profiles (id, display_name, city, is_discoverable)
       values ('${a}', 'Alice', 'Aachen', true), ('${b}', 'Bob', 'Aachen', true), ('${c}', 'Private Charlie', 'Aachen', false);
-    insert into public.listings (id, owner_id, kind, status, title, city) values
-      ('${house}', '${a}', 'housing', 'active', 'Room for students', 'Aachen'),
-      ('${draft}', '${a}', 'marketplace', 'draft', 'Private draft', 'Aachen'),
-      ('${job}', '${a}', 'job', 'active', 'Student job', 'Aachen'),
-      ('${trip}', '${a}', 'trip', 'active', 'Prague trip', 'Aachen');
+    insert into public.listings (id, owner_id, kind, status, title, city, price_cents) values
+      ('${house}', '${a}', 'housing', 'active', 'Room for students', 'Aachen', 62000),
+      ('${draft}', '${a}', 'marketplace', 'draft', 'Private draft', 'Aachen', null),
+      ('${job}', '${a}', 'job', 'active', 'Student job', 'Aachen', null),
+      ('${trip}', '${a}', 'trip', 'active', 'Prague trip', 'Aachen', null);
     insert into public.housing_details (listing_id, housing_type, rent_cents) values ('${house}', 'room', 62000);
     insert into public.marketplace_details (listing_id) values ('${draft}');
     insert into public.trip_details (listing_id, destination, starts_at, capacity) values ('${trip}', 'Prague', now(), 2);
@@ -114,7 +114,8 @@ for (const inheritedGrants of [false, true]) {
       await deny(a, `insert into public.housing_details (listing_id, housing_type, rent_cents) values ('${job}', 'room', 10)`);
       await deny(b, `update public.housing_details set listing_id = '${job}' where listing_id = '${house}'`);
       await count('authenticated', b, `update public.housing_details set rent_cents = 1 where listing_id = '${house}' returning *`, 0);
-      await count('authenticated', a, `update public.housing_details set rent_cents = 60000 where listing_id = '${house}' returning *`, 1);
+      await deny(a, `update public.housing_details set rent_cents = 60000 where listing_id = '${house}'`, '23514');
+      await count('authenticated', a, `select * from public.housing_details where listing_id = '${house}' and rent_cents = 62000`, 1);
       await deny(b, `insert into public.job_applications (job_listing_id, applicant_id, status) values ('${job}', '${b}', 'accepted')`);
       await deny(b, `insert into public.job_applications (job_listing_id, applicant_id) values ('${job}', '${a}')`);
       await count('authenticated', b, `insert into public.job_applications (job_listing_id, applicant_id, cover_note) values ('${job}', '${b}', 'My application') returning *`, 1);
@@ -191,12 +192,17 @@ for (const inheritedGrants of [false, true]) {
       await deny(a, save(null, 'housing', 'Orphan sentinel', 500, 'invalid_type'), '23514');
       await count('authenticated', a, "select * from public.listings where title = 'Orphan sentinel'", 0);
       await deny(a, save(null, 'marketplace', 'Negative price', -1), '22023');
+      await deny(a, `update public.listings set price_cents = 60000 where id = '${house}'`, '23514');
+      await count('authenticated', a, save(house, 'housing', 'Updated rent atomically', 60000), 1);
+      await count('authenticated', a, `select * from public.listings where id = '${house}' and price_cents = 60000`, 1);
+      await count('authenticated', a, `select * from public.housing_details where listing_id = '${house}' and rent_cents = 60000`, 1);
       await assert.rejects(as('anon', null, save(null, 'marketplace', 'Anonymous listing')), e => e.code === '42501'); assertions++;
       const { rows: market } = await as('authenticated', a, save(null, 'marketplace', 'Free desk', 0));
       const liveMarket = market[0].id;
       await count('anon', null, `select * from public.marketplace_details where listing_id = '${liveMarket}' and item_condition = 'good'`, 1);
       await deny(a, save(liveMarket, 'marketplace', 'Invalid edit', 10, 'room', 'invalid'), '22P02');
       await count('anon', null, `select * from public.listings where id = '${liveMarket}' and title = 'Free desk'`, 1);
+      await deny(a, `delete from public.marketplace_details where listing_id='${liveMarket}'`, '23514');
       await count('authenticated', a, `update public.listings set status = 'closed' where id = '${liveMarket}' returning id`, 1);
       await count('anon', null, `select * from public.listings where id = '${liveMarket}'`, 0);
       await count('anon', null, `select * from public.marketplace_details where listing_id = '${liveMarket}'`, 0);
@@ -250,6 +256,25 @@ for (const inheritedGrants of [false, true]) {
       assert.ok(new Date(spoofedDate[0].created_at).getUTCFullYear() < 2099); assertions += 2;
       await deny(a, `update public.listings set status = 'active'
         where id = '${spoofedDate[0].id}'`, '23514');
+
+      // Database-level public listing integrity: no blank city, missing price,
+      // detail deletion, diverging rent, or direct archived reactivation.
+      await deny(a, `insert into public.listings(owner_id,kind,status,title,city,price_cents)
+        values ('${a}','housing','draft','Whitespace city','     ',1200)`, '23514');
+      await deny(a, `update public.listings set city='   ' where id='${house}'`, '23514');
+      await deny(a, `update public.profiles set city='   ' where id='${a}'`, '23514');
+      await deny(a, `insert into public.listings(owner_id,kind,status,title,city,price_cents)
+        values ('${a}','housing','active','Null rent listing','Aachen',null)`, '23514');
+      await deny(a, `update public.listings set price_cents=null where id='${house}'`, '23514');
+      await deny(a, `delete from public.housing_details where listing_id='${house}'`, '23514');
+      await count('authenticated', a,
+        `select * from public.housing_details where listing_id='${house}'`, 1);
+      await deny(a, `update public.listings set status='active' where id='${liveMarket}'`, '42501');
+      // Draft child deletion and parent deletion must still work normally.
+      await count('authenticated', a,
+        `delete from public.marketplace_details where listing_id='${draft}' returning listing_id`, 1);
+      await count('authenticated', a,
+        `delete from public.listings where id='${draft}' returning id`, 1);
 
       // New profile defaults are private and neither profile nor listing can
       // be created with an invented city when callers omit that field.
