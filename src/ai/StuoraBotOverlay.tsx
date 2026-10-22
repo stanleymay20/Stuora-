@@ -124,9 +124,9 @@ export default function StuoraBotOverlay({ open, preferredCity = '', onClose, on
     <View style={[styles.modalHost, desktop && styles.desktopModalHost]}>
       {desktop ? <Pressable
         accessibilityRole="button"
-        accessibilityLabel="Close Stuora Bot backdrop"
+        accessibilityLabel="Dismiss assistant backdrop"
         onPress={onClose}
-        style={StyleSheet.absoluteFill}
+        style={styles.desktopBackdropButton}
       /> : null}
       <SafeAreaView testID="stuora-bot-panel" style={[styles.safeArea, desktop && styles.desktopPanel]}>
       <View style={styles.header}>
@@ -175,8 +175,10 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(17,22,47,0.24)',
   },
   safeArea: { flex: 1, backgroundColor: '#F8F8FC' },
+  desktopBackdropButton: { ...StyleSheet.absoluteFillObject, zIndex: 0 },
   desktopPanel: {
-    flex: 0, width: 480, maxWidth: '100%', height: '84%', maxHeight: 780,
+    position: 'relative', zIndex: 1, flex: 1, minHeight: 0,
+    width: 480, maxWidth: '100%', maxHeight: 780,
     borderRadius: 24, overflow: 'hidden', borderWidth: 1, borderColor: '#E3E3EF',
     shadowColor: '#11162F', shadowOpacity: 0.22,
     shadowRadius: 24, shadowOffset: { width: 0, height: 14 }, elevation: 16,
