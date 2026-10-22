@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import AccountPanel from './src/account/AccountPanel';
 import ListingWorkspace from './src/listings/ListingWorkspace';
 import MessageWorkspace from './src/messages/MessageWorkspace';
@@ -13,6 +14,7 @@ import { EditorialImage } from './src/ui/EditorialImage';
 import {
   Platform,
   Image,
+  Modal,
   Pressable,
   SafeAreaView,
   ScrollView,
@@ -151,6 +153,42 @@ export default function App({ onOpenSavings }: { onOpenSavings: () => void }) {
   const [category, setCategory] = useState<Category>(initialWebDestination.category);
   const [search, setSearch] = useState('');
   const [botOpen, setBotOpen] = useState(false);
+  const cityStorageKey = 'stuora.selected-city.' + (session?.user.id ?? 'guest');
+  const [cityPreference, setCityPreference] = useState('');
+  const [cityPickerOpen, setCityPickerOpen] = useState(false);
+  const [cityDraft, setCityDraft] = useState('');
+  const [cityError, setCityError] = useState('');
+  const profileCity = profile?.city?.trim() ?? '';
+  const preferredCity = cityPreference === '__all__' ? '' : (cityPreference || profileCity);
+  useEffect(() => {
+    // Only store a coarse city preference. No location permission, IP or GPS inference.
+    let alive = true;
+    setCityPreference('');
+    void AsyncStorage.getItem(cityStorageKey)
+      .then(value => {
+        if (alive && value && (value === '__all__' || (value.length <= 120 && value.length >= 2))) {
+          setCityPreference(value);
+        }
+      })
+      .catch(() => { /* A storage failure leaves profile city or All cities available. */ });
+    return () => { alive = false; };
+  }, [cityStorageKey]);
+  const showCityPicker = () => { setCityDraft(preferredCity); setCityError(''); setCityPickerOpen(true); };
+  const setSelectedCity = (city: string) => {
+    setCityPreference(city);
+    setCityPickerOpen(false);
+    void AsyncStorage.setItem(cityStorageKey, city).catch(() => {
+      // Preference remains valid for this session even if device storage is unavailable.
+    });
+  };
+  const saveCity = () => {
+    const city = cityDraft.trim().replace(/\\s+/g, ' ');
+    if (city.length < 2 || city.length > 120 || !/^[\\p{L}\\p{M} .'-]+$/u.test(city)) {
+      setCityError('Enter a city name between 2 and 120 characters.');
+      return;
+    }
+    setSelectedCity(city);
+  };
   const [draftType, setDraftType] = useState<PostCategory>(initialWebDestination.draftType);
   const popstatePending = useRef(false);
   const exploreScrollRef = useRef<ScrollView>(null);
@@ -255,10 +293,10 @@ export default function App({ onOpenSavings }: { onOpenSavings: () => void }) {
           </View>
 
           <View style={styles.sectionHeaderInline}><Text style={styles.sectionTitle}>Community housing</Text><Pressable accessibilityRole="button" accessibilityLabel="See all housing" onPress={() => goToCategory('Housing')} style={styles.seeAllHitArea}><Text style={styles.linkText}>See all</Text></Pressable></View>
-          <ListingWorkspace key={`home-${session?.user.id ?? 'public'}`} category="Housing" preview onAccount={() => setTab('profile')} onMessage={openListingConversation} onCreate={() => startListing('Housing')} />
+          <ListingWorkspace key={`home-${session?.user.id ?? 'public'}`} category="Housing" preferredCity={preferredCity} preview onAccount={() => setTab('profile')} onMessage={openListingConversation} onCreate={() => startListing('Housing')} />
 
           <View style={styles.sectionHeaderInline}><Text style={styles.sectionTitle}>Marketplace</Text><Pressable accessibilityRole="button" accessibilityLabel="See all marketplace" onPress={() => goToCategory('Marketplace')} style={styles.seeAllHitArea}><Text style={styles.linkText}>See all</Text></Pressable></View>
-          <ListingWorkspace key={`home-market-${session?.user.id ?? 'public'}`} category="Marketplace" preview onAccount={() => setTab('profile')} onMessage={openListingConversation} onCreate={() => startListing('Marketplace')} />
+          <ListingWorkspace key={`home-market-${session?.user.id ?? 'public'}`} category="Marketplace" preferredCity={preferredCity} preview onAccount={() => setTab('profile')} onMessage={openListingConversation} onCreate={() => startListing('Marketplace')} />
         </ScrollView>
       )}
 
@@ -288,7 +326,7 @@ export default function App({ onOpenSavings }: { onOpenSavings: () => void }) {
               <SearchField value={search} onChangeText={setSearch} onClear={() => setSearch('')} clearLabel={`Clear ${category.toLowerCase()} search`} label={category === 'People' ? 'Search people by name' : `Search ${category.toLowerCase()} listings`} placeholder={`Search ${category.toLowerCase()}…`} />
             </View>
           ) : null}
-          {category === 'Housing' || category === 'Marketplace' ? <ListingWorkspace key={`${category}-${session?.user.id ?? 'public'}`} category={category} search={search} onAccount={() => setTab('profile')} onMessage={openListingConversation} onCreate={() => startListing(category)} onClearSearch={() => setSearch('')} /> : category === 'People' ? <PeopleDirectory key={session?.user.id ?? 'public'} search={search} onAccount={() => setTab('profile')} /> : category === 'Groups' ? <GroupWorkspace key={session?.user.id ?? 'public'} onAccount={() => setTab('profile')} /> : <CommunityCatalog key={category} category={category} search={search} onHousing={() => goToCategory('Housing')} />}
+          {category === 'Housing' || category === 'Marketplace' ? <ListingWorkspace key={`${category}-${session?.user.id ?? 'public'}`} category={category} preferredCity={preferredCity} search={search} onAccount={() => setTab('profile')} onMessage={openListingConversation} onCreate={() => startListing(category)} onClearSearch={() => setSearch('')} /> : category === 'People' ? <PeopleDirectory key={session?.user.id ?? 'public'} search={search} onAccount={() => setTab('profile')} /> : category === 'Groups' ? <GroupWorkspace key={session?.user.id ?? 'public'} onAccount={() => setTab('profile')} /> : <CommunityCatalog key={category} category={category} search={search} onHousing={() => goToCategory('Housing')} />}
         </ScrollView>
       )}
 
@@ -353,7 +391,10 @@ export default function App({ onOpenSavings }: { onOpenSavings: () => void }) {
                 ))}
               </View>
               <View style={styles.desktopTopActions}>
-                <View style={styles.locationChip}><Text style={styles.locationChipText}>{profile?.city || 'Berlin'}</Text></View>
+                <Pressable accessibilityRole="button" accessibilityLabel="Choose student city" onPress={showCityPicker}
+                  style={({ pressed }) => [styles.locationChip, pressed && styles.pressed]}>
+                  <Text style={styles.locationChipText} numberOfLines={1}>{preferredCity || 'All cities'}</Text>
+                </Pressable>
                 <Pressable accessibilityRole="button" accessibilityLabel="Open Student Savings" onPress={onOpenSavings} style={({ pressed }) => [styles.savingsNav, pressed && styles.pressed]}>
                   <Text style={styles.savingsNavIcon}>€</Text>
                   <Text style={styles.savingsNavText}>Student Savings</Text>
@@ -368,7 +409,11 @@ export default function App({ onOpenSavings }: { onOpenSavings: () => void }) {
           </View>
         ) : (
           <>
-            <View style={styles.mobileTopBar}><BrandMark /><View style={styles.mobileTopActions}><Pressable accessibilityRole="button" accessibilityLabel="Open Student Savings" onPress={onOpenSavings} style={({ pressed }) => [styles.mobileSavings, pressed && styles.pressed]}><Text style={styles.mobileSavingsText}>€ Savings</Text></Pressable><Pressable accessibilityRole="button" accessibilityLabel="Open your account" onPress={() => setTab('profile')} style={styles.miniAvatar}><Icon name="profile" color="#FFFFFF" size={22} /></Pressable></View></View>
+            <View style={styles.mobileTopBar}><BrandMark /><View style={styles.mobileTopActions}>
+              <Pressable accessibilityRole="button" accessibilityLabel="Choose student city" onPress={showCityPicker}
+                style={({ pressed }) => [styles.locationChipMobile, pressed && styles.pressed]}>
+                <Text style={styles.locationChipText} numberOfLines={1}>{preferredCity || 'All cities'}</Text>
+              </Pressable><Pressable accessibilityRole="button" accessibilityLabel="Open Student Savings" onPress={onOpenSavings} style={({ pressed }) => [styles.mobileSavings, pressed && styles.pressed]}><Text style={styles.mobileSavingsText}>€ Savings</Text></Pressable><Pressable accessibilityRole="button" accessibilityLabel="Open your account" onPress={() => setTab('profile')} style={styles.miniAvatar}><Icon name="profile" color="#FFFFFF" size={22} /></Pressable></View></View>
             {content}
             <View style={styles.bottomNav}>
               {bottomNav.map((item) => {
@@ -390,7 +435,31 @@ export default function App({ onOpenSavings }: { onOpenSavings: () => void }) {
           onPress={() => setBotOpen(true)}
         />
       </View>
-      <StuoraBotOverlay open={botOpen} onClose={() => setBotOpen(false)} onNavigate={goToCategory} />
+      <StuoraBotOverlay open={botOpen} preferredCity={preferredCity} onClose={() => setBotOpen(false)} onNavigate={goToCategory} />
+      <Modal visible={cityPickerOpen} transparent animationType="fade" onRequestClose={() => setCityPickerOpen(false)}>
+        <View style={styles.cityModalBackdrop}>
+          <View style={styles.cityModalCard}>
+            <Text style={styles.cityModalTitle}>Choose your student city</Text>
+            <Text style={styles.cityModalExplanation}>Choose a city to filter genuine student listings. This uses your selection or saved profile, not GPS tracking.</Text>
+            <TextInput accessibilityLabel="Student city name" autoCapitalize="words" autoCorrect={false} maxLength={120}
+              value={cityDraft} onChangeText={setCityDraft} onSubmitEditing={saveCity}
+              placeholder="Enter a city" placeholderTextColor={BRAND.subtle} style={styles.cityInput} />
+            {cityError ? <Text accessibilityRole="alert" style={styles.cityError}>{cityError}</Text> : null}
+            <View style={styles.cityActions}>
+              <Pressable accessibilityRole="button" accessibilityLabel="Show all cities"
+                onPress={() => setSelectedCity('__all__')} style={styles.cityActionSecondary}>
+                <Text style={styles.cityActionSecondaryText}>All cities</Text>
+              </Pressable>
+              <Pressable accessibilityRole="button" accessibilityLabel="Cancel city selection"
+                onPress={() => setCityPickerOpen(false)} style={styles.cityActionSecondary}>
+                <Text style={styles.cityActionSecondaryText}>Cancel</Text>
+              </Pressable>
+              <Pressable accessibilityRole="button" accessibilityLabel="Save student city"
+                onPress={saveCity} style={styles.cityActionPrimary}><Text style={styles.cityActionPrimaryText}>Save city</Text></Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -445,7 +514,19 @@ const styles = StyleSheet.create({
   logoLetter: { color: BRAND.white, fontSize: 24, fontWeight: '900', fontStyle: 'italic', zIndex: 3 },
   logoLetterCompact: { fontSize: 18 },
   brandName: { color: BRAND.ink, fontSize: 26, fontWeight: '900', letterSpacing: -1.2 },
-  locationChip: { backgroundColor: BRAND.white, borderWidth: 1, borderColor: BRAND.line, paddingHorizontal: 11, paddingVertical: 8, borderRadius: 999 },
+  locationChip: { backgroundColor: BRAND.white, borderWidth: 1, borderColor: BRAND.line, paddingHorizontal: 11, paddingVertical: 8, borderRadius: 999, maxWidth: 150 },
+  locationChipMobile: { backgroundColor: BRAND.white, borderWidth: 1, borderColor: BRAND.line, paddingHorizontal: 7, paddingVertical: 8, borderRadius: 999, maxWidth: 94 },
+  cityModalBackdrop: { flex: 1, backgroundColor: 'rgba(17,22,47,0.35)', alignItems: 'center', justifyContent: 'center', padding: 18 },
+  cityModalCard: { backgroundColor: BRAND.white, borderRadius: 20, padding: 22, width: '100%', maxWidth: 450, gap: 13 },
+  cityModalTitle: { fontSize: 21, fontWeight: '900', color: BRAND.ink },
+  cityModalExplanation: { fontSize: 13, lineHeight: 20, color: BRAND.muted },
+  cityInput: { minHeight: 48, borderRadius: 12, paddingHorizontal: 14, borderWidth: 1, borderColor: BRAND.line, fontSize: 15, color: BRAND.ink },
+  cityError: { fontSize: 12, color: '#B21F44' },
+  cityActions: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'flex-end', gap: 8 },
+  cityActionSecondary: { paddingHorizontal: 12, paddingVertical: 12, borderRadius: 11, backgroundColor: BRAND.purpleSoft },
+  cityActionSecondaryText: { fontSize: 12, fontWeight: '800', color: BRAND.purple },
+  cityActionPrimary: { paddingHorizontal: 15, paddingVertical: 12, borderRadius: 11, backgroundColor: BRAND.purple },
+  cityActionPrimaryText: { fontSize: 12, fontWeight: '800', color: BRAND.white },
   locationChipText: { color: BRAND.ink, fontSize: 11, fontWeight: '800' },
   notificationButton: { width: 36, height: 36, borderRadius: 12, backgroundColor: BRAND.white, borderWidth: 1, borderColor: BRAND.line, alignItems: 'center', justifyContent: 'center' },
   miniAvatar: { width: 36, height: 36, borderRadius: 12, backgroundColor: BRAND.purple, alignItems: 'center', justifyContent: 'center' },
