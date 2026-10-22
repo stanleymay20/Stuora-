@@ -47,7 +47,9 @@ export default function FloatingStuoraBot({
         onPress={onPress}
         style={({ pressed }) => [styles.launcher, pressed && styles.pressed]}
       >
-        <AnimatedStuoraMascot reducedMotion={reduceMotion} active={visible} />
+        <View pointerEvents="none" style={styles.mascotFrame}>
+          <View style={styles.mascotScaled}><AnimatedStuoraMascot reducedMotion={reduceMotion} active={visible} /></View>
+        </View>
         <View style={styles.caption}><Text style={styles.captionText}>Ask Stuora</Text></View>
         <Text style={styles.beta}>SEARCH BETA</Text>
       </Pressable>
@@ -63,11 +65,13 @@ const styles = StyleSheet.create({
   mobileHost: { bottom: 75 },
   desktopHost: { bottom: 22, right: 20 },
   launcher: {
-    width: 128, minHeight: 163,
+    width: 106, minHeight: 134,
     alignItems: 'center', justifyContent: 'center',
     // No clipping: antennae, fingertips, underside light and hover shadow remain visible.
     overflow: 'visible',
   },
+  mascotFrame: { width: 100, height: 101, alignItems: 'center', position: 'relative', overflow: 'visible' },
+  mascotScaled: { position: 'absolute', top: -11, left: -8, transform: [{ scale: 0.82 }] },
   pressed: { opacity: 0.85 },
   caption: {
     backgroundColor: '#5635E7', borderRadius: 999,
