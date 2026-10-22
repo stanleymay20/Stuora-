@@ -18,9 +18,9 @@ export default function AccountPanel() {
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [name, setName] = useState('');
-  const [city, setCity] = useState('Berlin');
+  const [city, setCity] = useState('');
   const [bio, setBio] = useState('');
-  const [discoverable, setDiscoverable] = useState(true);
+  const [discoverable, setDiscoverable] = useState(false);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState('');
   const [issue, setIssue] = useState('');
@@ -28,8 +28,8 @@ export default function AccountPanel() {
   const preserveRecoveryNotice = useRef(false);
 
   useEffect(() => {
-    setName(profile?.display_name ?? ''); setCity(profile?.city ?? 'Berlin');
-    setBio(profile?.bio ?? ''); setDiscoverable(profile?.is_discoverable ?? true);
+    setName(profile?.display_name ?? ''); setCity(profile?.city ?? '');
+    setBio(profile?.bio ?? ''); setDiscoverable(profile?.is_discoverable ?? false);
   }, [profile]);
   useEffect(() => {
     setPassword(''); setNewPassword(''); setConfirmPassword('');
@@ -155,7 +155,7 @@ export default function AccountPanel() {
         {profile.bio ? <Text style={styles.passportBio}>{profile.bio}</Text> : null}
       </View>
     </View> : null}
-    {!session ? <View style={styles.welcome}><Image source={require('../../assets/berlin-skyline.jpg')} style={[StyleSheet.absoluteFill, { width: '100%', height: '100%' }]} resizeMode="cover" /><View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(17,22,47,0.35)' }]} /><View style={{ zIndex: 1 }}><StuoraMark size={58} /></View><Text style={styles.welcomeTitle}>Stuora</Text><Text style={styles.welcomeSubtitle}>Student life, all in one place.</Text></View> : null}
+    {!session ? <View style={styles.welcome}><View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: '#252354' }]} /><View pointerEvents="none" style={styles.welcomeAura} /><View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(17,22,47,0.35)' }]} /><View style={{ zIndex: 1 }}><StuoraMark size={58} /></View><Text style={styles.welcomeTitle}>Stuora</Text><Text style={styles.welcomeSubtitle}>Student life, all in one place.</Text></View> : null}
     <Text accessibilityRole="header" style={styles.heading}>{session ? 'Your Stuora Passport' : forgot ? 'Reset your password' : signup ? 'Create your Stuora account' : 'Welcome to Stuora'}</Text>
     <Text style={styles.description}>{session ? 'Your profile is saved to your account and available across devices.' : forgot ? 'Enter your account email. We will send a secure recovery link if an account exists.' : 'Core student participation is free. No university connection is required.'}</Text>
     {(issue || error) ? <Text accessibilityRole="alert" style={styles.error}>{issue || error}</Text> : null}
@@ -181,11 +181,11 @@ export default function AccountPanel() {
         <Text style={styles.label}>Display name</Text>
         <TextInput accessibilityLabel="Display name" maxLength={80} value={name} onChangeText={setName} editable={!busy} style={styles.input} />
         <Text style={styles.label}>City</Text>
-        <TextInput accessibilityLabel="City" maxLength={120} value={city} onChangeText={setCity} editable={!busy} style={styles.input} />
+        <TextInput accessibilityLabel="City" placeholder="Enter your actual city" maxLength={120} value={city} onChangeText={setCity} editable={!busy} style={styles.input} />
         <Text style={styles.label}>Bio (optional)</Text>
         <TextInput accessibilityLabel="Bio" maxLength={600} multiline value={bio} onChangeText={setBio} editable={!busy} style={[styles.input, styles.bio]} />
         <Pressable accessibilityRole="switch" aria-checked={discoverable} accessibilityState={{ checked: discoverable, disabled: busy }} accessibilityLabel="Profile discoverable" disabled={busy} onPress={() => setDiscoverable(v => !v)}><Text style={styles.link}>{discoverable ? '✓' : '○'} Let signed-in students discover my profile</Text></Pressable>
-        <Text style={styles.description}>Your display name, city and bio are visible when discovery is enabled. Your email is not part of your public profile.</Text>
+        <Text style={styles.description}>Your profile is private by default. Only enable discovery if you want signed-in students to see your display name, city and bio. Your email is never shown in the directory.</Text>
         {button(profile ? 'Save profile' : 'Create profile', () => void save())}
       </>}
       {button('Sign out', () => void logout())}
@@ -202,6 +202,7 @@ const styles = StyleSheet.create({
   passportMeta: { fontSize: 12, color: '#6F7490', fontWeight: '600' },
   passportBio: { fontSize: 12, lineHeight: 19, color: '#252B4A' },
   welcome: { minHeight: 215, borderRadius: 18, overflow: 'hidden', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#11162F' },
+  welcomeAura: { position: 'absolute', width: 190, height: 190, top: -85, right: -30, backgroundColor: '#6359B4', opacity: 0.45, borderRadius: 100 },
   welcomeTitle: { color: '#FFFFFF', fontSize: 30, fontWeight: '900' },
   welcomeSubtitle: { color: '#FFFFFF', fontSize: 14 },
   card: { padding: 24, backgroundColor: '#fff', borderRadius: 20, borderWidth: 1, borderColor: '#E9EAF1', gap: 12 },
