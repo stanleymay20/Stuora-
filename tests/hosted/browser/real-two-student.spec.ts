@@ -84,6 +84,9 @@ async function signIn(page: Page, email: string, password: string, displayName: 
   const name = page.getByLabel('Display name');
   if (await page.getByRole('button', { name: 'Create profile', exact: true }).isVisible().catch(() => false)) {
     await name.fill(displayName);
+    // Dedicated staging fixture uses an explicit city; application never
+    // supplies a fictional geographic default on behalf of real students.
+    await page.getByLabel('City', { exact: true }).fill('Aachen');
     await page.getByRole('button', { name: 'Create profile', exact: true }).click();
     await expect(page.getByText('Your profile has been saved.')).toBeVisible();
   }
