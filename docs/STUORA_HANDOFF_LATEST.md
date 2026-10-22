@@ -84,3 +84,6 @@ Files newly added on draft PR #23:
 - Housing and Marketplace now use the **existing** RLS-protected public.saved_listings table for save/unsave, persisted account state and a filtered Saved listings view. A PostgREST `listings!inner` join returns only the user's saved **active, visible** listings. No new tables, RLS policies, image upload changes or external services.
 - Browser API contract tests added for both categories; database assertions verify cross-student read/write/delete isolation. Mocked browser tests are **not real hosted two-account acceptance**.
 - Still INTERNAL ALPHA: media processing runtime/cutover, verified Jobs/Trips/Events workflows, moderation, email deliverability, real two-account tests, native-device checks, external API and generative LLM gateway and commercial operations remain unqualified. No AI provider or payment activated.
+
+## 2026-10-22 — New trusted decoder hardening candidate
+- The dormant Edge media path now contains header-level JPEG/PNG/WebP dimension checks **before ImageMagick.read**, plus independent real-WASM Deno codec tests. No Edge deployment or Storage cutover is authorized merely by source CI. Consult `docs/STUORA_TRUSTED_MEDIA_CUTOVER_2026-10-22.md`. Staging database already has photo guard and rate-attempt migrations; production remains unchanged. The approved app's current direct upload continues.

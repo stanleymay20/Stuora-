@@ -43,6 +43,9 @@ jobs:
       - name: Typecheck trusted media Edge Function
         run: deno check --config supabase/functions/listing-photo-intake/deno.json supabase/functions/listing-photo-intake/index.ts
 
+      - name: Test real WASM JPEG PNG WebP media codecs (local Deno runtime)
+        run: deno test --allow-read --config supabase/functions/listing-photo-intake/deno.json supabase/functions/listing-photo-intake/processor.test.ts
+
   verify:
     runs-on: ubuntu-latest
     timeout-minutes: 15
