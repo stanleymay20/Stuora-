@@ -112,6 +112,51 @@ Deno.test("animated WebP and animated PNG headers fail before WASM",()=>{
   assert.throws(()=>inspectImageHeader(apng),{code:'ANIMATED'});
 });
 
+Deno.test("PNG preflight rejects animation data even after first IDAT",()=>{
+  const finalChunk=png.subarray(png.length-12);
+  const preceding=png.subarray(0,png.length-12);
+  const lateAnimation=[
+    chunk('acTL',Uint8Array.of(0,0,0,2,0,0,0,0)),
+    chunk('fcTL',new Uint8Array(26)),
+    chunk('fdAT',new Uint8Array(8)),
+  ];
+  for(const animation of lateAnimation){
+    const payload=concat(preceding,animation,finalChunk);
+    assert.throws(()=>inspectImageHeader(payload),{code:'ANIMATED'});
+    assert.throws(()=>decodeAndEncode(payload),{code:'ANIMATED'});
+  }
+});
+Deno.test("PNG preflight requires complete IEND, rejects trailing bytes, duplicate IHDR and nonconsecutive IDAT",()=>{
+  const iend=png.subarray(png.length-12);
+  const preceding=png.subarray(0,png.length-12);
+  const checks=[
+    png.subarray(0,png.length-1),
+    concat(png,Uint8Array.of(0)),
+    concat(preceding,chunk('IHDR',Uint8Array.of(...Array(13).fill(0))),iend),
+    concat(preceding,chunk('tEXt',new TextEncoder().encode('Comment\\0after IDAT')),
+      chunk('IDAT',Uint8Array.of(0)),iend),
+  ];
+  for(const payload of checks){
+    assert.throws(()=>inspectImageHeader(payload));
+    assert.throws(()=>decodeAndEncode(payload));
+  }
+});
+Deno.test("PNG preflight keeps legitimate post-IDAT metadata, which the real decoder strips",()=>{
+  const comment=new TextEncoder().encode('StudentGPS=0;NeverPersist');
+  const withMetadata=concat(png.subarray(0,png.length-12),
+    chunk('tEXt',concat(new TextEncoder().encode('Comment\\0'),comment)),png.subarray(png.length-12));
+  assert.deepEqual(inspectImageHeader(withMetadata),{format:'png',width:1,height:1});
+  const processed=decodeAndEncode(withMetadata);
+  assert.ok(!new TextDecoder().decode(processed.data).includes('NeverPersist'));
+  assert.ok(!listChunks(processed.data).includes('tEXt'));
+});
+Deno.test("PNG preflight caps adversarial chunk counts before WASM decoding",()=>{
+  const many=new Array<Uint8Array>(10_001).fill(chunk('tEXt',new Uint8Array()));
+  const payload=concat(png.subarray(0,33),...many,png.subarray(33));
+  assert.throws(()=>inspectImageHeader(payload),{code:'STRUCTURE_LIMIT'});
+  assert.throws(()=>decodeAndEncode(payload),{code:'STRUCTURE_LIMIT'});
+});
+
 Deno.test("staging Edge build is immutable-disabled regardless of activation secrets",()=>{
   assert.equal(TRUSTED_MEDIA_WRITES_COMPILED_IN,false);
   for (const activation of [undefined,"STAGING_APPROVED","PRODUCTION"]) {

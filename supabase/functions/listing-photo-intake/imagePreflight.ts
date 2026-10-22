@@ -23,21 +23,42 @@ function checked(format: ImageHeader['format'], width: number, height: number): 
   return { format, width, height };
 }
 function png(raw: Uint8Array): ImageHeader {
-  if (raw.length < 45 || u32be(raw, 8) !== 13 || !typeAt(raw,12,'IHDR')) return bad();
-  const header = checked('png',u32be(raw,16),u32be(raw,20));
-  // The apng animation extension must not be silently reduced to one frame.
-  let pos = 8, gotData = false;
-  while(pos + 12 <= raw.length){
-    const length = u32be(raw,pos);
+  if (raw.length < 45 || u32be(raw, 8) !== 13 || !typeAt(raw, 12, 'IHDR')) return bad();
+  const header = checked('png', u32be(raw, 16), u32be(raw, 20));
+  // PNG may carry ancillary chunks AFTER IDAT. Scan through the final IEND
+  // rather than trusting the first image-data chunk; APNG frame chunks after
+  // IDAT must not be silently truncated to a still photo.
+  let pos = 8;
+  let sawHeader = false, sawImageData = false, finishedImageData = false;
+  let sawEnd = false, chunkCount = 0;
+  while (pos + 12 <= raw.length) {
+    if (++chunkCount > 10_000) return bad('STRUCTURE_LIMIT');
+    const length = u32be(raw, pos);
     const end = pos + length + 12;
-    if(end > raw.length) return bad();
-    if(typeAt(raw,pos+4,'acTL') || typeAt(raw,pos+4,'fcTL') || typeAt(raw,pos+4,'fdAT'))
-      return bad('ANIMATED');
-    if(typeAt(raw,pos+4,'IDAT')) { gotData = true; break; }
-    if(typeAt(raw,pos+4,'IEND')) return bad();
-    pos=end;
+    if (end > raw.length) return bad();
+    const type = String.fromCharCode(...raw.subarray(pos + 4, pos + 8));
+    if (type === 'acTL' || type === 'fcTL' || type === 'fdAT') return bad('ANIMATED');
+    if (!sawHeader) {
+      if (type !== 'IHDR' || length !== 13) return bad();
+      sawHeader = true;
+    } else if (type === 'IHDR') return bad();
+    if (type === 'IDAT') {
+      // IDAT blocks must be consecutive. An IDAT after any other chunk
+      // is malformed, including after an ancillary metadata chunk.
+      if (finishedImageData) return bad();
+      sawImageData = true;
+    } else if (sawImageData && type !== 'IEND') {
+      finishedImageData = true;
+    }
+    if (type === 'IEND') {
+      if (length !== 0 || !sawImageData || end !== raw.length) return bad();
+      sawEnd = true;
+      pos = end;
+      break;
+    }
+    pos = end;
   }
-  if(!gotData) return bad();
+  if (!sawHeader || !sawImageData || !sawEnd || pos !== raw.length) return bad();
   return header;
 }
 function jpeg(raw: Uint8Array): ImageHeader {

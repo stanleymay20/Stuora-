@@ -1,5 +1,5 @@
-// Staged, NOT DEPLOYED. This privileged Edge Function must be reviewed and
-// validated against a dedicated staging backend before the Storage cutover.
+// Deployed in STAGING only with a compiled-off write gate. Changes to this
+// function require CI and controlled staging redeployment; NO Storage cutover.
 // Real student images are never sent to an external LLM or third-party URL.
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.117.3";
