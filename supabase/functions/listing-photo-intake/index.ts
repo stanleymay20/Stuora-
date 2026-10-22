@@ -124,6 +124,10 @@ function deps(): TrustedMediaDeps {
 }
 Deno.serve(async req => {
   const origin = req.headers.get("Origin");
+  // Fail closed until private staging integration tests, durable request quotas
+  // and the coordinated client/Storage migration have been approved.
+  if (Deno.env.get("STUORA_TRUSTED_MEDIA_ACTIVATION") !== "STAGING_APPROVED")
+    return response(503, { code: "FEATURE_DISABLED", error: "Trusted uploads are not enabled" }, origin);
   if (origin && origin !== allowedOrigin) return response(403, { error: "Unapproved origin" }, null);
   if (req.method === "OPTIONS") return response(200, { ok: true }, origin);
   if (req.method !== "POST" && req.method !== "DELETE") return response(405, { error: "Unsupported method" }, origin);
