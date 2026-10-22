@@ -9,7 +9,7 @@
 - Existing signed-in accounts must work against the **approved staging origin only** (no production calls).
 - A publishes an explicitly marked staging Housing listing, uploads a PNG through real staging Storage, and verifies the image decodes after revisiting the listing. B discovers the same persisted listing and image without gaining owner edit or photo-removal controls; B reloads and fetches the image again.
 - B starts a persisted owner conversation, sends a message, and A receives it in Messages.
-- A creates a public group, B cannot access discussion before joining, B joins and sends a message, A reads it, and B leaves.
+- A creates a public group, B cannot access discussion before joining, B joins and sends a message, A reads it, and B leaves. **After reloading**, B must again be a nonmember and cannot read the former group discussion or post messages.
 - The suite attempts to **remove the uploaded photo before archiving the listing** and delete the group in `finally`. Cleanup failures **fail the acceptance run** with staging fixture labels; manually verify storage objects and staging data afterward. An interrupted process can still leave fixtures requiring manual cleanup.
 - No mocked Supabase requests, no false student verification flags, no live money, no Stripe, no student-deals code. A passing image-decode check proves fetchability of the staged PNG in Chromium, **not** cross-user raw Storage API denial, MIME-content security, public-object revocation, device gallery permissions, or permanent deletion guarantees. A host-only guard catches unexpected `*.supabase.co` requests but does not replace direct two-token REST/Storage negative authorization tests or validate custom-domain external destinations.
 
