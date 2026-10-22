@@ -20,7 +20,7 @@ const PAGE_SIZE = 24;
 const MAX_PHOTOS = 6;
 const MAX_PHOTO_BYTES = 5 * 1024 * 1024;
 const ALLOWED_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
-const blank = (): Draft => ({ title: '', description: '', city: 'Berlin', price: '', housingType: 'room', furnished: false, bills: false, condition: 'good' });
+const blank = (): Draft => ({ title: '', description: '', city: '', price: '', housingType: 'room', furnished: false, bills: false, condition: 'good' });
 const money = (cents: number | null) => `€${((cents ?? 0) / 100).toFixed(2)}`;
 
 function normalizeItem(raw: unknown): Item {
@@ -60,7 +60,7 @@ function Photo({ media, title, index, removable, disabled, onRemove }: { media: 
   </View>;
 }
 
-export default function ListingWorkspace({ category, mode = 'browse', search = '', preview = false, onAccount, onMessage, onCreate, onClearSearch }: { category: 'Housing' | 'Marketplace'; mode?: 'browse' | 'create'; search?: string; preview?: boolean; onAccount: () => void; onMessage?: (conversationId: string) => void; onCreate?: () => void; onClearSearch?: () => void }) {
+export default function ListingWorkspace({ category, mode = 'browse', search = '', preferredCity = '', preview = false, onAccount, onMessage, onCreate, onClearSearch }: { category: 'Housing' | 'Marketplace'; mode?: 'browse' | 'create'; search?: string; preferredCity?: string; preview?: boolean; onAccount: () => void; onMessage?: (conversationId: string) => void; onCreate?: () => void; onClearSearch?: () => void }) {
   const { session, profile, profileLoading, initializing, error: profileError } = useAuth();
   const { width } = useWindowDimensions();
   const compactWideEmpty = preview && width >= 760;
@@ -70,7 +70,8 @@ export default function ListingWorkspace({ category, mode = 'browse', search = '
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [own, setOwn] = useState(false);
-  const [cityFilter, setCityFilter] = useState('');
+  const [cityFilter, setCityFilter] = useState(preferredCity);
+  useEffect(() => { setCityFilter(preferredCity); }, [preferredCity]);
   const [maxPrice, setMaxPrice] = useState('');
   const hasListingFilters = Boolean(cityFilter.trim() || maxPrice.trim());
   const [revision, setRevision] = useState(0);
@@ -78,7 +79,14 @@ export default function ListingWorkspace({ category, mode = 'browse', search = '
   const [more, setMore] = useState(false);
   const [selected, setSelected] = useState<Item | null>(null);
   const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState<Draft>(blank);
+  const [draft, setDraft] = useState<Draft>(() => blank());
+  useEffect(() => {
+    // Suggested city comes from real profile/selection; never silently assume Berlin.
+    if (mode === 'create' && !editing && !draft.city.trim()) {
+      const candidate = preferredCity || profile?.city?.trim() || '';
+      if (candidate) setDraft(current => ({ ...current, city: candidate }));
+    }
+  }, [mode, editing, draft.city, preferredCity, profile?.city]);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState('');
   const [confirmArchive, setConfirmArchive] = useState(false);
