@@ -4,13 +4,16 @@ const userId = session().user.id;
 type Media = { id: string; listing_id: string; object_path: string; sort_order: number; created_at: string };
 type Stored = { id: string; owner_id: string; kind: string; status: string; title: string; description: string; city: string; price_cents: number; housing_details: Record<string, unknown> | null; marketplace_details: Record<string, unknown> | null; listing_media: Media[] };
 const pixelPng = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9Zuz0AAAAASUVORK5CYII=', 'base64');
+// Deliberately insert a GPS text chunk: only scrubbed bytes may be uploaded.
 function api() {
   const rows: Stored[] = [];
   let failure = '';
   let sequence = 10;
   let mediaSequence = 1;
+  const uploadedPhotos: Buffer[] = [];
+  const saved = new Set<string>();
   return {
-    rows, fail: (endpoint: string) => { failure = endpoint; },
+    rows, uploadedPhotos, saved, fail: (endpoint: string) => { failure = endpoint; },
     install: async (page: Page) => {
       await page.route('https://stuora-test.invalid/**', async route => {
         const req = route.request(), url = new URL(req.url());
@@ -20,11 +23,33 @@ function api() {
         if (url.pathname.includes('/storage/v1/object/public/listing-media/')) return route.fulfill({ body: pixelPng, contentType: 'image/png' });
         if (url.pathname.startsWith('/storage/v1/object/listing-media/') && req.method() === 'POST') {
           const path = decodeURIComponent(url.pathname.slice('/storage/v1/object/listing-media/'.length));
+          uploadedPhotos.push(req.postDataBuffer() ?? Buffer.alloc(0));
           return route.fulfill({ status: 200, json: { Key: `listing-media/${path}` } });
         }
         if (url.pathname === '/storage/v1/object/listing-media' && req.method() === 'DELETE') return route.fulfill({ status: 200, json: [] });
         const endpoint = url.pathname.split('/').at(-1)!;
         if (failure === endpoint) { failure = ''; return route.fulfill({ status: 403, json: { message: 'Controlled test error', code: '42501' } }); }
+        if (endpoint === 'saved_listings') {
+          const listingId = url.searchParams.get('listing_id')?.replace('eq.', '');
+          if (req.method() === 'POST') {
+            const body = req.postDataJSON();
+            expect(body.user_id).toBe(userId);
+            saved.add(body.listing_id);
+            return route.fulfill({ status: 201, json: {} });
+          }
+          if (req.method() === 'DELETE') {
+            expect(url.searchParams.get('user_id')).toBe('eq.' + userId);
+            if (listingId) saved.delete(listingId);
+            return route.fulfill({ status: 204 });
+          }
+          if (req.method() === 'GET' && url.searchParams.get('select')?.includes('listings!inner')) {
+            const rowsSaved = rows.filter(r => saved.has(r.id) && r.status === 'active' &&
+              url.searchParams.get('listings.kind') === 'eq.' + r.kind);
+            return route.fulfill({ json: rowsSaved.map(r => ({ listing_id: r.id, listings: r })) });
+          }
+          const found = listingId && saved.has(listingId) ? { listing_id: listingId } : null;
+          return route.fulfill({ json: found, contentType: 'application/vnd.pgrst.object+json' });
+        }
         if (endpoint === 'save_student_listing') {
           const args = req.postDataJSON();
           expect(args).not.toHaveProperty('owner_id'); expect(args).not.toHaveProperty('status');
@@ -81,10 +106,11 @@ for (const category of ['Housing', 'Marketplace']) {
     await page.getByRole('button', { name: `Post ${category}`, exact: true }).click();
     await page.getByLabel('Listing title').fill(`${category} from Alice`);
     await page.getByLabel('Listing description').fill('A real persistent student listing');
+    await page.getByLabel('Listing city').fill('Aachen');
     await page.getByLabel(category === 'Housing' ? 'Monthly rent (EUR)' : 'Price (EUR)').fill(category === 'Housing' ? '650.25' : '0');
     await page.getByRole('button', { name: 'Publish listing', exact: true }).click();
-    await expect(page.getByText('Listing saved. Add up to six real photos below.')).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Add photo (0/6)' })).toBeVisible();
+    await expect(page.getByText('Listing saved. Photo uploads are temporarily paused while Stuora completes secure processing.')).toBeVisible();
+    await expect(page.getByRole('button', { name: /^Add photo/ })).toHaveCount(0);
     expect(data.rows[0].price_cents).toBe(category === 'Housing' ? 65025 : 0);
     const secondContext = await browser.newContext(); const second = await secondContext.newPage(); await data.install(second); await second.goto('/'); await explore(second, category);
     await second.getByRole('button', { name: `View ${category} from Alice` }).click();
@@ -101,7 +127,7 @@ for (const category of ['Housing', 'Marketplace']) {
     await page.getByRole('button', { name: 'Edit listing', exact: true }).click();
     await page.getByLabel('Listing title').fill(`${category} edited`);
     await page.getByRole('button', { name: 'Save listing changes' }).click();
-    await expect(page.getByText('Listing saved. Add up to six real photos below.')).toBeVisible();
+    await expect(page.getByText('Listing saved. Photo uploads are temporarily paused while Stuora completes secure processing.')).toBeVisible();
     await expect(page.getByText(`${category} edited`, { exact: true })).toBeVisible();
     await page.getByRole('button', { name: 'Archive listing', exact: true }).click();
     await page.getByRole('button', { name: 'Confirm archive', exact: true }).click();
@@ -110,39 +136,35 @@ for (const category of ['Housing', 'Marketplace']) {
     await expect(second.getByText(`No ${category.toLowerCase()} listings found.`)).toBeVisible();
     await page.getByRole('button', { name: 'My listings', exact: true }).click();
     await page.getByRole('button', { name: `View ${category} edited` }).click();
-    await expect(page.getByText('Berlin · closed')).toBeVisible();
+    await expect(page.getByText('Aachen · closed')).toBeVisible();
     await expect(page.getByRole('button', { name: 'Edit listing', exact: true })).toHaveCount(0);
     await secondContext.close();
   });
 }
 
-test('owner uploads and removes a real listing photo while public discovery renders it', async ({ page, browser }) => {
-  const data = api(); await data.install(page); await account(page); await signin(page);
-  await page.getByRole('button', { name: 'Create listing', exact: true }).click();
-  await page.getByRole('button', { name: 'Post Marketplace', exact: true }).click();
+test('Stuora paused-photo release blocks direct Storage uploading for owners and visitors', async ({page,browser}) => {
+  const data=api(); await data.install(page); await account(page); await signin(page);
+  await page.getByRole('button',{name:'Create listing',exact:true}).click();
+  await page.getByRole('button',{name:'Post Marketplace',exact:true}).click();
   await page.getByLabel('Listing title').fill('Media desk');
+  await page.getByLabel('Listing city').fill('Aachen');
   await page.getByLabel('Price (EUR)').fill('25');
-  await page.getByRole('button', { name: 'Publish listing', exact: true }).click();
-  await expect(page.getByRole('button', { name: 'Add photo (0/6)' })).toBeVisible();
-  const chooser = page.waitForEvent('filechooser');
-  await page.getByRole('button', { name: 'Add photo (0/6)' }).click();
-  const fileChooser = await chooser;
-  await fileChooser.setFiles({ name: 'desk.png', mimeType: 'image/png', buffer: pixelPng });
-  await expect(page.getByText('Photo uploaded and attached to this listing.')).toBeVisible();
-  await expect(page.getByLabel('Media desk photo 1')).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Add photo (1/6)' })).toBeVisible();
-
-  const publicContext = await browser.newContext(); const publicPage = await publicContext.newPage(); await data.install(publicPage); await publicPage.goto('/'); await explore(publicPage, 'Marketplace');
-  await expect(publicPage.getByLabel('Media desk cover photo')).toBeVisible();
-  await publicPage.getByRole('button', { name: 'View Media desk' }).click();
-  await expect(publicPage.getByLabel('Media desk photo 1')).toBeVisible();
-  await expect(publicPage.getByRole('button', { name: 'Remove photo 1' })).toHaveCount(0);
-  await publicContext.close();
-
-  await page.getByRole('button', { name: 'Remove photo 1' }).click();
-  await expect(page.getByText('Photo removed.')).toBeVisible();
-  await expect(page.getByLabel('Media desk photo 1')).toHaveCount(0);
-  await expect(page.getByRole('button', { name: 'Add photo (0/6)' })).toBeVisible();
+  await page.getByRole('button',{name:'Publish listing',exact:true}).click();
+  await expect(page.getByText('Listing saved. Photo uploads are temporarily paused while Stuora completes secure processing.')).toBeVisible();
+  await expect(page.getByRole('button',{name:/^Add photo/})).toHaveCount(0);
+  await expect(page.getByText('Photo uploads are temporarily paused while Stuora completes secure processing.', { exact: true })).toBeVisible();
+  expect(data.uploadedPhotos).toHaveLength(0);
+  await page.reload(); await explore(page,'Marketplace');
+  await page.getByRole('button',{name:'My listings',exact:true}).click();
+  await page.getByRole('button',{name:'View Media desk'}).click();
+  await expect(page.getByRole('button',{name:/^Add photo/})).toHaveCount(0);
+  const visitor=await browser.newContext(),other=await visitor.newPage();
+  await data.install(other); await other.goto('/'); await explore(other,'Marketplace');
+  await other.getByRole('button',{name:'View Media desk'}).click();
+  await expect(other.getByRole('button',{name:/^Add photo/})).toHaveCount(0);
+  await expect(other.getByRole('button',{name:/^Remove photo/})).toHaveCount(0);
+  expect(data.uploadedPhotos).toHaveLength(0);
+  await visitor.close();
 });
 
 test('anonymous posting gate, listing read failure, validation and save retry preserve input', async ({ page }) => {
@@ -155,7 +177,9 @@ test('anonymous posting gate, listing read failure, validation and save retry pr
   await page.getByRole('button', { name: 'Create listing', exact: true }).click();
   await page.getByRole('button', { name: 'Publish listing', exact: true }).click();
   await expect(page.getByText('Title must be between 3 and 140 characters.')).toBeVisible();
-  await page.getByLabel('Listing title').fill('Desk from Alice'); await page.getByLabel('Price (EUR)').fill('-1');
+  await page.getByLabel('Listing title').fill('Desk from Alice');
+  await page.getByLabel('Listing city').fill('Aachen');
+  await page.getByLabel('Price (EUR)').fill('-1');
   await page.getByRole('button', { name: 'Publish listing', exact: true }).click();
   await expect(page.getByText(/Enter a EUR price/)).toBeVisible(); expect(data.rows).toHaveLength(0);
   await page.getByLabel('Price (EUR)').fill('35.50'); data.fail('save_student_listing');
@@ -163,7 +187,7 @@ test('anonymous posting gate, listing read failure, validation and save retry pr
   await expect(page.getByText(/Could not save. Your input is preserved./)).toBeVisible();
   await expect(page.getByLabel('Listing title')).toHaveValue('Desk from Alice');
   await page.getByRole('button', { name: 'Publish listing', exact: true }).click();
-  await expect(page.getByText('Listing saved. Add up to six real photos below.')).toBeVisible();
+  await expect(page.getByText('Listing saved. Photo uploads are temporarily paused while Stuora completes secure processing.')).toBeVisible();
   await explore(page, 'Marketplace');
   await expect(page.getByRole('button', { name: 'Refresh listings' })).toBeEnabled();
   data.fail('listings'); await page.getByRole('button', { name: 'Refresh listings' }).click();
@@ -246,3 +270,124 @@ test('search changes cancel old listing requests and their timers', async ({ pag
   await expect(page.getByText(/Could not load listings/)).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'View Old desk' })).toHaveCount(0);
 });
+
+for (const category of ['Housing', 'Marketplace'] as const) {
+  test(`${category}: city and maximum-price filters are sent to Supabase and clear correctly`, async ({ page }) => {
+    const data = api(); await data.install(page);
+    const requests: { kind: string | null; city: string | null; maximum: string | null }[] = [];
+    await page.route('**/rest/v1/listings?*', async route => {
+      const params = new URL(route.request().url()).searchParams;
+      requests.push({ kind: params.get('kind'), city: params.get('city'), maximum: params.get('price_cents') });
+      await route.fulfill({ json: [] });
+    });
+    await page.goto('/');
+    await page.getByRole('button', { name: `Browse ${category}`, exact: true }).click();
+    await expect(page.getByRole('textbox', { name: 'Filter listings by city' })).toBeVisible();
+    await expect(page.getByRole('textbox', { name: 'Maximum listing price (EUR)' })).toBeVisible();
+    await page.getByRole('textbox', { name: 'Filter listings by city' }).fill('Potsdam');
+    await page.getByRole('textbox', { name: 'Maximum listing price (EUR)' }).fill('650.25');
+    await expect.poll(() => requests.some(r => r.kind === `eq.${category.toLowerCase()}` &&
+      r.city === 'ilike.%Potsdam%' && r.maximum === 'lte.65025')).toBe(true);
+    await expect(page.getByText('No real listings match these filters. Clear the filters or adjust the city and maximum price.')).toBeVisible();
+    await page.getByRole('button', { name: 'Clear listing filters' }).click();
+    await expect(page.getByRole('textbox', { name: 'Filter listings by city' })).toHaveValue('');
+    await expect(page.getByRole('textbox', { name: 'Maximum listing price (EUR)' })).toHaveValue('');
+    await expect.poll(() => requests.some(r => r.kind === `eq.${category.toLowerCase()}` && r.city === null && r.maximum === null)).toBe(true);
+  });
+}
+
+test('messaging a real listing opens the exact returned conversation and never an older thread', async ({ page }) => {
+  const data = api();
+  await data.install(page);
+  const targetId = '00000000-0000-0000-0000-000000000021';
+  const olderId = '00000000-0000-0000-0000-000000000022';
+  const listingId = '00000000-0000-0000-0000-000000000023';
+  const ownerId = '00000000-0000-0000-0000-000000000024';
+  let requestedListing = '';
+  let requestedMessages = '';
+  const listing = {
+    id: listingId, owner_id: ownerId, kind: 'housing', status: 'active',
+    title: 'A real room from another member', description: 'Message the owner about this room',
+    city: 'Berlin', price_cents: 65000,
+    housing_details: { listing_id: listingId, housing_type: 'room', rent_cents: 65000, furnished: false, bills_included: false },
+    marketplace_details: null, listing_media: [],
+  };
+  await page.route('**/rest/v1/listings?*', async route => {
+    const url = new URL(route.request().url());
+    if (url.searchParams.has('id')) return route.fulfill({ json: listing, contentType: 'application/vnd.pgrst.object+json' });
+    return route.fulfill({ json: [listing] });
+  });
+  await page.route('**/rest/v1/rpc/start_listing_conversation', async route => {
+    requestedListing = route.request().postDataJSON()?.p_listing_id;
+    return route.fulfill({ json: targetId });
+  });
+  await page.route('**/rest/v1/conversations?*', async route => route.fulfill({ json: [
+    { id: olderId, title: 'Older unrelated conversation', created_at: '2026-10-18T12:00:00Z' },
+    { id: targetId, title: 'Listing: A real room from another member', created_at: '2026-10-17T12:00:00Z' },
+  ] }));
+  await page.route('**/rest/v1/messages?*', async route => {
+    requestedMessages = new URL(route.request().url()).searchParams.get('conversation_id') ?? '';
+    return route.fulfill({ json: [] });
+  });
+  await account(page); await signin(page);
+  await explore(page, 'Housing');
+  await page.getByRole('button', { name: 'View A real room from another member' }).click();
+  await expect(page.getByRole('button', { name: 'Message owner' })).toBeVisible();
+  await page.getByRole('button', { name: 'Message owner' }).click();
+  await expect(page.getByRole('button', { name: 'Open conversation Listing: A real room from another member' })).toBeVisible();
+  await expect.poll(() => requestedMessages).toBe('eq.' + targetId);
+  expect(requestedListing).toBe(listingId);
+  await expect(page.getByText('Older unrelated conversation', { exact: true })).toBeVisible();
+  await expect(page.getByText('No messages yet. Say hello.', { exact: true })).toBeVisible();
+});
+
+test('message handoff fails closed if returned conversation is not accessible to the signed-in member', async ({ page }) => {
+  const data = api();
+  await data.install(page);
+  const listingId = '00000000-0000-0000-0000-000000000033';
+  const targetId = '00000000-0000-0000-0000-000000000031';
+  await page.route('**/rest/v1/listings?*', async route => route.fulfill({ json: [{
+    id: listingId, owner_id: '00000000-0000-0000-0000-000000000034',
+    kind: 'marketplace', status: 'active', title: 'An actual member desk', description: '',
+    city: 'Berlin', price_cents: 2500, housing_details: null,
+    marketplace_details: { listing_id: listingId, item_condition: 'good', pickup_only: true, quantity: 1 },
+    listing_media: [],
+  }] }));
+  await page.route('**/rest/v1/rpc/start_listing_conversation', async route => route.fulfill({ json: targetId }));
+  await page.route('**/rest/v1/conversations?*', async route => route.fulfill({ json: [
+    { id: '00000000-0000-0000-0000-000000000032', title: 'Someone else', created_at: '2026-10-18T12:00:00Z' },
+  ] }));
+  await account(page); await signin(page);
+  await explore(page, 'Marketplace');
+  await page.getByRole('button', { name: 'View An actual member desk' }).click();
+  await page.getByRole('button', { name: 'Message owner' }).click();
+  await expect(page.getByText('This listing conversation is not accessible. Refresh Messages or return to the listing.')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Send message' })).toHaveCount(0);
+});
+
+for (const category of ['Housing', 'Marketplace']) {
+  test(category + ': save and remove real-account bookmarks through RLS-scoped API contract', async ({ page }) => {
+    const data = api();
+    const id = category === 'Housing' ? '00000000-0000-0000-0000-000000000075' : '00000000-0000-0000-0000-000000000076';
+    data.rows.push({
+      id, owner_id: '00000000-0000-0000-0000-000000000002',
+      kind: category.toLowerCase(), status: 'active',
+      title: category + ' save-test', description: 'Listing exists only inside the mocked browser fixture',
+      city: 'Aachen', price_cents: 18000, housing_details: null, marketplace_details: null, listing_media: [],
+    });
+    await data.install(page); await account(page); await signin(page); await explore(page, category);
+    await page.getByRole('button', { name: 'View ' + category + ' save-test' }).click();
+    await expect(page.getByRole('button', { name: 'Save listing', exact: true })).toBeVisible();
+    await page.getByRole('button', { name: 'Save listing', exact: true }).click();
+    await expect(page.getByText('Listing saved to your account.')).toBeVisible();
+    expect(data.saved.has(id)).toBe(true);
+    await page.reload(); await explore(page, category);
+    await page.getByRole('button', { name: 'Saved listings', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'View ' + category + ' save-test' })).toBeVisible();
+    await page.getByRole('button', { name: 'View ' + category + ' save-test' }).click();
+    await expect(page.getByRole('button', { name: 'Remove from saved', exact: true })).toBeVisible();
+    await page.getByRole('button', { name: 'Remove from saved', exact: true }).click();
+    expect(data.saved.has(id)).toBe(false);
+    await expect(page.getByText(/No saved active listings/)).toBeVisible();
+  });
+}

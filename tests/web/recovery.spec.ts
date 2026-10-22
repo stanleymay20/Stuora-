@@ -29,8 +29,9 @@ test('web recovery callback creates a recovery session and updates password', as
     type: 'recovery',
   });
   await page.goto(`/#${hash.toString()}`);
-  await page.getByText('You', { exact: true }).click();
+  // Recovery is now full-screen and hides normal app navigation.
   await expect(page.getByText('Choose a new password', { exact: true })).toBeVisible();
+  await expect(page.getByText('You', { exact: true })).toHaveCount(0);
 
   await page.getByLabel('New password', { exact: true }).fill('short');
   await page.getByLabel('Confirm new password', { exact: true }).fill('short');
@@ -46,7 +47,8 @@ test('web recovery callback creates a recovery session and updates password', as
 
   await page.getByLabel('Confirm new password', { exact: true }).fill('new-password-123');
   await page.getByRole('button', { name: 'Update password' }).click();
-  await expect(page.getByText('Password updated successfully. Your Stuora account is ready.')).toBeVisible();
+  await expect(page.getByText('Password updated successfully. Sign in again with your new password.')).toBeVisible();
   expect(api.passwordUpdates()).toBe(1);
-  await expect(page.getByText('Your Stuora Passport', { exact: true })).toBeVisible();
+  await expect(page.getByText('Welcome to Stuora', { exact: true })).toBeVisible();
+  await expect(page.getByText('Your Stuora Passport', { exact: true })).toHaveCount(0);
 });

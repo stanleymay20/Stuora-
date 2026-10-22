@@ -7,11 +7,12 @@ export function session(email = 'alice@example.invalid') {
   const jwt = [Buffer.from('{"alg":"HS256"}').toString('base64url'), Buffer.from(JSON.stringify({ sub: userId, exp: now + 3600, iat: now, role: 'authenticated' })).toString('base64url'), 'test-signature'].join('.');
   return { access_token: jwt, refresh_token: 'test-refresh-token', token_type: 'bearer', expires_in: 3600, expires_at: now + 3600, user };
 }
-export async function backend(page: Page, failProfile = false) {
+export async function backend(page: Page, failProfile = false, resendStatus = 200) {
   let profile: Record<string, unknown> | null = null;
   let writes = 0;
   let reads = 0;
   let recoveries = 0;
+  let confirmationsResent = 0;
   let passwordUpdates = 0;
   await page.route('https://stuora-test.invalid/**', async route => {
     const req = route.request();
@@ -19,6 +20,17 @@ export async function backend(page: Page, failProfile = false) {
     if (url.pathname.endsWith('/listings') && req.method() === 'GET') return route.fulfill({ json: [] });
     if (url.pathname.endsWith('/student_benefits') && req.method() === 'GET') return route.fulfill({ json: [] });
     if (url.pathname.endsWith('/signup')) return route.fulfill({ json: { user: session().user, session: null } });
+    if (url.pathname.endsWith('/resend')) {
+      confirmationsResent++;
+      expect(req.method()).toBe('POST');
+      expect(req.postDataJSON()?.email).toBeTruthy();
+      expect(req.postDataJSON()?.type).toBe('signup');
+      expect(url.searchParams.get('redirect_to')).toBeTruthy();
+      if (resendStatus !== 200) {
+        return route.fulfill({ status: resendStatus, json: { error_code: 'over_email_send_rate_limit', msg: 'Email rate limit exceeded' } });
+      }
+      return route.fulfill({ json: {} });
+    }
     if (url.pathname.endsWith('/recover')) {
       recoveries++;
       expect(req.postDataJSON()?.email).toBeTruthy();
@@ -54,7 +66,7 @@ export async function backend(page: Page, failProfile = false) {
     }
     return route.fulfill({ status: 404, json: { message: `Unexpected endpoint in test: ${url.pathname}` } });
   });
-  return { writes: () => writes, recoveries: () => recoveries, passwordUpdates: () => passwordUpdates };
+  return { writes: () => writes, recoveries: () => recoveries, confirmationsResent: () => confirmationsResent, passwordUpdates: () => passwordUpdates };
 }
 export async function account(page: Page) {
   await page.goto('/');

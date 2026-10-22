@@ -1,0 +1,20 @@
+{
+  "brand": "Stuora",
+  "subjects": {
+    "confirmation": "Stuora | Confirm your email",
+    "invite": "Stuora | Invitation to join",
+    "magic_link": "Stuora | Your sign-in link",
+    "email_change": "Stuora | Confirm email change",
+    "recovery": "Stuora | Reset your password",
+    "reauthentication": "Stuora | Your verification code",
+    "password_changed_notification": "Stuora | Password changed",
+    "email_changed_notification": "Stuora | Email address changed",
+    "phone_changed_notification": "Stuora | Phone number changed",
+    "identity_linked_notification": "Stuora | Sign-in method linked",
+    "identity_unlinked_notification": "Stuora | Sign-in method removed",
+    "mfa_factor_enrolled_notification": "Stuora | Verification method added",
+    "mfa_factor_unenrolled_notification": "Stuora | Verification method removed"
+  },
+  "stagingOnly": true,
+  "installed": false
+}

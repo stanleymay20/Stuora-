@@ -86,3 +86,111 @@ async function messagesPersisted(page: Page) {
   await page.getByRole('button', { name: 'Refresh messages', exact: true }).click();
   await expect(page.getByText('Hi, is this room still available?', { exact: true })).toBeVisible();
 }
+
+test('Messages show newest entries first and load older history without losing newer replies', async ({ page }) => {
+  await messagingBackend(page);
+  const calls: Array<{ offset: number; limit: number; order: string | null }> = [];
+  const archive = Array.from({ length: 61 }, (_, i) => ({
+    id: `00000000-0000-0000-0000-${String(i + 401).padStart(12, '0')}`,
+    conversation_id: conversationId,
+    sender_id: bob,
+    body: `Archive message ${i + 1}`,
+    created_at: new Date(Date.UTC(2026, 9, 11, 10, 0, i)).toISOString(),
+  })).reverse();
+  await page.route('**/rest/v1/messages?*', async route => {
+    const request = route.request();
+    if (request.method() !== 'GET') return route.fallback();
+    const url = new URL(request.url());
+    const offset = Number(url.searchParams.get('offset') ?? 0);
+    const limit = Number(url.searchParams.get('limit') ?? 100);
+    const order = url.searchParams.get('order');
+    calls.push({ offset, limit, order });
+    await route.fulfill({ json: archive.slice(offset, offset + limit) });
+  });
+  await page.goto('/');
+  await page.getByText('You', { exact: true }).click();
+  await page.getByLabel('Email', { exact: true }).fill('alice@example.invalid');
+  await page.getByLabel('Password', { exact: true }).fill('correct-password');
+  await page.getByRole('button', { name: 'Sign in', exact: true }).click();
+  await expect(page.getByText('Your Stuora Passport', { exact: true })).toBeVisible();
+  await page.getByText('Home', { exact: true }).first().click();
+  await page.getByRole('button', { name: 'View Room near campus' }).first().click();
+  await page.getByRole('button', { name: 'Message owner' }).click();
+  await expect(page.getByText('Archive message 61', { exact: true })).toBeVisible();
+  await expect(page.getByText('Archive message 1', { exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Load older messages' })).toBeVisible();
+  expect(calls.some(x => x.offset === 0 && x.limit === 51 && x.order?.includes('created_at.desc'))).toBe(true);
+  await page.getByRole('button', { name: 'Load older messages' }).click();
+  await expect(page.getByText('Archive message 1', { exact: true })).toBeVisible();
+  await expect(page.getByText('Archive message 61', { exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Load older messages' })).toHaveCount(0);
+  expect(calls.some(x => x.offset === 0 && x.limit === 101)).toBe(true);
+});
+
+test('private inbox clears an unsent draft on thread switch and does not mislabel read errors as an empty chat', async ({ page }) => {
+  await messagingBackend(page);
+  const secondConversation = '00000000-0000-0000-0000-000000000222';
+  await page.route('**/rest/v1/conversations?*', async route => route.fulfill({ json: [
+    { id: conversationId, title: 'Listing: Room near campus', created_at: '2026-10-11T10:00:00Z' },
+    { id: secondConversation, title: 'Listing: Marketplace desk', created_at: '2026-10-11T09:00:00Z' },
+  ] }));
+  let failMessages = false;
+  await page.route('**/rest/v1/messages?*', async route => failMessages
+    ? route.fulfill({ status: 403, json: { code: '42501', message: 'Read restricted' } })
+    : route.fulfill({ json: [] }));
+  await page.goto('/?stuora=profile');
+  await page.getByLabel('Email', { exact: true }).fill('alice@example.invalid');
+  await page.getByLabel('Password', { exact: true }).fill('correct-password');
+  await page.getByRole('button', { name: 'Sign in', exact: true }).click();
+  await expect(page.getByText('Your Stuora Passport', { exact: true })).toBeVisible();
+  await page.goto('/?stuora=messages');
+  await page.getByRole('button', { name: 'Open conversation Listing: Room near campus' }).click();
+  await page.getByRole('textbox', { name: 'Message', exact: true }).fill('Draft for one recipient only');
+  await page.getByRole('button', { name: 'Open conversation Listing: Marketplace desk' }).click();
+  await expect(page.getByRole('textbox', { name: 'Message', exact: true })).toHaveValue('');
+  await expect(page.getByRole('button', { name: 'Send message', exact: true })).toBeDisabled();
+  failMessages = true;
+  await page.getByRole('button', { name: 'Refresh messages' }).click();
+  await expect(page.getByText('Could not load messages. Check your connection and retry.', { exact: true })).toBeVisible();
+  await expect(page.getByText('No messages yet. Say hello.', { exact: true })).toHaveCount(0);
+});
+
+test('a delayed send completion never clears a newly selected conversation draft', async ({ page }) => {
+  await messagingBackend(page);
+  const other = '00000000-0000-0000-0000-000000000333';
+  await page.route('**/rest/v1/conversations?*', async route => route.fulfill({ json: [
+    { id: conversationId, title: 'Listing: Room near campus', created_at: '2026-10-11T10:00:00Z' },
+    { id: other, title: 'Listing: Other student item', created_at: '2026-10-11T09:00:00Z' },
+  ] }));
+  let release!: () => void;
+  const blocked = new Promise<void>(resolve => { release = resolve; });
+  let started!: () => void;
+  const requested = new Promise<void>(resolve => { started = resolve; });
+  // Match REST collection with or without query params (PostgREST may append columns).
+  await page.route('**/rest/v1/messages**', async route => {
+    if (route.request().method() === 'GET') return route.fulfill({ json: [] });
+    if (route.request().method() !== 'POST') return route.fallback();
+    expect(route.request().postDataJSON()).toMatchObject({
+      conversation_id: conversationId, sender_id: alice, body: 'Message sent to the first listing',
+    });
+    started();
+    await blocked;
+    await route.fulfill({ status: 201, json: [] });
+  });
+  await page.goto('/?stuora=profile');
+  await page.getByLabel('Email', { exact: true }).fill('alice@example.invalid');
+  await page.getByLabel('Password', { exact: true }).fill('correct-password');
+  await page.getByRole('button', { name: 'Sign in', exact: true }).click();
+  await expect(page.getByText('Your Stuora Passport', { exact: true })).toBeVisible();
+  await page.goto('/?stuora=messages');
+  await page.getByRole('button', { name: 'Open conversation Listing: Room near campus' }).click();
+  await page.getByRole('textbox', { name: 'Message', exact: true }).fill('Message sent to the first listing');
+  await page.getByRole('button', { name: 'Send message', exact: true }).click();
+  await requested;
+  await page.getByRole('button', { name: 'Open conversation Listing: Other student item' }).click();
+  await expect(page.getByRole('textbox', { name: 'Message', exact: true })).toHaveValue('');
+  await page.getByRole('textbox', { name: 'Message', exact: true }).fill('Private new draft to second student');
+  release();
+  await expect(page.getByRole('textbox', { name: 'Message', exact: true })).toHaveValue('Private new draft to second student');
+  await expect(page.getByText('Could not send your message. Your text is preserved; check your connection and retry.')).toHaveCount(0);
+});

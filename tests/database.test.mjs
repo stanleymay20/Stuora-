@@ -11,7 +11,7 @@ const ab = id(21), bc = id(22);
 async function database(inheritedGrants) {
   const db = new PGlite();
   await db.exec(`
-    create role anon; create role authenticated;
+    create role anon; create role authenticated; create role service_role;
     create schema auth;
     create table auth.users (id uuid primary key);
     create function auth.uid() returns uuid language sql stable as
@@ -46,6 +46,7 @@ async function database(inheritedGrants) {
     $$;
 
     grant usage on schema public, auth, storage to anon, authenticated;
+    grant usage on schema public to service_role;
     grant execute on function auth.uid() to anon, authenticated;
     grant execute on function storage.foldername(text), storage.filename(text) to anon, authenticated;
     grant select, insert, update, delete on storage.objects to authenticated;
@@ -56,13 +57,13 @@ async function database(inheritedGrants) {
   for (const f of files) await db.exec(readFileSync(new URL(`../supabase/migrations/${f}`, import.meta.url), 'utf8'));
   await db.exec(`
     insert into auth.users values ('${a}'), ('${b}'), ('${c}');
-    insert into public.profiles (id, display_name, is_discoverable)
-      values ('${a}', 'Alice', true), ('${b}', 'Bob', true), ('${c}', 'Private Charlie', false);
-    insert into public.listings (id, owner_id, kind, status, title) values
-      ('${house}', '${a}', 'housing', 'active', 'Room in Berlin'),
-      ('${draft}', '${a}', 'marketplace', 'draft', 'Private draft'),
-      ('${job}', '${a}', 'job', 'active', 'Student job'),
-      ('${trip}', '${a}', 'trip', 'active', 'Prague trip');
+    insert into public.profiles (id, display_name, city, is_discoverable)
+      values ('${a}', 'Alice', 'Aachen', true), ('${b}', 'Bob', 'Aachen', true), ('${c}', 'Private Charlie', 'Aachen', false);
+    insert into public.listings (id, owner_id, kind, status, title, city, price_cents) values
+      ('${house}', '${a}', 'housing', 'active', 'Room for students', 'Aachen', 62000),
+      ('${draft}', '${a}', 'marketplace', 'draft', 'Private draft', 'Aachen', null),
+      ('${job}', '${a}', 'job', 'active', 'Student job', 'Aachen', null),
+      ('${trip}', '${a}', 'trip', 'active', 'Prague trip', 'Aachen', null);
     insert into public.housing_details (listing_id, housing_type, rent_cents) values ('${house}', 'room', 62000);
     insert into public.marketplace_details (listing_id) values ('${draft}');
     insert into public.trip_details (listing_id, destination, starts_at, capacity) values ('${trip}', 'Prague', now(), 2);
@@ -114,7 +115,8 @@ for (const inheritedGrants of [false, true]) {
       await deny(a, `insert into public.housing_details (listing_id, housing_type, rent_cents) values ('${job}', 'room', 10)`);
       await deny(b, `update public.housing_details set listing_id = '${job}' where listing_id = '${house}'`);
       await count('authenticated', b, `update public.housing_details set rent_cents = 1 where listing_id = '${house}' returning *`, 0);
-      await count('authenticated', a, `update public.housing_details set rent_cents = 60000 where listing_id = '${house}' returning *`, 1);
+      await deny(a, `update public.housing_details set rent_cents = 60000 where listing_id = '${house}'`, '23514');
+      await count('authenticated', a, `select * from public.housing_details where listing_id = '${house}' and rent_cents = 62000`, 1);
       await deny(b, `insert into public.job_applications (job_listing_id, applicant_id, status) values ('${job}', '${b}', 'accepted')`);
       await deny(b, `insert into public.job_applications (job_listing_id, applicant_id) values ('${job}', '${a}')`);
       await count('authenticated', b, `insert into public.job_applications (job_listing_id, applicant_id, cover_note) values ('${job}', '${b}', 'My application') returning *`, 1);
@@ -156,26 +158,154 @@ for (const inheritedGrants of [false, true]) {
       await deny(a, `insert into public.reports (reporter_id, reported_user_id, reason) values ('${b}', '${c}', 'spam')`);
       await count('authenticated', a, `insert into public.reports (reporter_id, reported_user_id, reason) values ('${a}', '${c}', 'spam') returning *`, 1);
       await count('authenticated', b, 'select * from public.reports', 0);
+      // Existing bookmark table RLS: saved rows belong exclusively to their user.
+      await count('authenticated', b, "insert into public.saved_listings (user_id,listing_id) values ('" + b + "','" + house + "') returning *", 1);
+      await count('authenticated', b, "select * from public.saved_listings where listing_id='" + house + "'", 1);
+      await count('authenticated', a, "select * from public.saved_listings where listing_id='" + house + "'", 0);
+      await deny(a, "insert into public.saved_listings (user_id,listing_id) values ('" + b + "','" + house + "')");
+      await count('authenticated', a, "delete from public.saved_listings where listing_id='" + house + "' returning *", 0);
+      await count('authenticated', b, "delete from public.saved_listings where listing_id='" + house + "' returning *", 1);
 
-      // Media metadata follows listing visibility and ownership.
-      await count('authenticated', a, `insert into public.listing_media (listing_id, object_path, sort_order) values ('${house}', '${a}/${house}/room.jpg', 0) returning *`, 1);
-      await count('anon', null, `select * from public.listing_media where listing_id = '${house}'`, 1);
-      await deny(b, `insert into public.listing_media (listing_id, object_path) values ('${house}', '${b}/${house}/attack.jpg')`);
-      await deny(a, `insert into public.listing_media (listing_id, object_path) values ('${house}', '${a}/${job}/wrong-listing.jpg')`);
-      await count('authenticated', a, `insert into public.listing_media (listing_id, object_path) values ('${draft}', '${a}/${draft}/draft.jpg') returning *`, 1);
-      await count('anon', null, `select * from public.listing_media where listing_id = '${draft}'`, 0);
-      await count('authenticated', a, `select * from public.listing_media where listing_id = '${draft}'`, 1);
-      await count('authenticated', b, `delete from public.listing_media where listing_id = '${house}' returning *`, 0);
+      // Raw authenticated metadata INSERT is quarantined until trusted
+      // server-side image intake is approved. A privileged writer may still
+      // insert valid processed files, and existing public reads/owner cleanup
+      // remain available.
+      await deny(a, `insert into public.listing_media(listing_id,object_path) values ('${house}','${a}/${house}/direct.jpg')`);
+      await deny(b, `insert into public.listing_media(listing_id,object_path) values ('${house}','${b}/${house}/attack.jpg')`);
+      const {rows: mediaGrants} = await db.query(`select
+        has_table_privilege('authenticated','public.listing_media','INSERT') as student_insert,
+        has_table_privilege('service_role','public.listing_media','INSERT') as service_insert,
+        has_table_privilege('authenticated','public.listing_media','DELETE') as owner_cleanup`);
+      assert.equal(mediaGrants[0].student_insert,false); assertions++;
+      assert.equal(mediaGrants[0].service_insert,true); assertions++;
+      assert.equal(mediaGrants[0].owner_cleanup,true); assertions++;
+      await db.query(`insert into public.listing_media(listing_id,object_path,sort_order)
+        values ('${house}','${a}/${house}/room.jpg',0)`);
+      await count('anon',null,`select * from public.listing_media where listing_id='${house}'`,1);
+      await db.query(`insert into public.listing_media(listing_id,object_path)
+        values ('${draft}','${a}/${draft}/draft.jpg')`);
+      await count('anon',null,`select * from public.listing_media where listing_id='${draft}'`,0);
+      await count('authenticated',a,`select * from public.listing_media where listing_id='${draft}'`,1);
+      await count('authenticated',b,`delete from public.listing_media where listing_id='${house}' returning *`,0);
+      for(let i=1;i<6;i++){
+        await db.query(`insert into public.listing_media(listing_id,object_path,sort_order)
+          values ('${house}','${a}/${house}/room-${i}.jpg',${i})`);
+      }
+      await assert.rejects(db.query(`insert into public.listing_media(listing_id,object_path,sort_order)
+          values ('${house}','${a}/${house}/seventh.jpg',6)`),e=>e.code==='23514'); assertions++;
+      await assert.rejects(db.query(`insert into public.listing_media(listing_id,object_path,sort_order)
+          values ('${house}','${b}/${house}/privileged.jpg',6)`),e=>e.code==='23514'); assertions++;
+      await assert.rejects(db.query(`insert into public.listing_media(listing_id,object_path,sort_order)
+          values ('${house}','${a}/${house}/nested/escape.jpg',6)`),e=>e.code==='23514'); assertions++;
+      await count('authenticated',a,`select * from public.listing_media where listing_id='${house}'`,6);
+      await count('authenticated',a,`delete from public.listing_media where listing_id='${house}' and sort_order=3 returning id`,1);
+      await db.query(`insert into public.listing_media(listing_id,object_path,sort_order)
+          values ('${house}','${a}/${house}/replacement.jpg',3)`);
 
-      // Hosted Supabase owns these tables; the harness grants authenticated CRUD
-      // so the same storage.objects policies can be exercised locally.
-      await count('authenticated', a, `insert into storage.objects (bucket_id, name) values ('listing-media', '${a}/${house}/room.jpg') returning *`, 1);
-      await deny(b, `insert into storage.objects (bucket_id, name) values ('listing-media', '${b}/${house}/attack.jpg')`);
-      await deny(a, `insert into storage.objects (bucket_id, name) values ('listing-media', '${a}/${job}/job.jpg')`);
-      await count('authenticated', a, `insert into storage.objects (bucket_id, name) values ('avatars', '${a}/avatar') returning *`, 1);
-      await deny(b, `insert into storage.objects (bucket_id, name) values ('avatars', '${a}/avatar-2')`);
-      await count('authenticated', b, `select * from storage.objects where bucket_id = 'avatars'`, 0);
-      await count('authenticated', a, `select * from storage.objects where bucket_id = 'avatars'`, 1);
+      // Upload-attempt admission is service-only and durable across separate
+      // RPC transactions even if no upload or metadata INSERT follows.
+      const { rows: attemptGrants } = await db.query(`select
+        has_function_privilege('anon','public.consume_listing_photo_attempt(uuid,uuid)','EXECUTE') as anon_allowed,
+        has_function_privilege('authenticated','public.consume_listing_photo_attempt(uuid,uuid)','EXECUTE') as student_allowed,
+        has_function_privilege('service_role','public.consume_listing_photo_attempt(uuid,uuid)','EXECUTE') as server_allowed`);
+      assert.deepEqual(attemptGrants[0], { anon_allowed: false, student_allowed: false, server_allowed: true });
+      assertions++;
+      await deny(a, `select public.consume_listing_photo_attempt('${a}','${house}')`, '42501');
+      for (let i=0; i<10; i++) {
+        const { rows } = await as('service_role', a,
+          `select public.consume_listing_photo_attempt('${a}','${house}') as allowed`);
+        assert.equal(rows[0].allowed, true); assertions++;
+      }
+      const { rows: exhausted } = await as('service_role', a,
+        `select public.consume_listing_photo_attempt('${a}','${house}') as allowed`);
+      assert.equal(exhausted[0].allowed, false); assertions++;
+      const { rows: differentListing } = await as('service_role', a,
+        `select public.consume_listing_photo_attempt('${a}','${draft}') as allowed`);
+      assert.equal(differentListing[0].allowed, false); assertions++;
+      const { rows: anotherStudent } = await as('service_role', b,
+        `select public.consume_listing_photo_attempt('${b}','${house}') as allowed`);
+      assert.equal(anotherStudent[0].allowed, true); assertions++;
+      const { rows: persistedAttempts } = await db.query(
+        `select used from private.listing_photo_attempt_windows
+         where scope='student_minute' and scope_key='${a}'`);
+      assert.equal(persistedAttempts[0].used, 12); assertions++;
+
+      // A separate committed service-role processing lease caps concurrent
+      // WASM decoders. Public roles cannot acquire or release capacity.
+      const { rows: leaseGrants } = await db.query(`select
+        has_function_privilege('anon','public.acquire_listing_photo_processing_lease(uuid,uuid)','EXECUTE') as anon_allowed,
+        has_function_privilege('authenticated','public.acquire_listing_photo_processing_lease(uuid,uuid)','EXECUTE') as user_allowed,
+        has_function_privilege('service_role','public.acquire_listing_photo_processing_lease(uuid,uuid)','EXECUTE') as server_allowed`);
+      assert.deepEqual(leaseGrants[0], { anon_allowed:false, user_allowed:false, server_allowed:true }); assertions++;
+      await deny(a, `select public.acquire_listing_photo_processing_lease('${a}','11111111-1111-4111-8111-111111111101')`);
+      const leaseIdentities = [a,b,c,id(84),id(85)];
+      const leaseTokens = [id(91),id(92),id(93),id(94),id(95)];
+      for (let i=0;i<4;i++) {
+        const { rows }=await as('service_role',leaseIdentities[i],
+          `select public.acquire_listing_photo_processing_lease('${leaseIdentities[i]}','${leaseTokens[i]}') as admitted`);
+        assert.equal(rows[0].admitted,true); assertions++;
+      }
+      const { rows: duplicateUser }=await as('service_role',a,
+        `select public.acquire_listing_photo_processing_lease('${a}','${id(96)}') as admitted`);
+      assert.equal(duplicateUser[0].admitted,false); assertions++;
+      const { rows: fullCapacity }=await as('service_role',leaseIdentities[4],
+        `select public.acquire_listing_photo_processing_lease('${leaseIdentities[4]}','${leaseTokens[4]}') as admitted`);
+      assert.equal(fullCapacity[0].admitted,false); assertions++;
+      // The service-role functions take an explicit student ID; auth.uid()
+      // does not identify the client within these privileged RPCs. Verify a
+      // different student ID cannot release someone else's lease even if the
+      // request token matches. Passing 'a' as the caller argument here would
+      // *correctly* release a's lease and make the test invalid.
+      const { rows: wrongOwnerRelease }=await as('service_role',b,
+        `select public.release_listing_photo_processing_lease('${b}','${leaseTokens[0]}') as released`);
+      assert.equal(wrongOwnerRelease[0].released,false); assertions++;
+      const { rows: preservedLease } = await db.query(
+        `select count(*)::integer as still_active from private.listing_photo_processing_leases
+         where student_id='${a}' and request_id='${leaseTokens[0]}'`);
+      assert.equal(preservedLease[0].still_active,1); assertions++;
+      const { rows: correctRelease }=await as('service_role',a,
+        `select public.release_listing_photo_processing_lease('${a}','${leaseTokens[0]}') as released`);
+      assert.equal(correctRelease[0].released,true); assertions++;
+      const { rows: refilled }=await as('service_role',leaseIdentities[4],
+        `select public.acquire_listing_photo_processing_lease('${leaseIdentities[4]}','${leaseTokens[4]}') as admitted`);
+      assert.equal(refilled[0].admitted,true); assertions++;
+      // A crashed worker may leave a lease behind. Simulate time passing
+      // *inside the disposable in-memory database* and prove admission
+      // deletes expired reservations while retaining active ones.
+      await db.query(`update private.listing_photo_processing_leases
+        set created_at=clock_timestamp()-interval '5 minutes',
+            expires_at=clock_timestamp()-interval '1 second'
+        where request_id='${leaseTokens[1]}'`);
+      const { rows: reclaimed } = await as('service_role', id(97),
+        `select public.acquire_listing_photo_processing_lease('${id(97)}','${id(98)}') as admitted`);
+      assert.equal(reclaimed[0].admitted,true); assertions++;
+      const { rows: expiredStillPresent } = await db.query(
+        `select count(*)::integer as count from private.listing_photo_processing_leases
+        where request_id='${leaseTokens[1]}'`);
+      assert.equal(expiredStillPresent[0].count,0); assertions++;
+
+
+      // Authenticated clients have Storage table privileges for avatars,
+      // but ALL listing-media INSERT/UPDATE RLS policies are removed.
+      await deny(a,`insert into storage.objects(bucket_id,name)
+        values ('listing-media','${a}/${house}/room.jpg')`);
+      await deny(b,`insert into storage.objects(bucket_id,name)
+        values ('listing-media','${b}/${house}/attack.jpg')`);
+      await deny(a,`insert into storage.objects(bucket_id,name)
+        values ('listing-media','${a}/${job}/job.jpg')`);
+      await db.query(`insert into storage.objects(bucket_id,name)
+        values ('listing-media','${a}/${house}/server-processed.png')`);
+      await count('authenticated',a,`update storage.objects set name='${a}/${house}/overwritten.png'
+        where bucket_id='listing-media' returning id`,0);
+      await count('authenticated',b,`delete from storage.objects where bucket_id='listing-media' returning id`,0);
+      await count('authenticated',a,`delete from storage.objects where bucket_id='listing-media' returning id`,1);
+      // Avatar writing must NOT regress during listing-media quarantine.
+      await count('authenticated',a,`insert into storage.objects(bucket_id,name)
+        values ('avatars','${a}/avatar') returning id`,1);
+      await deny(b,`insert into storage.objects(bucket_id,name)
+        values ('avatars','${a}/avatar-2')`);
+      await count('authenticated',b,`select * from storage.objects where bucket_id='avatars'`,0);
+      await count('authenticated',a,`select * from storage.objects where bucket_id='avatars'`,1);
 
       const save = (listingId, kind, title, price = 3500, housingType = 'room', condition = 'good') => `select public.save_student_listing(${listingId ? `'${listingId}'` : 'null'}, '${kind}', '${title}', 'Student listing', 'Berlin', ${price}, '${housingType}', true, true, '${condition}') as id`;
       const { rows: created } = await as('authenticated', a, save(null, 'housing', 'Persistent room', 65000));
@@ -191,20 +321,237 @@ for (const inheritedGrants of [false, true]) {
       await deny(a, save(null, 'housing', 'Orphan sentinel', 500, 'invalid_type'), '23514');
       await count('authenticated', a, "select * from public.listings where title = 'Orphan sentinel'", 0);
       await deny(a, save(null, 'marketplace', 'Negative price', -1), '22023');
+      await deny(a, `update public.listings set price_cents = 60000 where id = '${house}'`, '23514');
+      await count('authenticated', a, save(house, 'housing', 'Updated rent atomically', 60000), 1);
+      await count('authenticated', a, `select * from public.listings where id = '${house}' and price_cents = 60000`, 1);
+      await count('authenticated', a, `select * from public.housing_details where listing_id = '${house}' and rent_cents = 60000`, 1);
       await assert.rejects(as('anon', null, save(null, 'marketplace', 'Anonymous listing')), e => e.code === '42501'); assertions++;
       const { rows: market } = await as('authenticated', a, save(null, 'marketplace', 'Free desk', 0));
       const liveMarket = market[0].id;
       await count('anon', null, `select * from public.marketplace_details where listing_id = '${liveMarket}' and item_condition = 'good'`, 1);
       await deny(a, save(liveMarket, 'marketplace', 'Invalid edit', 10, 'room', 'invalid'), '22P02');
       await count('anon', null, `select * from public.listings where id = '${liveMarket}' and title = 'Free desk'`, 1);
+      await deny(a, `delete from public.marketplace_details where listing_id='${liveMarket}'`, '23514');
       await count('authenticated', a, `update public.listings set status = 'closed' where id = '${liveMarket}' returning id`, 1);
       await count('anon', null, `select * from public.listings where id = '${liveMarket}'`, 0);
       await count('anon', null, `select * from public.marketplace_details where listing_id = '${liveMarket}'`, 0);
       await count('authenticated', a, `select * from public.listings where id = '${liveMarket}'`, 1);
       await deny(a, save(liveMarket, 'marketplace', 'Reopen archived'));
+      // The fresh-database baseline MUST contain staging's abuse controls;
+      // PR18 introduced these triggers and they cannot be assumed present.
+      const { rows: limiterTriggers } = await db.query(`select tgname from pg_trigger
+        where not tgisinternal and tgname in
+        ('listings_safety','messages_safety','reports_safety','job_applications_safety')`);
+      assert.deepEqual(limiterTriggers.map(row => row.tgname).sort(),
+        ['job_applications_safety','listings_safety','messages_safety','reports_safety']);
+      assertions++;
+      const { rows: fnGrants } = await db.query(`select
+        has_function_privilege('authenticated','public.save_community_listing(uuid,public.listing_kind,text,text,text,integer,jsonb)','EXECUTE') as publish,
+        has_function_privilege('authenticated','public.listing_participation(uuid,text,text)','EXECUTE') as participation,
+        has_function_privilege('authenticated','public.review_job_application(uuid,public.application_status)','EXECUTE') as review,
+        has_function_privilege('authenticated','private.save_community_listing_impl(uuid,public.listing_kind,text,text,text,integer,jsonb)','EXECUTE') as internal_publish`);
+      for (const value of Object.values(fnGrants[0])) {
+        assert.equal(value, false, 'unfinished community API must not be executable');
+        assertions++;
+      }
+      await deny(a, `select public.save_community_listing(null,'event'::public.listing_kind,
+        'Unauthorized event','', 'Aachen',0,'{}'::jsonb)`, '42501');
+      await deny(a, `select public.listing_participation('${trip}','join')`, '42501');
+      await deny(a, `insert into public.listings(owner_id,kind,status,title,city,price_cents)
+        values ('${a}','event','active','Direct bypass event','Aachen',0)`, '42501');
+      await deny(a, `insert into public.listings(owner_id,kind,status,title,city,price_cents)
+        values ('${a}','trip','draft','Direct bypass trip','Aachen',0)`, '42501');
+
+      // A caller with a valid JWT must not bypass the publishing RPC by
+      // inserting a public housing/marketplace parent without detail rows.
+      await deny(a, `insert into public.listings
+        (owner_id, kind, status, title, city, price_cents)
+        values ('${a}', 'housing', 'active', 'No house details', 'Aachen', 100)`, '23514');
+      await deny(a, `insert into public.listings
+        (owner_id, kind, status, title, city, price_cents)
+        values ('${a}', 'marketplace', 'active', 'No item details', 'Aachen', 100)`, '23514');
+      await deny(a, `insert into public.listings
+        (owner_id, kind, status, title, city, price_cents, currency)
+        values ('${a}', 'housing', 'active', 'Wrong currency', 'Aachen', 100, 'USD')`, '23514');
+      await deny(a, `update public.listings set currency = 'USD'
+        where id = '${house}'`, '23514');
+      // The database owns created_at even if a direct request attempts 2099.
+      const { rows: spoofedDate } = await as('authenticated', a,
+        `insert into public.listings
+          (owner_id, kind, status, title, city, created_at)
+          values ('${a}', 'housing', 'draft', 'Future-pinned draft', 'Aachen', '2099-01-01')
+          returning id, created_at`);
+      assert.equal(spoofedDate.length, 1);
+      assert.ok(new Date(spoofedDate[0].created_at).getUTCFullYear() < 2099); assertions += 2;
+      await deny(a, `update public.listings set status = 'active'
+        where id = '${spoofedDate[0].id}'`, '23514');
+
+      // Database-level public listing integrity: no blank city, missing price,
+      // detail deletion, diverging rent, or direct archived reactivation.
+      await deny(a, `insert into public.listings(owner_id,kind,status,title,city,price_cents)
+        values ('${a}','housing','draft','Whitespace city','     ',1200)`, '23514');
+      await deny(a, `update public.listings set city='   ' where id='${house}'`, '23514');
+      await deny(a, `update public.profiles set city='   ' where id='${a}'`, '23514');
+      await deny(a, `insert into public.listings(owner_id,kind,status,title,city,price_cents)
+        values ('${a}','housing','active','Null rent listing','Aachen',null)`, '23514');
+      await deny(a, `update public.listings set price_cents=null where id='${house}'`, '23514');
+      await deny(a, `delete from public.housing_details where listing_id='${house}'`, '23514');
+      await count('authenticated', a,
+        `select * from public.housing_details where listing_id='${house}'`, 1);
+      await deny(a, `update public.listings set status='active' where id='${liveMarket}'`, '42501');
+      // Draft child deletion and parent deletion must still work normally.
+      await count('authenticated', a,
+        `delete from public.marketplace_details where listing_id='${draft}' returning listing_id`, 1);
+      await count('authenticated', a,
+        `delete from public.listings where id='${draft}' returning id`, 1);
+
+      // New profile defaults are private and neither profile nor listing can
+      // be created with an invented city when callers omit that field.
+      const { rows: defaults } = await db.query(`select table_name, column_name, column_default
+        from information_schema.columns where table_schema='public'
+        and (table_name='profiles' and column_name in ('city','is_discoverable')
+             or table_name='listings' and column_name='city')`);
+      assert.equal(defaults.length, 3);
+      assert.equal(defaults.find(row => row.table_name === 'profiles' && row.column_name === 'is_discoverable')?.column_default, 'false');
+      assert.equal(defaults.find(row => row.table_name === 'profiles' && row.column_name === 'city')?.column_default, null);
+      assert.equal(defaults.find(row => row.table_name === 'listings' && row.column_name === 'city')?.column_default, null);
+      assertions += 4;
+      const newId = id(99);
+      await db.exec(`insert into auth.users (id) values ('${newId}')`);
+      const { rows: privateNew } = await as('authenticated', newId,
+        `insert into public.profiles (id, display_name, city) values ('${newId}', 'Opt In Only', 'Köln') returning is_discoverable`);
+      assert.equal(privateNew[0].is_discoverable, false); assertions++;
+      const { rows: preservedOptIn } = await as('authenticated', b,
+        `select is_discoverable from public.profiles where id='${b}'`);
+      assert.equal(preservedOptIn[0].is_discoverable, true); assertions++;
+      await deny(newId, `insert into public.listings (owner_id, kind, title) values ('${newId}', 'housing', 'No city')`, '23502');
+      await deny(newId, `insert into public.listings (owner_id, kind, title, city) values ('${newId}', 'housing', 'Wrong city', null)`, '23502');
       const { rows: rls } = await db.query("select relname from pg_class join pg_namespace on pg_namespace.oid = relnamespace where nspname = 'public' and relkind = 'r' and not relrowsecurity");
       assert.deepEqual(rls, []); assertions++;
       t.diagnostic(`${assertions} authorization assertions passed against Postgres`);
+    } finally { await db.close(); }
+  });
+}
+
+for (const inheritedGrants of [false, true]) {
+  test(`Student Groups enforce ownership, membership and member-only messaging (default grants: ${inheritedGrants})`, async t => {
+    const db = await database(inheritedGrants);
+    async function as(role, user, sql) {
+      await db.exec(`set role ${role}; select set_config('request.jwt.claim.sub', '${user ?? ''}', false);`);
+      try { return await db.query(sql); } finally { await db.exec('reset role'); }
+    }
+    async function expectCount(role, user, query, count) {
+      const { rows } = await as(role, user, query);
+      assert.equal(rows.length, count); return rows;
+    }
+    try {
+      assert.ok((await db.query("select relname from pg_class where relname in ('student_groups','student_group_members','student_group_messages') and relrowsecurity")).rows.length === 3);
+      await assert.rejects(as('anon', null, "select public.create_student_group('Berlin Physics', '', 'Berlin', 'Study')"), e => e.code === '42501');
+      const { rows: created } = await as('authenticated', a,
+        "select public.create_student_group('Berlin Physics', 'Weekly study circle', 'Berlin', 'Study') id");
+      const groupId = created[0].id;
+      await expectCount('anon', null, `select * from public.student_groups where id = '${groupId}'`, 1);
+      await expectCount('authenticated', a, `select * from public.student_group_members where group_id = '${groupId}'`, 1);
+      await expectCount('authenticated', b, `select * from public.student_group_members where group_id = '${groupId}'`, 0);
+      await assert.rejects(as('authenticated', b,
+        `select public.send_student_group_message('${groupId}', 'Intruder message')`), e => e.code === '42501');
+      await assert.rejects(as('authenticated', b,
+        `insert into public.student_group_members (group_id,user_id) values ('${groupId}','${c}')`), e => e.code === '42501');
+      await expectCount('authenticated', b,
+        `insert into public.student_group_members (group_id,user_id) values ('${groupId}','${b}') returning group_id`, 1);
+      await expectCount('authenticated', a, `select * from public.student_group_members where group_id = '${groupId}'`, 2);
+      // Leaving voluntarily is reversible; an owner removal is NOT.
+      await expectCount('authenticated', b,
+        `delete from public.student_group_members where group_id='${groupId}' and user_id='${b}' returning user_id`, 1);
+      await expectCount('authenticated', b,
+        `insert into public.student_group_members(group_id,user_id) values ('${groupId}','${b}') returning group_id`, 1);
+      const { rows: message } = await as('authenticated', b,
+        `select public.send_student_group_message('${groupId}', 'Meeting on Tuesday') id`);
+      const messageId = message[0].id;
+      // Deleted messages must not reset the per-account discussion quota.
+      for (let i = 0; i < 9; i++) {
+        await as('authenticated', b, `select public.send_student_group_message('${groupId}', 'Another study message ${i}')`);
+      }
+      await assert.rejects(as('authenticated', b,
+        `select public.send_student_group_message('${groupId}', 'Spam after ten')`), e => e.code === 'P0001');
+      await expectCount('authenticated', b, `select * from public.student_group_messages where id = '${messageId}'`, 1);
+      await expectCount('authenticated', a, `select * from public.student_group_messages where id = '${messageId}'`, 1);
+      await expectCount('authenticated', c, `select * from public.student_group_messages where id = '${messageId}'`, 0);
+      // Cross-tenant RLS regression: the reader belongs to a DIFFERENT group.
+      // A policy using unqualified "m.group_id = group_id" silently binds both
+      // sides to the membership row and previously leaked every discussion.
+      const { rows: otherCreated } = await as('authenticated', c,
+        "select public.create_student_group('Charlie Private Circle', '', 'Aachen', 'Hobbies') id");
+      const otherGroupId = otherCreated[0].id;
+      const { rows: otherSent } = await as('authenticated', c,
+        `select public.send_student_group_message('${otherGroupId}', 'Charlie-only message') id`);
+      const otherMessageId = otherSent[0].id;
+      await expectCount('authenticated', c, `select * from public.student_group_messages where id = '${otherMessageId}'`, 1);
+      await expectCount('authenticated', c, `select * from public.student_group_messages where id = '${messageId}'`, 0);
+      await expectCount('authenticated', a, `select * from public.student_group_messages where id = '${otherMessageId}'`, 0);
+      await expectCount('authenticated', c, 'select * from public.student_group_messages', 1);
+      // Bob's membership elsewhere must NOT preserve access after owner removal.
+      await expectCount('authenticated', b,
+        `insert into public.student_group_members (group_id, user_id) values ('${otherGroupId}', '${b}') returning group_id`, 1);
+      await expectCount('authenticated', b, `select * from public.student_group_messages where id = '${otherMessageId}'`, 1);
+      await assert.rejects(as('authenticated', b,
+        `insert into public.student_group_messages (group_id,author_id,body) values ('${groupId}','${b}','Bypass limits')`), e => e.code === '42501');
+      await expectCount('authenticated', b,
+        `update public.student_groups set name = 'Hijacked' where id = '${groupId}' returning id`, 0);
+      await expectCount('authenticated', a,
+        `update public.student_groups set name = 'Berlin Study Circle' where id = '${groupId}' returning id`, 1);
+      // Owner may not silently leave their group, preserving its creator membership.
+      await expectCount('authenticated', a,
+        `delete from public.student_group_members where group_id = '${groupId}' and user_id = '${a}' returning user_id`, 0);
+      // Direct owner deletion is disallowed: only the controlled removal RPC
+      // can create a durable ban and revoke the member atomically.
+      await expectCount('authenticated', a,
+        `delete from public.student_group_members where group_id = '${groupId}' and user_id = '${b}' returning user_id`, 0);
+      await assert.rejects(as('authenticated', b,
+        `select public.remove_student_group_member('${groupId}','${a}')`), e => e.code === '42501');
+      await assert.rejects(as('authenticated', a,
+        `select public.remove_student_group_member('${groupId}','${a}')`), e => e.code === '42501');
+      await assert.rejects(as('anon', null,
+        `select public.remove_student_group_member('${groupId}','${b}')`), e => e.code === '42501');
+      await expectCount('authenticated', a,
+        `select public.remove_student_group_member('${groupId}','${b}')`, 1);
+      await expectCount('authenticated', a,
+        `select * from public.student_group_bans where group_id='${groupId}' and user_id='${b}'`, 1);
+      await expectCount('authenticated', b,
+        `select * from public.student_group_bans where group_id='${groupId}'`, 0);
+      await assert.rejects(as('authenticated', b,
+        `delete from public.student_group_bans where group_id='${groupId}'`), e => e.code === '42501');
+      await assert.rejects(as('authenticated', b,
+        `insert into public.student_group_members(group_id,user_id) values ('${groupId}','${b}')`), e => e.code === '42501');
+      await assert.rejects(as('authenticated', b,
+        `select public.send_student_group_message('${groupId}','Attempt after removal')`), e => e.code === '42501');
+      await expectCount('authenticated', b, `select * from public.student_group_messages where id = '${messageId}'`, 0);
+      await expectCount('authenticated', b, `select * from public.student_group_messages where id = '${otherMessageId}'`, 1);
+      await expectCount('authenticated', b, 'select * from public.student_group_messages', 1);
+      await expectCount('authenticated', a, `select * from public.student_group_messages where id = '${messageId}'`, 1);
+      // Restoring eligibility does NOT silently re-enrol the student.
+      await assert.rejects(as('authenticated', b,
+        `select public.restore_student_group_member('${groupId}','${b}')`), e => e.code === '42501');
+      await expectCount('authenticated', a,
+        `select public.restore_student_group_member('${groupId}','${b}')`, 1);
+      await expectCount('authenticated', b, `select * from public.student_group_messages where id = '${messageId}'`, 0);
+      await expectCount('authenticated', b,
+        `insert into public.student_group_members(group_id,user_id) values ('${groupId}','${b}') returning group_id`, 1);
+      await expectCount('authenticated', b, `select * from public.student_group_messages where id = '${messageId}'`, 1);
+      await expectCount('authenticated', b,
+        `delete from public.student_groups where id = '${groupId}' returning id`, 0);
+      await expectCount('authenticated', a,
+        `delete from public.student_groups where id = '${groupId}' returning id`, 1);
+      await expectCount('anon', null, `select * from public.student_groups where id = '${groupId}'`, 0);
+      await expectCount('authenticated', a, `select * from public.student_group_messages where group_id = '${groupId}'`, 0);
+      // First group was deleted. Creation limits must still count its event.
+      for (const label of ['Second Study Circle', 'Third Study Circle']) {
+        await expectCount('authenticated', a,
+          `select public.create_student_group('${label}', '', 'Berlin', 'Study')`, 1);
+      }
+      await assert.rejects(as('authenticated', a,
+        "select public.create_student_group('Fourth Study Circle', '', 'Berlin', 'Study')"), e => e.code === 'P0001');
+      t.diagnostic('student groups: public discovery, atomic owner membership, restricted discussion, moderation, anti-hijack and deletion cascade verified');
     } finally { await db.close(); }
   });
 }

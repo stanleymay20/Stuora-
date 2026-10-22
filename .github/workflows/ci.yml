@@ -7,6 +7,45 @@ on:
     branches: [main]
 
 jobs:
+  # Independent authorization gate: never hide RLS failures behind an npm audit
+  # network timeout. The original audit and full verify gate remain mandatory.
+  rls-authorization:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Use Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22.13.0'
+      - name: Install dependencies
+        run: npm ci
+      - name: Test database authorization
+        run: npm run test:database
+
+  # Independent Deno runtime gate. Expo's TypeScript settings do not understand
+  # Deno's npm:/jsr: module specifiers and cannot prove Edge Function readiness.
+  trusted-media-edge:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Install Deno
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+      - name: Typecheck trusted media Edge Function
+        run: deno check --config supabase/functions/listing-photo-intake/deno.json supabase/functions/listing-photo-intake/index.ts
+
+      - name: Test real WASM JPEG PNG WebP media codecs (local Deno runtime)
+        run: deno test --allow-read --config supabase/functions/listing-photo-intake/deno.json supabase/functions/listing-photo-intake/processor.test.ts
+
   verify:
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -37,11 +76,33 @@ jobs:
       - name: Test environment isolation
         run: node --test tests/backend-config.test.mjs
 
+      - name: Test isolated Vercel preview origin binding
+        run: node --test tests/vercel-preview-origin.test.mjs
+
+      - name: Validate Stuora Auth email and branded error copy
+        run: node --test tests/auth-branding.test.mjs
+
+      - name: Reject direct public photo uploads in Stuora clients
+        run: node --test tests/media-client-lockdown.test.mjs
+
+      - name: Test staging media denial harness without account credentials
+        run: node --test tests/media-quarantine-http.test.mjs
+
+      - name: Gate real two-student acceptance to exact approved staging preview
+        run: node --test tests/hosted-preview-identity.test.mjs
+
+      - name: Reject malicious native Auth deep links
+        run: node --test tests/native-auth-callback.test.mjs
+
+      - name: Verify staging-only Auth template rollout procedure
+        run: node --test tests/auth-branding-rollout.test.mjs
+
+      - name: Generate and verify Stuora native branding assets
+        run: node --test tests/native-branding.test.mjs
+
       - name: Validate build environment
         run: npm run check:environment
 
-      - name: Check Expo dependency compatibility
-        run: npx expo install --check
 
       - name: Test database authorization
         run: npm run test:database
@@ -60,3 +121,8 @@ jobs:
 
       - name: Export native bundles
         run: npx expo export --platform ios --platform android --output-dir native-build
+
+      # A published-SDK/version-index skew must never hide independent test failures.
+      # Keep this a mandatory failing gate; evaluate it after all independent checks.
+      - name: Check Expo dependency compatibility
+        run: npx expo install --check

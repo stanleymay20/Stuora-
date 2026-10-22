@@ -331,7 +331,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
-          city?: string
+          city: string
           created_at?: string
           currency?: string
           description?: string
@@ -451,7 +451,7 @@ export type Database = {
           account_kind?: Database["public"]["Enums"]["account_kind"]
           avatar_path?: string | null
           bio?: string
-          city?: string
+          city: string
           created_at?: string
           display_name: string
           id: string
@@ -556,6 +556,42 @@ export type Database = {
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
+        ]
+      }
+      student_group_bans: {
+        Row: { group_id: string; user_id: string; banned_by: string; banned_at: string }
+        Insert: { group_id: string; user_id: string; banned_by: string; banned_at?: string }
+        Update: { group_id?: string; user_id?: string; banned_by?: string; banned_at?: string }
+        Relationships: [
+          { foreignKeyName: "student_group_bans_group_id_fkey"; columns: ["group_id"]; isOneToOne: false; referencedRelation: "student_groups"; referencedColumns: ["id"] },
+          { foreignKeyName: "student_group_bans_user_id_fkey"; columns: ["user_id"]; isOneToOne: false; referencedRelation: "profiles"; referencedColumns: ["id"] },
+          { foreignKeyName: "student_group_bans_banned_by_fkey"; columns: ["banned_by"]; isOneToOne: false; referencedRelation: "profiles"; referencedColumns: ["id"] },
+        ]
+      }
+      student_group_members: {
+        Row: { group_id: string; user_id: string; joined_at: string }
+        Insert: { group_id: string; user_id: string; joined_at?: string }
+        Update: { group_id?: string; user_id?: string; joined_at?: string }
+        Relationships: [
+          { foreignKeyName: "student_group_members_group_id_fkey"; columns: ["group_id"]; isOneToOne: false; referencedRelation: "student_groups"; referencedColumns: ["id"] },
+          { foreignKeyName: "student_group_members_user_id_fkey"; columns: ["user_id"]; isOneToOne: false; referencedRelation: "profiles"; referencedColumns: ["id"] },
+        ]
+      }
+      student_group_messages: {
+        Row: { id: string; group_id: string; author_id: string; body: string; created_at: string }
+        Insert: { id?: string; group_id: string; author_id: string; body: string; created_at?: string }
+        Update: { id?: string; group_id?: string; author_id?: string; body?: string; created_at?: string }
+        Relationships: [
+          { foreignKeyName: "student_group_messages_group_id_fkey"; columns: ["group_id"]; isOneToOne: false; referencedRelation: "student_groups"; referencedColumns: ["id"] },
+          { foreignKeyName: "student_group_messages_author_id_fkey"; columns: ["author_id"]; isOneToOne: false; referencedRelation: "profiles"; referencedColumns: ["id"] },
+        ]
+      }
+      student_groups: {
+        Row: { id: string; owner_id: string; name: string; description: string; city: string; topic: string; created_at: string; updated_at: string }
+        Insert: { id?: string; owner_id: string; name: string; description?: string; city: string; topic: string; created_at?: string; updated_at?: string }
+        Update: { id?: string; owner_id?: string; name?: string; description?: string; city?: string; topic?: string; created_at?: string; updated_at?: string }
+        Relationships: [
+          { foreignKeyName: "student_groups_owner_id_fkey"; columns: ["owner_id"]; isOneToOne: false; referencedRelation: "profiles"; referencedColumns: ["id"] },
         ]
       }
       student_benefits: {
@@ -696,6 +732,22 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      create_student_group: {
+        Args: { p_name: string; p_description: string; p_city: string; p_topic: string }
+        Returns: string
+      }
+      remove_student_group_member: {
+        Args: { p_group_id: string; p_user_id: string }
+        Returns: undefined
+      }
+      restore_student_group_member: {
+        Args: { p_group_id: string; p_user_id: string }
+        Returns: undefined
+      }
+      send_student_group_message: {
+        Args: { p_group_id: string; p_body: string }
+        Returns: string
+      }
       save_student_listing: {
         Args: {
           p_bills_included: boolean
