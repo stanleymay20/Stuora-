@@ -18,7 +18,9 @@ test('Stuora Bot finds real affordable rooms with backend filters and opens Hous
   await page.goto('/');
   await page.getByRole('button', { name: 'Open Stuora Bot' }).click();
   await expect(page.getByText('Connected search beta · Read-only')).toBeVisible();
-  await expect(page.locator('img[src*="stuora-bot"]')).toHaveCount(2);
+  // The floating launcher is hidden behind the open modal; only the Bot header mascot remains.
+  await expect(page.locator('img[src*="stuora-bot"]')).toHaveCount(1);
+  await expect(page.getByRole('button', { name: 'Open Stuora Bot' })).toHaveCount(0);
   await page.getByRole('textbox', { name: 'Ask Stuora Bot' }).fill('Find rooms in Berlin under €650');
   await page.getByRole('button', { name: 'Ask Stuora Bot' }).click();
   await expect(page.getByRole('dialog').getByText('Student room near campus', { exact: true })).toBeVisible();
