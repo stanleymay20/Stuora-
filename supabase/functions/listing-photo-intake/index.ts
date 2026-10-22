@@ -122,6 +122,30 @@ function deps(): TrustedMediaDeps {
     },
   };
 }
+async function boundedMultipart(req: Request, limit: number): Promise<FormData> {
+  if (!req.body) throw new MediaRejection("INVALID_BODY", 400, "Photo request body missing");
+  const reader = req.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let received = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      received += value.byteLength;
+      if (received > limit)
+        throw new MediaRejection("SIZE_LIMIT", 413, "Photo request exceeds the upload limit");
+      chunks.push(value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  const body = new Uint8Array(received);
+  let offset = 0;
+  for (const part of chunks) { body.set(part, offset); offset += part.byteLength; }
+  const headers = new Headers({ "content-type": req.headers.get("content-type") ?? "" });
+  return new Request(req.url, { method: "POST", headers, body: body.buffer }).formData();
+}
+
 Deno.serve(async req => {
   const origin = req.headers.get("Origin");
   // Fail closed until private staging integration tests, durable request quotas
@@ -151,7 +175,7 @@ Deno.serve(async req => {
     const type = req.headers.get("content-type") ?? "";
     if (!type.toLowerCase().startsWith("multipart/form-data;"))
       throw new MediaRejection("INVALID_BODY", 415, "Multipart form data required");
-    const form = await req.formData();
+    const form = await boundedMultipart(req, MAX_INPUT_BYTES + 32_768);
     const listingId = form.get("listingId");
     const file = form.get("file");
     if (!validUuid(listingId) || !(file instanceof File) || file.size > MAX_INPUT_BYTES)
