@@ -9,6 +9,7 @@
       "node"
     ]
   },
+  "exclude": ["supabase/functions/*/index.ts"],
   "include": [
     "**/*.ts",
     "**/*.tsx",
