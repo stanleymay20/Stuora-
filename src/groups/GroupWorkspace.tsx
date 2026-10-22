@@ -305,6 +305,7 @@ export default function GroupWorkspace({ onAccount }: { onAccount: () => void })
           <View style={styles.moderationPanel}>
             <Text style={styles.subtitle}>Member moderation</Text>
             <Text style={styles.muted}>Removing a student blocks rejoining until you restore access. Leaving voluntarily does not block rejoining.</Text>
+            <Action name="Refresh group members" secondary disabled={busy} onPress={() => setModerationRevision(v => v + 1)} />
             {moderationLoading ? <ActivityIndicator accessibilityLabel="Loading group members" /> : null}
             {moderationIssue ? <Text accessibilityRole="alert" style={styles.issue}>{moderationIssue}</Text> : null}
             {moderationIssue ? <Action name="Retry group moderation" secondary onPress={() => setModerationRevision(v => v + 1)} /> : null}
