@@ -406,6 +406,6 @@ for (const category of ['Housing', 'Marketplace']) {
     await expect(page.getByRole('button', { name: 'Remove from saved', exact: true })).toBeVisible();
     await page.getByRole('button', { name: 'Remove from saved', exact: true }).click();
     expect(data.saved.has(id)).toBe(false);
-    await expect(page.getByText('No saved active listings in this category. Save an available listing to find it here later.')).toBeVisible();
+    await expect(page.getByText(/No saved active listings/)).toBeVisible();
   });
 }

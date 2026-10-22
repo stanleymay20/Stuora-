@@ -402,8 +402,10 @@ export default function ListingWorkspace({ category, mode = 'browse', search = '
             <Text style={[s.emptyTitle, compactWideEmpty && s.emptyTitleWide]}>No {category.toLowerCase()} listings found.</Text>
             <Text style={[s.emptyCaption, compactWideEmpty && s.emptyCaptionWide]}>{search.trim()
               ? 'No listing titles match that search. Try a different term or clear the search.'
+              : savedOnly ? (hasListingFilters
+                ? 'No saved active listings match these filters. Clear or adjust the city and price.'
+                : 'No saved active listings in this category. Save an available listing to find it here later.')
               : hasListingFilters ? 'No real listings match these filters. Clear the filters or adjust the city and maximum price.'
-              : savedOnly ? 'No saved active listings in this category. Save an available listing to find it here later.'
               : own ? 'You have not posted a listing in this category yet.'
               : 'Be among the first students to share a real listing. Only published community listings appear here.'}</Text>
             {search.trim() && onClearSearch ? <Button title="Clear search" onPress={onClearSearch} /> : !search.trim() && onCreate ? <Button title={`Post ${category.toLowerCase()} listing`} onPress={onCreate} /> : null}
