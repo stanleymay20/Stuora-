@@ -63,8 +63,7 @@ export default function FloatingStuoraBot({
 
   return (
     <View pointerEvents="box-none" style={[styles.host, desktop ? styles.desktopHost : styles.mobileHost]}>
-      <Animated.View style={[styles.floating, { transform: [{ translateY: bob }, { scale }] }]}>
-        <Pressable
+      <Pressable
           testID="floating-stuora-bot"
           accessibilityRole="button"
           accessibilityLabel="Open Stuora Bot"
@@ -72,20 +71,22 @@ export default function FloatingStuoraBot({
           onPress={onPress}
           style={({ pressed }) => [styles.launcher, pressed && styles.pressed]}
         >
-          <View style={styles.orb}>
-            <View pointerEvents="none" style={styles.shine} />
-            <Image
+          {/* Animate the artwork, never the hit target: reliable touch and Playwright clicks. */}
+          <Animated.View style={[styles.floating, { transform: [{ translateY: bob }, { scale }] }]}>
+            <View style={styles.orb}>
+              <View pointerEvents="none" style={styles.shine} />
+              <Image
               source={require('../../assets/stuora-bot.webp')}
               resizeMode="contain"
               accessibilityElementsHidden
               importantForAccessibility="no"
               style={styles.mascot}
-            />
-          </View>
+              />
+            </View>
+          </Animated.View>
           <View style={styles.caption}><Text style={styles.captionText}>Ask Stuora</Text></View>
           <Text style={styles.beta}>SEARCH BETA</Text>
-        </Pressable>
-      </Animated.View>
+      </Pressable>
     </View>
   );
 }
