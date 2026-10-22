@@ -87,3 +87,7 @@ Files newly added on draft PR #23:
 
 ## 2026-10-22 — New trusted decoder hardening candidate
 - The dormant Edge media path now contains header-level JPEG/PNG/WebP dimension checks **before ImageMagick.read**, plus independent real-WASM Deno codec tests. No Edge deployment or Storage cutover is authorized merely by source CI. Consult `docs/STUORA_TRUSTED_MEDIA_CUTOVER_2026-10-22.md`. Staging database already has photo guard and rate-attempt migrations; production remains unchanged. The approved app's current direct upload continues.
+
+## 2026-10-22 — Trusted-media concurrency/cleanup candidate
+- New candidate SQL migration `20261022210000_listing_photo_processing_leases.sql`: three-minute database processing leases, max one per student and four project-wide; service-role only. Must be independently applied to **staging** only after exact-head CI green and migration read-back. Currently source-only until confirmed.
+- `listing-photo-intake/index.ts` acquires a DB lease before decode and releases in `finally`; `core.ts` compensates uncertain Storage upload outcomes. No Edge deployment, no client cutover, no production modifications. CI/mock DB tests do not substitute for hosted acceptance.

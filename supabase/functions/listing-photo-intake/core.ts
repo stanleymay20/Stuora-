@@ -53,7 +53,15 @@ export async function publishListingPhoto(
   const path = `${studentId}/${listingId}/${imageId}.png`;
   const sortOrder = Array.from({ length: PHOTO_LIMIT }, (_, index) => index)
     .find(index => !existing.some(value => value.sort_order === index)) ?? PHOTO_LIMIT;
-  await deps.storeSanitized(path, result.data, result.mime);
+  // An uncertain Storage error may still have written bytes (e.g. timeout
+  // after the server committed the object). Reconcile the server-created path
+  // before returning an error, so public orphan files cannot be ignored.
+  try { await deps.storeSanitized(path, result.data, result.mime); }
+  catch (err) {
+    try { await deps.removeObject(path); }
+    catch { throw new MediaRejection('CLEANUP_REQUIRED', 503, 'Photo storage outcome is uncertain; cleanup requires operator attention'); }
+    throw err;
+  }
   try {
     // The cutover migration must enforce a transaction-safe six-photo limit.
     return await deps.persistMedia(listingId, path, sortOrder);

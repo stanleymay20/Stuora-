@@ -234,6 +234,38 @@ for (const inheritedGrants of [false, true]) {
          where scope='student_minute' and scope_key='${a}'`);
       assert.equal(persistedAttempts[0].used, 12); assertions++;
 
+      // A separate committed service-role processing lease caps concurrent
+      // WASM decoders. Public roles cannot acquire or release capacity.
+      const { rows: leaseGrants } = await db.query(`select
+        has_function_privilege('anon','public.acquire_listing_photo_processing_lease(uuid,uuid)','EXECUTE') as anon_allowed,
+        has_function_privilege('authenticated','public.acquire_listing_photo_processing_lease(uuid,uuid)','EXECUTE') as user_allowed,
+        has_function_privilege('service_role','public.acquire_listing_photo_processing_lease(uuid,uuid)','EXECUTE') as server_allowed`);
+      assert.deepEqual(leaseGrants[0], { anon_allowed:false, user_allowed:false, server_allowed:true }); assertions++;
+      await deny(a, `select public.acquire_listing_photo_processing_lease('${a}','11111111-1111-4111-8111-111111111101')`);
+      const leaseIdentities = [a,b,c,id(84),id(85)];
+      const leaseTokens = [id(91),id(92),id(93),id(94),id(95)];
+      for (let i=0;i<4;i++) {
+        const { rows }=await as('service_role',leaseIdentities[i],
+          `select public.acquire_listing_photo_processing_lease('${leaseIdentities[i]}','${leaseTokens[i]}') as admitted`);
+        assert.equal(rows[0].admitted,true); assertions++;
+      }
+      const { rows: duplicateUser }=await as('service_role',a,
+        `select public.acquire_listing_photo_processing_lease('${a}','${id(96)}') as admitted`);
+      assert.equal(duplicateUser[0].admitted,false); assertions++;
+      const { rows: fullCapacity }=await as('service_role',leaseIdentities[4],
+        `select public.acquire_listing_photo_processing_lease('${leaseIdentities[4]}','${leaseTokens[4]}') as admitted`);
+      assert.equal(fullCapacity[0].admitted,false); assertions++;
+      const { rows: wrongOwnerRelease }=await as('service_role',b,
+        `select public.release_listing_photo_processing_lease('${a}','${leaseTokens[0]}') as released`);
+      assert.equal(wrongOwnerRelease[0].released,false); assertions++;
+      const { rows: correctRelease }=await as('service_role',a,
+        `select public.release_listing_photo_processing_lease('${a}','${leaseTokens[0]}') as released`);
+      assert.equal(correctRelease[0].released,true); assertions++;
+      const { rows: refilled }=await as('service_role',leaseIdentities[4],
+        `select public.acquire_listing_photo_processing_lease('${leaseIdentities[4]}','${leaseTokens[4]}') as admitted`);
+      assert.equal(refilled[0].admitted,true); assertions++;
+
+
       // Hosted Supabase owns these tables; the harness grants authenticated CRUD
       // so the same storage.objects policies can be exercised locally.
       await count('authenticated', a, `insert into storage.objects (bucket_id, name) values ('listing-media', '${a}/${house}/room.jpg') returning *`, 1);

@@ -102,6 +102,7 @@ Deno.serve(async req => {
   if (origin && origin !== allowedOrigin) return response(403, { error: "Unapproved origin" }, null);
   if (req.method === "OPTIONS") return response(200, { ok: true }, origin);
   if (req.method !== "POST" && req.method !== "DELETE") return response(405, { error: "Unsupported method" }, origin);
+  let processingLease: { studentId: string; requestId: string } | null = null;
   try {
     const match = /^Bearer (\S+)$/i.exec(req.headers.get("authorization") ?? "");
     if (!match) return response(401, { error: "Authentication required" }, origin);
@@ -128,6 +129,17 @@ Deno.serve(async req => {
       throw new MediaRejection("LIMIT_UNAVAILABLE", 503, "Photo upload temporarily unavailable");
     if (!attemptAllowed)
       throw new MediaRejection("UPLOAD_RATE_LIMIT", 429, "Too many photo uploads. Try again later");
+    // Independent committed RPC lease limits concurrent WASM allocations,
+    // including requests across separate Edge isolates and replicas.
+    const requestId = crypto.randomUUID();
+    const { data: leaseAllowed, error: leaseError } = await admin.rpc("acquire_listing_photo_processing_lease", {
+      p_student: user.id, p_request: requestId,
+    });
+    if (leaseError || typeof leaseAllowed !== "boolean")
+      throw new MediaRejection("CAPACITY_UNAVAILABLE", 503, "Photo processing capacity unavailable");
+    if (!leaseAllowed)
+      throw new MediaRejection("CAPACITY_BUSY", 429, "Photo processing is busy. Try again later");
+    processingLease = { studentId: user.id, requestId };
     const declared = Number(req.headers.get("content-length") ?? 0);
     if (declared > MAX_INPUT_BYTES + 32_768)
       throw new MediaRejection("SIZE_LIMIT", 413, "Photo exceeds the 5 MB upload limit");
@@ -150,5 +162,15 @@ Deno.serve(async req => {
     // No user identifiers, object keys, token values or image bytes in logs.
     console.error("listing-photo-intake internal failure", err instanceof Error ? err.name : "unknown");
     return response(503, { code: "NOT_READY", error: "Photo service unavailable" }, origin);
+  } finally {
+    if (processingLease) {
+      const { error: releaseError, data: released } = await admin.rpc("release_listing_photo_processing_lease", {
+        p_student: processingLease.studentId, p_request: processingLease.requestId,
+      });
+      // Expiry provides a recovery limit for process crashes; no user ID or
+      // opaque request token is ever placed in diagnostic logs.
+      if (releaseError || released !== true)
+        console.error("listing-photo-intake lease release requires operator review");
+    }
   }
 });

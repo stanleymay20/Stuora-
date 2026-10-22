@@ -93,10 +93,17 @@ test('failed metadata commit removes the processed public object without publish
   expect(f.calls).toEqual(['lookup','list','transcode','store','persist','remove-object']);
   expect(f.photos).toHaveLength(0);
 });
-test('failed Storage upload does not attempt a metadata write', async () => {
+test('uncertain failed Storage upload attempts to clean orphan bytes before returning error', async () => {
   const f = fixture(); f.config.rejectUpload = true;
   await expect(upload(f)).rejects.toThrow('Storage unavailable');
-  expect(f.calls).toEqual(['lookup','list','transcode','store']);
+  expect(f.calls).toEqual(['lookup','list','transcode','store','remove-object']);
+  expect(f.photos).toHaveLength(0);
+});
+test('uncertain Storage upload and failed cleanup escalate for operator investigation', async () => {
+  const f = fixture(); f.config.rejectUpload = true; f.config.rejectDelete = true;
+  await expect(upload(f)).rejects.toMatchObject({code:'CLEANUP_REQUIRED',status:503});
+  expect(f.calls).toEqual(['lookup','list','transcode','store','remove-object']);
+  expect(f.photos).toHaveLength(0);
 });
 test('failed processed file cleanup escalates an operator-attention error', async () => {
   const f = fixture(); f.config.rejectPersist = true; f.config.rejectDelete = true;
