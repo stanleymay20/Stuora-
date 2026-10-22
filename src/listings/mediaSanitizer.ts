@@ -163,7 +163,7 @@ export function sanitizeListingImage(bytes: ArrayBuffer): { bytes: ArrayBuffer; 
   if (input[0] === 0xff && input[1] === 0xd8) { out = jpeg(input); mime = 'image/jpeg'; }
   else if (input[0] === 137 && input[1] === 80 && input[2] === 78) { out = png(input); mime = 'image/png'; }
   else if (input[0] === 82 && input[1] === 73 && input[2] === 70 && input[3] === 70) { out = webp(input); mime = 'image/webp'; }
-  else error('Unsupported or invalid photo format');
+  else return error('Unsupported or invalid photo format');
   // Create a fresh isolated ArrayBuffer, never return the original metadata bytes.
   return { bytes: out.slice().buffer, mime };
 }
