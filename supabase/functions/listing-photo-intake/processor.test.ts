@@ -133,7 +133,7 @@ Deno.test("PNG preflight requires complete IEND, rejects trailing bytes, duplica
     png.subarray(0,png.length-1),
     concat(png,Uint8Array.of(0)),
     concat(preceding,chunk('IHDR',Uint8Array.of(...Array(13).fill(0))),iend),
-    concat(preceding,chunk('tEXt',new TextEncoder().encode('Comment\\0after IDAT')),
+    concat(preceding,chunk('tEXt',new TextEncoder().encode('Comment' + String.fromCharCode(0) + 'after IDAT')),
       chunk('IDAT',Uint8Array.of(0)),iend),
   ];
   for(const payload of checks){
@@ -144,7 +144,7 @@ Deno.test("PNG preflight requires complete IEND, rejects trailing bytes, duplica
 Deno.test("PNG preflight keeps legitimate post-IDAT metadata, which the real decoder strips",()=>{
   const comment=new TextEncoder().encode('StudentGPS=0;NeverPersist');
   const withMetadata=concat(png.subarray(0,png.length-12),
-    chunk('tEXt',concat(new TextEncoder().encode('Comment\\0'),comment)),png.subarray(png.length-12));
+    chunk('tEXt',concat(new TextEncoder().encode('Comment' + String.fromCharCode(0)),comment)),png.subarray(png.length-12));
   assert.deepEqual(inspectImageHeader(withMetadata),{format:'png',width:1,height:1});
   const processed=decodeAndEncode(withMetadata);
   assert.ok(!new TextDecoder().decode(processed.data).includes('NeverPersist'));
