@@ -130,3 +130,7 @@ Files newly added on draft PR #23:
 - Versioned `supabase/auth-branding/`: six Auth HTML templates and seven optional security notifications plus `subjects.json` and a staging installation runbook. Navy/purple Stuora identity, no external image URLs or fake sender/support mailboxes, only the official Auth Go-template variables.
 - **Not installed** in hosted Supabase Auth templates/SMTP, nor configured verified From address, DNS or custom Auth domain. Requires separate staging dashboard/Management API update and test email read-back. Code cannot change hosted email appearance until that rollout.
 - Account UI now uses `stuoraAuthError` to replace raw provider login errors with brand-consistent privacy-safe messages; browser test adjusted. New required CI source-branded template check `tests/auth-branding.test.mjs`. PR #23 draft; trusted-media staging v2 disabled; production unchanged.
+
+## 2026-10-22 — Canonical brand source and parity gate
+- Added `assets/stuora-mark.svg`, the **identical three existing ribbon paths and four gradient stops** from `src/ui/Brand.tsx`; no rebrand or fake logo. Added `docs/STUORA_BRAND_SYSTEM.md` showing source/live parity and explicit unimplemented native icon/favicon, sender, domain and hosted email-template surfaces.
+- `tests/auth-branding.test.mjs` now verifies canonical path/color parity. Does not claim native launcher icons or branded SMTP are active. Both require separate controlled implementation/hosted verification.

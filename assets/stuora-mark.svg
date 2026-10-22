@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" role="img" aria-labelledby="title">
+<title id="title">Stuora</title>
+<defs>
+<linearGradient id="blue" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#7348FF"/><stop offset="1" stop-color="#19BAEF"/></linearGradient>
+<linearGradient id="purple" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#A744F8"/><stop offset="1" stop-color="#6645FA"/></linearGradient>
+</defs>
+<path d="M13 18L48 4Q57 1 57 11V19Q57 23 52 25L20 37Q7 40 7 28V26Q7 20 13 18Z" fill="url(#blue)"/>
+<path d="M12 39L44 27Q57 23 57 36V40Q57 44 51 47L17 61Q7 65 7 54V47Q7 42 12 39Z" fill="url(#blue)"/>
+<path d="M7 26Q7 18 16 21L50 34Q57 37 57 44Q57 49 49 47L15 34Q7 31 7 26Z" fill="url(#purple)"/>
+</svg>
