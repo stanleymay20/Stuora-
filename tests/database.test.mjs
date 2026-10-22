@@ -255,15 +255,38 @@ for (const inheritedGrants of [false, true]) {
       const { rows: fullCapacity }=await as('service_role',leaseIdentities[4],
         `select public.acquire_listing_photo_processing_lease('${leaseIdentities[4]}','${leaseTokens[4]}') as admitted`);
       assert.equal(fullCapacity[0].admitted,false); assertions++;
+      // The service-role functions take an explicit student ID; auth.uid()
+      // does not identify the client within these privileged RPCs. Verify a
+      // different student ID cannot release someone else's lease even if the
+      // request token matches. Passing 'a' as the caller argument here would
+      // *correctly* release a's lease and make the test invalid.
       const { rows: wrongOwnerRelease }=await as('service_role',b,
-        `select public.release_listing_photo_processing_lease('${a}','${leaseTokens[0]}') as released`);
+        `select public.release_listing_photo_processing_lease('${b}','${leaseTokens[0]}') as released`);
       assert.equal(wrongOwnerRelease[0].released,false); assertions++;
+      const { rows: preservedLease } = await db.query(
+        `select count(*)::integer as still_active from private.listing_photo_processing_leases
+         where student_id='${a}' and request_id='${leaseTokens[0]}'`);
+      assert.equal(preservedLease[0].still_active,1); assertions++;
       const { rows: correctRelease }=await as('service_role',a,
         `select public.release_listing_photo_processing_lease('${a}','${leaseTokens[0]}') as released`);
       assert.equal(correctRelease[0].released,true); assertions++;
       const { rows: refilled }=await as('service_role',leaseIdentities[4],
         `select public.acquire_listing_photo_processing_lease('${leaseIdentities[4]}','${leaseTokens[4]}') as admitted`);
       assert.equal(refilled[0].admitted,true); assertions++;
+      // A crashed worker may leave a lease behind. Simulate time passing
+      // *inside the disposable in-memory database* and prove admission
+      // deletes expired reservations while retaining active ones.
+      await db.query(`update private.listing_photo_processing_leases
+        set created_at=clock_timestamp()-interval '5 minutes',
+            expires_at=clock_timestamp()-interval '1 second'
+        where request_id='${leaseTokens[1]}'`);
+      const { rows: reclaimed } = await as('service_role', id(97),
+        `select public.acquire_listing_photo_processing_lease('${id(97)}','${id(98)}') as admitted`);
+      assert.equal(reclaimed[0].admitted,true); assertions++;
+      const { rows: expiredStillPresent } = await db.query(
+        `select count(*)::integer as count from private.listing_photo_processing_leases
+        where request_id='${leaseTokens[1]}'`);
+      assert.equal(expiredStillPresent[0].count,0); assertions++;
 
 
       // Hosted Supabase owns these tables; the harness grants authenticated CRUD

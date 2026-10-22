@@ -91,3 +91,6 @@ Files newly added on draft PR #23:
 ## 2026-10-22 — Trusted-media concurrency/cleanup candidate
 - New candidate SQL migration `20261022210000_listing_photo_processing_leases.sql`: three-minute database processing leases, max one per student and four project-wide; service-role only. Must be independently applied to **staging** only after exact-head CI green and migration read-back. Currently source-only until confirmed.
 - `listing-photo-intake/index.ts` acquires a DB lease before decode and releases in `finally`; `core.ts` compensates uncertain Storage upload outcomes. No Edge deployment, no client cutover, no production modifications. CI/mock DB tests do not substitute for hosted acceptance.
+
+## 2026-10-22 — Lease negative test correction after CI failure
+- Commit `4317689b3152faabd842948f1c1e8195738f5959`, CI run #39794167750: trusted-media-edge PASS, `rls-authorization` and `verify` FAIL at `tests/database.test.mjs:260` because the supposedly wrong-student release passed the legitimate `p_student` to the privileged RPC. This is a test-fixture error, NOT evidence of a server-side cross-account bypass. Follow-up corrects the student argument and adds negative persisted-lease and expiry checks. Do not apply the new migration to staging until exact successor passes all three CI jobs.
