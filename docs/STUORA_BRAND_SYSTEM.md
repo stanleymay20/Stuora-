@@ -23,3 +23,8 @@
 - Keep staging Edge `listing-photo-intake` version 2 disabled, PR draft, production unchanged.
 
 See `supabase/auth-branding/README.md` for controlled Auth email rollout.
+
+## Native application icon implementation
+- `app.config.js` invokes a deterministic, dependency-free source renderer in `scripts/generate-stuora-native-icons.cjs` before Expo resolves app config. It writes 1024×1024 icon, Android transparent adaptive foreground and centered transparent splash asset to ignored `assets/generated-stuora/`.
+- `app.json` now references a branded iOS/top-level icon and a branded Android adaptive foreground/background. The generated splash icon is **prepared but not yet wired**; installing and configuring the `expo-splash-screen` config plugin requires dependency review and native preview validation. Do not claim an OS splash or app-store build exists based only on generated assets.
+- Mandatory CI tests generate and validate images using only Node built-ins, check PNG type/dimensions, ensure source mark parity, and verify Expo references. Actual launcher render on physical iOS/Android still needs acceptance. Generated PNG output is never committed from a local session or served to an unapproved backend.

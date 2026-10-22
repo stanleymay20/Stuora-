@@ -137,3 +137,8 @@ Files newly added on draft PR #23:
 
 ## 2026-10-22 — Stuora web favicon configured in Expo
 - New static `assets/stuora-favicon.png` (64×64 PNG, derived from established Stuora mark), `app.json` now sets `web.favicon`, `web.name`, `web.shortName`, `web.themeColor`. Node brand validation checks correct source and PNG signature. **Hosted browser favicon not proven until exact-head CI web export and deployed-site readback**. Native iOS/Android launch icons and splash still pending 1024px original-quality raster assets and device QA.
+
+## 2026-10-22 — Native Stuora icon build candidate
+- Added `app.config.js` for deterministic on-config offline generation of 1024px branded native PNGs from the committed canonical `assets/stuora-mark.svg`; `app.json` now points to top-level/iOS icon and Android adaptive foreground with navy `#17152F` background.
+- Generator is zero external dependencies, emits ignored `assets/generated-stuora/` including a prepared but not yet activated splash-icon. Tests `tests/native-branding.test.mjs` verify generated output and Expo refs, required by CI. Native launch/device visual acceptance pending; `expo-splash-screen` not yet installed/activated.
+- Changes affect source only, draft PR #23; no Supabase Auth templates installed, SMTP/domain configured, Edge uploads enabled, production or payment changes.

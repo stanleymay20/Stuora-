@@ -82,6 +82,9 @@ jobs:
       - name: Validate Stuora Auth email and branded error copy
         run: node --test tests/auth-branding.test.mjs
 
+      - name: Generate and verify Stuora native branding assets
+        run: node --test tests/native-branding.test.mjs
+
       - name: Validate build environment
         run: npm run check:environment
 

@@ -18,10 +18,15 @@
     ],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.stuora.app"
+      "bundleIdentifier": "com.stuora.app",
+      "icon": "./assets/generated-stuora/icon.png"
     },
     "android": {
-      "package": "com.stuora.app"
+      "package": "com.stuora.app",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/generated-stuora/adaptive-foreground.png",
+        "backgroundColor": "#17152F"
+      }
     },
     "web": {
       "bundler": "metro",
@@ -29,6 +34,7 @@
       "name": "Stuora",
       "shortName": "Stuora",
       "themeColor": "#17152F"
-    }
+    },
+    "icon": "./assets/generated-stuora/icon.png"
   }
 }
