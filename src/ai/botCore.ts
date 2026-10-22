@@ -8,7 +8,8 @@ export type BotIntent = {
   search: string | null;
 };
 
-const cities = ['Berlin', 'Potsdam', 'Brandenburg', 'Leipzig', 'Hamburg', 'Munich', 'Cologne', 'Frankfurt', 'Dresden'];
+// Extract the city from student-supplied words; never use a fixed city whitelist.
+const cityPattern = /\\b(?:in|near|around)\\s+([\\p{L}\\p{M}][\\p{L}\\p{M} .'-]{1,77}?)(?=\\s+(?:under|below|less than|up to|max(?:imum)?|budget|with|for)\\b|[!?.,]|$)/iu;
 const domains: [BotDomain, RegExp][] = [
   ['housing', /\b(housing|rent(?:al)?|flats?|apartments?|rooms?|dorms?|wg|accommodation|landlords?)\b/i],
   ['jobs', /\b(job|jobs|career|internship|employer|werkstudent|working.student|part.time work|vacancy)\b/i],
@@ -21,7 +22,7 @@ const domains: [BotDomain, RegExp][] = [
 export function parseBotIntent(text: string): BotIntent {
   const value = text.trim().slice(0, 280);
   const domain = domains.find(([, expression]) => expression.test(value))?.[0] ?? null;
-  const city = cities.find(name => new RegExp('\\b' + name + '\\b', 'i').test(value)) ?? null;
+  const city = value.match(cityPattern)?.[1]?.trim() ?? null;
   // Apply price only to listings where price has a well-defined meaning.
   // Interpret €1,200 / €1.200 as twelve hundred, and €1.200,50 as 1200.50.
   // Do not silently turn a thousands separator into a decimal rent ceiling.
@@ -42,7 +43,7 @@ export function parseBotIntent(text: string): BotIntent {
 }
 
 export function botWelcome(): string {
-  return "I can search real Stuora listings and student groups. Try 'rooms in Berlin under €650', 'working-student jobs in Potsdam', or 'study groups in Berlin'. I will not invent offers or send messages for you.";
+  return "I search genuine Stuora listings and student groups. Ask about housing, student jobs or study groups in your selected city. I will not invent offers, send messages or apply on your behalf.";
 }
 
 export function botGuidance(): string {
