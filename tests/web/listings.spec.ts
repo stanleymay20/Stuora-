@@ -4,13 +4,18 @@ const userId = session().user.id;
 type Media = { id: string; listing_id: string; object_path: string; sort_order: number; created_at: string };
 type Stored = { id: string; owner_id: string; kind: string; status: string; title: string; description: string; city: string; price_cents: number; housing_details: Record<string, unknown> | null; marketplace_details: Record<string, unknown> | null; listing_media: Media[] };
 const pixelPng = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9Zuz0AAAAASUVORK5CYII=', 'base64');
+// Deliberately insert a GPS text chunk: only scrubbed bytes may be uploaded.
+const gpsMarker = Buffer.from('GPSLatitude=52.5200 GPSLongitude=13.4050');
+const gpsChunk = Buffer.concat([Buffer.from([0,0,0,gpsMarker.length]), Buffer.from('tEXt'), gpsMarker, Buffer.alloc(4)]);
+const gpsPng = Buffer.concat([pixelPng.subarray(0,33), gpsChunk, pixelPng.subarray(33)]);
 function api() {
   const rows: Stored[] = [];
   let failure = '';
   let sequence = 10;
   let mediaSequence = 1;
+  const uploadedPhotos: Buffer[] = [];
   return {
-    rows, fail: (endpoint: string) => { failure = endpoint; },
+    rows, uploadedPhotos, fail: (endpoint: string) => { failure = endpoint; },
     install: async (page: Page) => {
       await page.route('https://stuora-test.invalid/**', async route => {
         const req = route.request(), url = new URL(req.url());
@@ -20,6 +25,7 @@ function api() {
         if (url.pathname.includes('/storage/v1/object/public/listing-media/')) return route.fulfill({ body: pixelPng, contentType: 'image/png' });
         if (url.pathname.startsWith('/storage/v1/object/listing-media/') && req.method() === 'POST') {
           const path = decodeURIComponent(url.pathname.slice('/storage/v1/object/listing-media/'.length));
+          uploadedPhotos.push(req.postDataBuffer() ?? Buffer.alloc(0));
           return route.fulfill({ status: 200, json: { Key: `listing-media/${path}` } });
         }
         if (url.pathname === '/storage/v1/object/listing-media' && req.method() === 'DELETE') return route.fulfill({ status: 200, json: [] });
@@ -129,10 +135,20 @@ test('owner uploads and removes a real listing photo while public discovery rend
   const chooser = page.waitForEvent('filechooser');
   await page.getByRole('button', { name: 'Add photo (0/6)' }).click();
   const fileChooser = await chooser;
-  await fileChooser.setFiles({ name: 'desk.png', mimeType: 'image/png', buffer: pixelPng });
+  await fileChooser.setFiles({ name: 'desk.png', mimeType: 'image/png', buffer: gpsPng });
   await expect(page.getByText('Photo uploaded and attached to this listing.')).toBeVisible();
+  expect(data.uploadedPhotos).toHaveLength(1);
+  expect(data.uploadedPhotos[0]).toEqual(pixelPng);
+  expect(data.uploadedPhotos[0].includes(gpsMarker)).toBe(false);
   await expect(page.getByLabel('Media desk photo 1')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Add photo (1/6)' })).toBeVisible();
+  const invalidChooser = page.waitForEvent('filechooser');
+  await page.getByRole('button', { name: 'Add photo (1/6)' }).click();
+  await (await invalidChooser).setFiles({
+    name: 'another.png', mimeType: 'image/png', buffer: Buffer.from('<svg>not a PNG</svg>'),
+  });
+  await expect(page.getByText('Unsupported or invalid photo format')).toBeVisible();
+  expect(data.uploadedPhotos).toHaveLength(1);
 
   const publicContext = await browser.newContext(); const publicPage = await publicContext.newPage(); await data.install(publicPage); await publicPage.goto('/'); await explore(publicPage, 'Marketplace');
   await expect(publicPage.getByLabel('Media desk cover photo')).toBeVisible();
