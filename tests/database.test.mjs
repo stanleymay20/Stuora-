@@ -158,6 +158,13 @@ for (const inheritedGrants of [false, true]) {
       await deny(a, `insert into public.reports (reporter_id, reported_user_id, reason) values ('${b}', '${c}', 'spam')`);
       await count('authenticated', a, `insert into public.reports (reporter_id, reported_user_id, reason) values ('${a}', '${c}', 'spam') returning *`, 1);
       await count('authenticated', b, 'select * from public.reports', 0);
+      // Existing bookmark table RLS: saved rows belong exclusively to their user.
+      await count('authenticated', b, "insert into public.saved_listings (user_id,listing_id) values ('" + b + "','" + house + "') returning *", 1);
+      await count('authenticated', b, "select * from public.saved_listings where listing_id='" + house + "'", 1);
+      await count('authenticated', a, "select * from public.saved_listings where listing_id='" + house + "'", 0);
+      await deny(a, "insert into public.saved_listings (user_id,listing_id) values ('" + b + "','" + house + "')");
+      await count('authenticated', a, "delete from public.saved_listings where listing_id='" + house + "' returning *", 0);
+      await count('authenticated', b, "delete from public.saved_listings where listing_id='" + house + "' returning *", 1);
 
       // Media metadata follows listing visibility and ownership.
       await count('authenticated', a, `insert into public.listing_media (listing_id, object_path, sort_order) values ('${house}', '${a}/${house}/room.jpg', 0) returning *`, 1);

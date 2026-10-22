@@ -14,8 +14,9 @@ function api() {
   let sequence = 10;
   let mediaSequence = 1;
   const uploadedPhotos: Buffer[] = [];
+  const saved = new Set<string>();
   return {
-    rows, uploadedPhotos, fail: (endpoint: string) => { failure = endpoint; },
+    rows, uploadedPhotos, saved, fail: (endpoint: string) => { failure = endpoint; },
     install: async (page: Page) => {
       await page.route('https://stuora-test.invalid/**', async route => {
         const req = route.request(), url = new URL(req.url());
@@ -31,6 +32,27 @@ function api() {
         if (url.pathname === '/storage/v1/object/listing-media' && req.method() === 'DELETE') return route.fulfill({ status: 200, json: [] });
         const endpoint = url.pathname.split('/').at(-1)!;
         if (failure === endpoint) { failure = ''; return route.fulfill({ status: 403, json: { message: 'Controlled test error', code: '42501' } }); }
+        if (endpoint === 'saved_listings') {
+          const listingId = url.searchParams.get('listing_id')?.replace('eq.', '');
+          if (req.method() === 'POST') {
+            const body = req.postDataJSON();
+            expect(body.user_id).toBe(userId);
+            saved.add(body.listing_id);
+            return route.fulfill({ status: 201, json: {} });
+          }
+          if (req.method() === 'DELETE') {
+            expect(url.searchParams.get('user_id')).toBe('eq.' + userId);
+            if (listingId) saved.delete(listingId);
+            return route.fulfill({ status: 204 });
+          }
+          if (req.method() === 'GET' && url.searchParams.get('select')?.includes('listings!inner')) {
+            const rowsSaved = rows.filter(r => saved.has(r.id) && r.status === 'active' &&
+              url.searchParams.get('listings.kind') === 'eq.' + r.kind);
+            return route.fulfill({ json: rowsSaved.map(r => ({ listing_id: r.id, listings: r })) });
+          }
+          const found = listingId && saved.has(listingId) ? { listing_id: listingId } : null;
+          return route.fulfill({ json: found, contentType: 'application/vnd.pgrst.object+json' });
+        }
         if (endpoint === 'save_student_listing') {
           const args = req.postDataJSON();
           expect(args).not.toHaveProperty('owner_id'); expect(args).not.toHaveProperty('status');
@@ -360,3 +382,30 @@ test('message handoff fails closed if returned conversation is not accessible to
   await expect(page.getByText('This listing conversation is not accessible. Refresh Messages or return to the listing.')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Send message' })).toHaveCount(0);
 });
+
+for (const category of ['Housing', 'Marketplace']) {
+  test(category + ': save and remove real-account bookmarks through RLS-scoped API contract', async ({ page }) => {
+    const data = api();
+    const id = category === 'Housing' ? '00000000-0000-0000-0000-000000000075' : '00000000-0000-0000-0000-000000000076';
+    data.rows.push({
+      id, owner_id: '00000000-0000-0000-0000-000000000002',
+      kind: category.toLowerCase(), status: 'active',
+      title: category + ' save-test', description: 'Listing exists only inside the mocked browser fixture',
+      city: 'Aachen', price_cents: 18000, housing_details: null, marketplace_details: null, listing_media: [],
+    });
+    await data.install(page); await account(page); await signin(page); await explore(page, category);
+    await page.getByRole('button', { name: 'View ' + category + ' save-test' }).click();
+    await expect(page.getByRole('button', { name: 'Save listing', exact: true })).toBeVisible();
+    await page.getByRole('button', { name: 'Save listing', exact: true }).click();
+    await expect(page.getByText('Listing saved to your account.')).toBeVisible();
+    expect(data.saved.has(id)).toBe(true);
+    await page.reload(); await explore(page, category);
+    await page.getByRole('button', { name: 'Saved listings', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'View ' + category + ' save-test' })).toBeVisible();
+    await page.getByRole('button', { name: 'View ' + category + ' save-test' }).click();
+    await expect(page.getByRole('button', { name: 'Remove from saved', exact: true })).toBeVisible();
+    await page.getByRole('button', { name: 'Remove from saved', exact: true }).click();
+    expect(data.saved.has(id)).toBe(false);
+    await expect(page.getByText('No saved active listings in this category. Save an available listing to find it here later.')).toBeVisible();
+  });
+}

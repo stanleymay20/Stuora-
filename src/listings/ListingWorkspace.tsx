@@ -59,6 +59,9 @@ export default function ListingWorkspace({ category, mode = 'browse', search = '
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [own, setOwn] = useState(false);
+  const [savedOnly, setSavedOnly] = useState(false);
+  const [savedState, setSavedState] = useState<'idle' | 'loading' | 'saved' | 'unsaved' | 'error'>('idle');
+  const [savedRevision, setSavedRevision] = useState(0);
   const [cityFilter, setCityFilter] = useState(preferredCity);
   useEffect(() => { setCityFilter(preferredCity); }, [preferredCity]);
   const [maxPrice, setMaxPrice] = useState('');
@@ -82,6 +85,56 @@ export default function ListingWorkspace({ category, mode = 'browse', search = '
   const [actionError, setActionError] = useState('');
 
   useEffect(() => {
+    // Never carry another account's saved-only filter across identity changes.
+    setSavedOnly(false);
+    setSavedState('idle');
+  }, [userId]);
+
+  useEffect(() => {
+    if (!selected || !userId || selected.owner_id === userId || selected.status !== 'active') {
+      setSavedState('idle');
+      return;
+    }
+    let current = true;
+    setSavedState('loading');
+    void supabase.from('saved_listings').select('listing_id')
+      .eq('user_id', userId).eq('listing_id', selected.id).maybeSingle()
+      .then(({ data, error: issue }) => {
+        if (current) setSavedState(issue ? 'error' : data ? 'saved' : 'unsaved');
+      }).catch(() => { if (current) setSavedState('error'); });
+    return () => { current = false; };
+  }, [selected?.id, selected?.status, selected?.owner_id, userId, savedRevision]);
+
+  async function toggleSaved() {
+    if (!selected || !userId || busy || !['saved', 'unsaved'].includes(savedState)) return;
+    if (selected.status !== 'active' || selected.owner_id === userId) return;
+    const itemId = selected.id;
+    const wasSaved = savedState === 'saved';
+    setBusy(true); setActionError(''); setNotice('');
+    try {
+      if (wasSaved) {
+        const { error: issue } = await supabase.from('saved_listings')
+          .delete().eq('user_id', userId).eq('listing_id', itemId);
+        if (issue) throw issue;
+      } else {
+        const { error: issue } = await supabase.from('saved_listings').upsert(
+          { user_id: userId, listing_id: itemId },
+          { onConflict: 'user_id,listing_id', ignoreDuplicates: true }
+        );
+        if (issue) throw issue;
+      }
+      setSavedState(wasSaved ? 'unsaved' : 'saved');
+      setSavedRevision(v => v + 1);
+      if (wasSaved && savedOnly) setSelected(null);
+      setRevision(v => v + 1);
+      setNotice(wasSaved ? 'Listing removed from saved items.' : 'Listing saved to your account.');
+    } catch {
+      setActionError('Could not update saved listings. Nothing was changed locally. Please retry.');
+      setSavedRevision(v => v + 1);
+    } finally { setBusy(false); }
+  }
+
+  useEffect(() => {
     setPages(1); setSelected(null); setEditing(false); setDraft(blank()); setNotice(''); setActionError(''); setConfirmArchive(false);
   }, [kind, mode, userId, own, search, cityFilter, maxPrice]);
 
@@ -94,22 +147,36 @@ export default function ListingWorkspace({ category, mode = 'browse', search = '
       setLoading(false);
       ac.abort();
     }, 15000);
-    let query = (supabase.from('listings') as any)
-      .select('*,housing_details(*),marketplace_details(*),listing_media(id,listing_id,object_path,sort_order,created_at)')
-      .eq('kind', kind)
-      .order('created_at', { ascending: false })
-      .order('id')
-      .range(0, pages * PAGE_SIZE)
-      .abortSignal(ac.signal);
-    query = own && userId ? query.eq('owner_id', userId) : query.eq('status', 'active');
-    if (search.trim()) query = query.ilike('title', `%${search.trim().replace(/[\\%_]/g, '\\$&')}%`);
-    if (cityFilter.trim()) query = query.ilike('city', `%${cityFilter.trim().replace(/[\\%_]/g, '\\$&')}%`);
-    if (maxPrice.trim()) query = query.lte('price_cents', Math.round(Number(maxPrice) * 100));
+    // The saved view joins through the user's RLS-scoped saved_listings rows.
+    // Never fetch everyone's saved records and filter them on the client.
+    const embedded = savedOnly && !!userId;
+    const detailSelect = '*,housing_details(*),marketplace_details(*),listing_media(id,listing_id,object_path,sort_order,created_at)';
+    let query: any = embedded
+      ? (supabase.from('saved_listings') as any)
+        .select('listing_id,listings!inner(' + detailSelect + ')')
+        .eq('user_id', userId)
+        .eq('listings.kind', kind)
+        .eq('listings.status', 'active')
+        .order('created_at', { ascending: false })
+        .range(0, pages * PAGE_SIZE)
+        .abortSignal(ac.signal)
+      : (supabase.from('listings') as any)
+        .select(detailSelect)
+        .eq('kind', kind)
+        .order('created_at', { ascending: false })
+        .order('id')
+        .range(0, pages * PAGE_SIZE)
+        .abortSignal(ac.signal);
+    if (!embedded) query = own && userId ? query.eq('owner_id', userId) : query.eq('status', 'active');
+    const field = (name: string) => embedded ? 'listings.' + name : name;
+    if (search.trim()) query = query.ilike(field('title'), '%' + search.trim().replace(/[\\%_]/g, '\\$&') + '%');
+    if (cityFilter.trim()) query = query.ilike(field('city'), '%' + cityFilter.trim().replace(/[\\%_]/g, '\\$&') + '%');
+    if (maxPrice.trim()) query = query.lte(field('price_cents'), Math.round(Number(maxPrice) * 100));
     void Promise.resolve(query).then((result: any) => {
       if (ac.signal.aborted) return;
       if (result.error) setError('Could not load listings. Check your connection and retry.');
       else {
-        const rows = (result.data ?? []).map(normalizeItem);
+        const rows = (result.data ?? []).map((raw: any) => normalizeItem(embedded ? raw.listings : raw));
         setItems(rows.slice(0, pages * PAGE_SIZE));
         setMore(rows.length > pages * PAGE_SIZE);
       }
@@ -118,7 +185,7 @@ export default function ListingWorkspace({ category, mode = 'browse', search = '
       if (!ac.signal.aborted) { setError('Could not load listings. Check your connection and retry.'); setLoading(false); }
     }).finally(() => clearTimeout(timeout));
     return () => { clearTimeout(timeout); ac.abort(); };
-  }, [kind, userId, own, revision, pages, search, cityFilter, maxPrice, mode]);
+  }, [kind, userId, own, savedOnly, revision, pages, search, cityFilter, maxPrice, mode]);
 
   const change = <K extends keyof Draft>(key: K, value: Draft[K]) => setDraft(d => ({ ...d, [key]: value }));
   function replaceItem(item: Item) {
@@ -278,7 +345,15 @@ export default function ListingWorkspace({ category, mode = 'browse', search = '
       {selected.housing_details ? <Text>{selected.housing_details.housing_type} · {selected.housing_details.furnished ? 'Furnished' : 'Unfurnished'} · {selected.housing_details.bills_included ? 'Bills included' : 'Bills extra'}</Text> : null}
       {selected.marketplace_details ? <Text>Condition: {selected.marketplace_details.item_condition.replace('_', ' ')} · pickup only</Text> : null}
       {selected.owner_id === userId && selected.status === 'active' ? <Button title={busy ? 'Working…' : `Add photo (${selected.listing_media.length}/${MAX_PHOTOS})`} onPress={() => void addPhoto()} disabled={busy || selected.listing_media.length >= MAX_PHOTOS} /> : null}
-      {selected.owner_id !== userId && selected.status === 'active' ? <Button title={session && profile ? 'Message owner' : 'Sign in to message owner'} onPress={() => void messageOwner()} disabled={busy} /> : null}
+      {selected.owner_id !== userId && selected.status === 'active' ? <>
+        <Button title={session && profile && !profileError ? 'Message owner' : 'Sign in to message owner'} onPress={() => void messageOwner()} disabled={busy} />
+        {!session || !profile || profileError
+          ? <Button title="Sign in to save listing" onPress={onAccount} />
+          : savedState === 'error'
+            ? <><Text accessibilityRole="alert" style={s.error}>Could not check saved status.</Text><Button title="Retry saved status" onPress={() => setSavedRevision(v => v + 1)} /></>
+            : <Button title={savedState === 'saved' ? 'Remove from saved' : savedState === 'loading' ? 'Checking saved status…' : 'Save listing'}
+                onPress={() => void toggleSaved()} disabled={busy || savedState === 'loading' || savedState === 'idle'} />}
+      </> : null}
       {selected.owner_id === userId && selected.status === 'active' ? <><Button title="Edit listing" onPress={() => edit(selected)} disabled={busy} />{confirmArchive ? <><Text>Archive this listing? It will disappear from public discovery.</Text><Button title="Confirm archive" onPress={() => void archive()} disabled={busy} /><Button title="Keep listing" onPress={() => setConfirmArchive(false)} disabled={busy} /></> : <Button title="Archive listing" onPress={() => setConfirmArchive(true)} disabled={busy} />}</> : null}
       <Button title={mode === 'create' ? 'Create another listing' : 'Back to listings'} onPress={() => { setSelected(null); setConfirmArchive(false); setActionError(''); setNotice(''); }} disabled={busy} />
     </View> : <>
@@ -291,7 +366,16 @@ export default function ListingWorkspace({ category, mode = 'browse', search = '
             </View>
             <View style={s.filterActions}>
               <Button title="Refresh listings" onPress={() => setRevision(v => v + 1)} disabled={loading} />
-              {session ? <Button title={own ? 'Browse public listings' : 'My listings'} onPress={() => setOwn(v => !v)} /> : null}
+              {session ? <>
+                <Button title={own || savedOnly ? 'Browse public listings' : 'My listings'} onPress={() => {
+                  if (own || savedOnly) { setOwn(false); setSavedOnly(false); }
+                  else { setOwn(true); setSavedOnly(false); }
+                }} />
+                <Button title={savedOnly ? 'Show all listings' : 'Saved listings'} onPress={() => {
+                  if (savedOnly) { setSavedOnly(false); setOwn(false); }
+                  else { setOwn(false); setSavedOnly(true); }
+                }} />
+              </> : null}
             </View>
           </View>
           <View style={s.filterFields}>
@@ -308,7 +392,7 @@ export default function ListingWorkspace({ category, mode = 'browse', search = '
         </View>
       ) : null}
       <View style={s.resultsHeading}>
-        <Text style={s.resultsTitle}>{own ? 'My listings' : 'Available listings'}</Text>
+        <Text style={s.resultsTitle}>{savedOnly ? 'Saved listings' : own ? 'My listings' : 'Available listings'}</Text>
         {!loading && !error ? <Text style={s.resultsCaption}>{items.length} shown{more ? ' · More available' : ''}</Text> : null}
       </View>
       {loading ? <ActivityIndicator accessibilityLabel="Loading listings" /> : error ? <View><Text accessibilityRole="alert" style={s.error}>{error}</Text><Button title="Retry listings" onPress={() => setRevision(v => v + 1)} /></View> : <>
@@ -319,6 +403,7 @@ export default function ListingWorkspace({ category, mode = 'browse', search = '
             <Text style={[s.emptyCaption, compactWideEmpty && s.emptyCaptionWide]}>{search.trim()
               ? 'No listing titles match that search. Try a different term or clear the search.'
               : hasListingFilters ? 'No real listings match these filters. Clear the filters or adjust the city and maximum price.'
+              : savedOnly ? 'No saved active listings in this category. Save an available listing to find it here later.'
               : own ? 'You have not posted a listing in this category yet.'
               : 'Be among the first students to share a real listing. Only published community listings appear here.'}</Text>
             {search.trim() && onClearSearch ? <Button title="Clear search" onPress={onClearSearch} /> : !search.trim() && onCreate ? <Button title={`Post ${category.toLowerCase()} listing`} onPress={onCreate} /> : null}
