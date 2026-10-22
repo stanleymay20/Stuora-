@@ -9,7 +9,7 @@ export type BotIntent = {
 };
 
 // Extract the city from student-supplied words; never use a fixed city whitelist.
-const cityPattern = /\\b(?:in|near|around)\\s+([\\p{L}\\p{M}][\\p{L}\\p{M} .'-]{1,77}?)(?=\\s+(?:under|below|less than|up to|max(?:imum)?|budget|with|for)\\b|[!?.,]|$)/iu;
+const cityPattern = /\b(?:in|near|around)\s+([\p{L}\p{M}][\p{L}\p{M} .'-]{1,77}?)(?=\s+(?:under|below|less than|up to|max(?:imum)?|budget|with|for)\b|[!?.,]|$)/iu;
 const domains: [BotDomain, RegExp][] = [
   ['housing', /\b(housing|rent(?:al)?|flats?|apartments?|rooms?|dorms?|wg|accommodation|landlords?)\b/i],
   ['jobs', /\b(job|jobs|career|internship|employer|werkstudent|working.student|part.time work|vacancy)\b/i],
