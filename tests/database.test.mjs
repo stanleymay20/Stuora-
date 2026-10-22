@@ -166,45 +166,41 @@ for (const inheritedGrants of [false, true]) {
       await count('authenticated', a, "delete from public.saved_listings where listing_id='" + house + "' returning *", 0);
       await count('authenticated', b, "delete from public.saved_listings where listing_id='" + house + "' returning *", 1);
 
-      // Media metadata follows listing visibility and ownership.
-      await count('authenticated', a, `insert into public.listing_media (listing_id, object_path, sort_order) values ('${house}', '${a}/${house}/room.jpg', 0) returning *`, 1);
-      await count('anon', null, `select * from public.listing_media where listing_id = '${house}'`, 1);
-      await deny(b, `insert into public.listing_media (listing_id, object_path) values ('${house}', '${b}/${house}/attack.jpg')`, '23514');
-      await deny(a, `insert into public.listing_media (listing_id, object_path) values ('${house}', '${a}/${job}/wrong-listing.jpg')`, '23514');
-      await count('authenticated', a, `insert into public.listing_media (listing_id, object_path) values ('${draft}', '${a}/${draft}/draft.jpg') returning *`, 1);
-      await count('anon', null, `select * from public.listing_media where listing_id = '${draft}'`, 0);
-      await count('authenticated', a, `select * from public.listing_media where listing_id = '${draft}'`, 1);
-      await count('authenticated', b, `delete from public.listing_media where listing_id = '${house}' returning *`, 0);
-      // Quota must be enforced inside Postgres, including direct REST writes
-      // that bypass the app's displayed six-photo limit.
-      for (let i = 1; i < 6; i++) {
-        await count('authenticated', a,
-          `insert into public.listing_media (listing_id,object_path,sort_order)
-          values ('${house}','${a}/${house}/room-${i}.jpg',${i}) returning id`, 1);
+      // Raw authenticated metadata INSERT is quarantined until trusted
+      // server-side image intake is approved. A privileged writer may still
+      // insert valid processed files, and existing public reads/owner cleanup
+      // remain available.
+      await deny(a, `insert into public.listing_media(listing_id,object_path) values ('${house}','${a}/${house}/direct.jpg')`);
+      await deny(b, `insert into public.listing_media(listing_id,object_path) values ('${house}','${b}/${house}/attack.jpg')`);
+      const {rows: mediaGrants} = await db.query(`select
+        has_table_privilege('authenticated','public.listing_media','INSERT') as student_insert,
+        has_table_privilege('service_role','public.listing_media','INSERT') as service_insert,
+        has_table_privilege('authenticated','public.listing_media','DELETE') as owner_cleanup`);
+      assert.equal(mediaGrants[0].student_insert,false); assertions++;
+      assert.equal(mediaGrants[0].service_insert,true); assertions++;
+      assert.equal(mediaGrants[0].owner_cleanup,true); assertions++;
+      await db.query(`insert into public.listing_media(listing_id,object_path,sort_order)
+        values ('${house}','${a}/${house}/room.jpg',0)`);
+      await count('anon',null,`select * from public.listing_media where listing_id='${house}'`,1);
+      await db.query(`insert into public.listing_media(listing_id,object_path)
+        values ('${draft}','${a}/${draft}/draft.jpg')`);
+      await count('anon',null,`select * from public.listing_media where listing_id='${draft}'`,0);
+      await count('authenticated',a,`select * from public.listing_media where listing_id='${draft}'`,1);
+      await count('authenticated',b,`delete from public.listing_media where listing_id='${house}' returning *`,0);
+      for(let i=1;i<6;i++){
+        await db.query(`insert into public.listing_media(listing_id,object_path,sort_order)
+          values ('${house}','${a}/${house}/room-${i}.jpg',${i})`);
       }
-      await deny(a,
-        `insert into public.listing_media (listing_id,object_path,sort_order)
-         values ('${house}','${a}/${house}/seventh.jpg',6)`, '23514');
-      // A privileged service writer must obey the exact path and quota too.
-      await assert.rejects(db.query(
-        `insert into public.listing_media(listing_id,object_path,sort_order)
-         values ('${house}','${b}/${house}/privileged.jpg',6)`), e => e.code === '23514');
-      assertions++;
-      await assert.rejects(db.query(
-        `insert into public.listing_media(listing_id,object_path,sort_order)
-         values ('${house}','${a}/${house}/nested/escape.jpg',6)`), e => e.code === '23514');
-      assertions++;
-      await assert.rejects(db.query(
-        `insert into public.listing_media(listing_id,object_path,sort_order)
-         values ('${house}','${a}/${house}/seventh-admin.jpg',6)`), e => e.code === '23514');
-      assertions++;
-      await count('authenticated', a, `select * from public.listing_media where listing_id='${house}'`, 6);
-      await count('authenticated', a,
-        `delete from public.listing_media where listing_id='${house}' and sort_order=3 returning id`, 1);
-      await count('authenticated', a,
-        `insert into public.listing_media (listing_id,object_path,sort_order)
-         values ('${house}','${a}/${house}/replacement.jpg',3) returning id`, 1);
-
+      await assert.rejects(db.query(`insert into public.listing_media(listing_id,object_path,sort_order)
+          values ('${house}','${a}/${house}/seventh.jpg',6)`),e=>e.code==='23514'); assertions++;
+      await assert.rejects(db.query(`insert into public.listing_media(listing_id,object_path,sort_order)
+          values ('${house}','${b}/${house}/privileged.jpg',6)`),e=>e.code==='23514'); assertions++;
+      await assert.rejects(db.query(`insert into public.listing_media(listing_id,object_path,sort_order)
+          values ('${house}','${a}/${house}/nested/escape.jpg',6)`),e=>e.code==='23514'); assertions++;
+      await count('authenticated',a,`select * from public.listing_media where listing_id='${house}'`,6);
+      await count('authenticated',a,`delete from public.listing_media where listing_id='${house}' and sort_order=3 returning id`,1);
+      await db.query(`insert into public.listing_media(listing_id,object_path,sort_order)
+          values ('${house}','${a}/${house}/replacement.jpg',3)`);
 
       // Upload-attempt admission is service-only and durable across separate
       // RPC transactions even if no upload or metadata INSERT follows.
@@ -289,15 +285,27 @@ for (const inheritedGrants of [false, true]) {
       assert.equal(expiredStillPresent[0].count,0); assertions++;
 
 
-      // Hosted Supabase owns these tables; the harness grants authenticated CRUD
-      // so the same storage.objects policies can be exercised locally.
-      await count('authenticated', a, `insert into storage.objects (bucket_id, name) values ('listing-media', '${a}/${house}/room.jpg') returning *`, 1);
-      await deny(b, `insert into storage.objects (bucket_id, name) values ('listing-media', '${b}/${house}/attack.jpg')`);
-      await deny(a, `insert into storage.objects (bucket_id, name) values ('listing-media', '${a}/${job}/job.jpg')`);
-      await count('authenticated', a, `insert into storage.objects (bucket_id, name) values ('avatars', '${a}/avatar') returning *`, 1);
-      await deny(b, `insert into storage.objects (bucket_id, name) values ('avatars', '${a}/avatar-2')`);
-      await count('authenticated', b, `select * from storage.objects where bucket_id = 'avatars'`, 0);
-      await count('authenticated', a, `select * from storage.objects where bucket_id = 'avatars'`, 1);
+      // Authenticated clients have Storage table privileges for avatars,
+      // but ALL listing-media INSERT/UPDATE RLS policies are removed.
+      await deny(a,`insert into storage.objects(bucket_id,name)
+        values ('listing-media','${a}/${house}/room.jpg')`);
+      await deny(b,`insert into storage.objects(bucket_id,name)
+        values ('listing-media','${b}/${house}/attack.jpg')`);
+      await deny(a,`insert into storage.objects(bucket_id,name)
+        values ('listing-media','${a}/${job}/job.jpg')`);
+      await db.query(`insert into storage.objects(bucket_id,name)
+        values ('listing-media','${a}/${house}/server-processed.png')`);
+      await count('authenticated',a,`update storage.objects set name='${a}/${house}/overwritten.png'
+        where bucket_id='listing-media' returning id`,0);
+      await count('authenticated',b,`delete from storage.objects where bucket_id='listing-media' returning id`,0);
+      await count('authenticated',a,`delete from storage.objects where bucket_id='listing-media' returning id`,1);
+      // Avatar writing must NOT regress during listing-media quarantine.
+      await count('authenticated',a,`insert into storage.objects(bucket_id,name)
+        values ('avatars','${a}/avatar') returning id`,1);
+      await deny(b,`insert into storage.objects(bucket_id,name)
+        values ('avatars','${a}/avatar-2')`);
+      await count('authenticated',b,`select * from storage.objects where bucket_id='avatars'`,0);
+      await count('authenticated',a,`select * from storage.objects where bucket_id='avatars'`,1);
 
       const save = (listingId, kind, title, price = 3500, housingType = 'room', condition = 'good') => `select public.save_student_listing(${listingId ? `'${listingId}'` : 'null'}, '${kind}', '${title}', 'Student listing', 'Berlin', ${price}, '${housingType}', true, true, '${condition}') as id`;
       const { rows: created } = await as('authenticated', a, save(null, 'housing', 'Persistent room', 65000));

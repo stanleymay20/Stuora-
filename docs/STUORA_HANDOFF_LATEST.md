@@ -180,3 +180,7 @@ Files newly added on draft PR #23:
 
 ## 2026-10-22 — Initial client-lockdown CI browser assertion correction
 - Exact-head run #39829145344: 156 browser tests passed; 2 owner photo-pause tests failed solely because a non-exact text matcher resolved to both the save notice and detail notice. Changed that assertion to exact text. Independent `rls-authorization` and `trusted-media-edge` jobs had both passed. Do not treat this as a release success until all required jobs on the successor SHA pass.
+
+## 2026-10-22 — Prepared staged server-side quarantine (not yet applied)
+- Proposed `20261022211000_quarantine_listing_media_untrusted_writes.sql` removes direct authenticated `public.listing_media` INSERT and drops ONLY `storage.objects` listing-media INSERT/UPDATE policies. Does NOT touch avatar policies, owner Storage/metadata DELETE, public media reads, or trusted service-role grants. Does NOT activate trusted Edge v2 or change production.
+- Fresh PGlite authorization tests changed from accepting raw owner uploads to rejecting them (including attempted upserts), while verifying privileged, trigger-enforced metadata and storage writes, full six-photo cap, owner legacy cleanup and avatar writes still work. **Migration remains unexecuted on staging** until exact-head CI passes and the environment/rollback is reviewed. It is still necessary to run hosted two-JWT negative API tests after applying.
