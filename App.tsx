@@ -6,6 +6,7 @@ import PeopleDirectory from './src/people/PeopleDirectory';
 import CommunityCatalog from './src/community/CommunityCatalog';
 import GroupWorkspace from './src/groups/GroupWorkspace';
 import StuoraBotOverlay from './src/ai/StuoraBotOverlay';
+import FloatingStuoraBot from './src/ai/FloatingStuoraBot';
 import { useAuth } from './src/account/AuthProvider';
 import { Icon, StuoraMark } from './src/ui/Brand';
 import { EditorialImage } from './src/ui/EditorialImage';
@@ -352,10 +353,6 @@ export default function App({ onOpenSavings }: { onOpenSavings: () => void }) {
                 ))}
               </View>
               <View style={styles.desktopTopActions}>
-                <Pressable accessibilityRole="button" accessibilityLabel="Open Stuora Bot" onPress={() => setBotOpen(true)} style={({ pressed }) => [styles.botNav, pressed && styles.pressed]}>
-                  <Image source={require('./assets/stuora-bot.webp')} style={styles.botAvatar} accessibilityLabel="Stuora Bot mascot" />
-                  {width >= 1280 ? <Text style={styles.botNavText}>Stuora Bot</Text> : null}
-                </Pressable>
                 <View style={styles.locationChip}><Text style={styles.locationChipText}>{profile?.city || 'Berlin'}</Text></View>
                 <Pressable accessibilityRole="button" accessibilityLabel="Open Student Savings" onPress={onOpenSavings} style={({ pressed }) => [styles.savingsNav, pressed && styles.pressed]}>
                   <Text style={styles.savingsNavIcon}>€</Text>
@@ -371,7 +368,7 @@ export default function App({ onOpenSavings }: { onOpenSavings: () => void }) {
           </View>
         ) : (
           <>
-            <View style={styles.mobileTopBar}><BrandMark /><View style={styles.mobileTopActions}><Pressable accessibilityRole="button" accessibilityLabel="Open Stuora Bot" onPress={() => setBotOpen(true)} style={styles.botMobile}><Image source={require('./assets/stuora-bot.webp')} style={styles.botAvatar} accessibilityLabel="Stuora Bot mascot" /></Pressable><Pressable accessibilityRole="button" accessibilityLabel="Open Student Savings" onPress={onOpenSavings} style={({ pressed }) => [styles.mobileSavings, pressed && styles.pressed]}><Text style={styles.mobileSavingsText}>€ Savings</Text></Pressable><Pressable accessibilityRole="button" accessibilityLabel="Open your account" onPress={() => setTab('profile')} style={styles.miniAvatar}><Icon name="profile" color="#FFFFFF" size={22} /></Pressable></View></View>
+            <View style={styles.mobileTopBar}><BrandMark /><View style={styles.mobileTopActions}><Pressable accessibilityRole="button" accessibilityLabel="Open Student Savings" onPress={onOpenSavings} style={({ pressed }) => [styles.mobileSavings, pressed && styles.pressed]}><Text style={styles.mobileSavingsText}>€ Savings</Text></Pressable><Pressable accessibilityRole="button" accessibilityLabel="Open your account" onPress={() => setTab('profile')} style={styles.miniAvatar}><Icon name="profile" color="#FFFFFF" size={22} /></Pressable></View></View>
             {content}
             <View style={styles.bottomNav}>
               {bottomNav.map((item) => {
@@ -386,6 +383,12 @@ export default function App({ onOpenSavings }: { onOpenSavings: () => void }) {
             </View>
           </>
         )}
+        {/* Keep the launcher above mobile bottom navigation, away from forms and private messages. */}
+        <FloatingStuoraBot
+          desktop={isDesktop}
+          visible={!botOpen && (tab === 'home' || tab === 'explore')}
+          onPress={() => setBotOpen(true)}
+        />
       </View>
       <StuoraBotOverlay open={botOpen} onClose={() => setBotOpen(false)} onNavigate={goToCategory} />
     </SafeAreaView>
@@ -425,10 +428,6 @@ const styles = StyleSheet.create({
   desktopTopTitle: { color: BRAND.ink, fontSize: 17, fontWeight: '900' },
   desktopTopSub: { color: BRAND.subtle, fontSize: 11, marginTop: 2 },
   desktopTopActions: { flexDirection: 'row', alignItems: 'center', gap: 9 },
-  botNav: { minHeight: 42, flexDirection: 'row', alignItems: 'center', gap: 6, borderRadius: 12, backgroundColor: '#F0E9FF', paddingHorizontal: 6 },
-  botNavText: { color: '#7048FF', fontWeight: '900', fontSize: 12 },
-  botMobile: { minWidth: 38, minHeight: 42, justifyContent: 'center', alignItems: 'center', borderRadius: 12, backgroundColor: '#F0E9FF' },
-  botAvatar: { width: 32, height: 32, borderRadius: 10 },
   savingsNav: { borderRadius: 12, backgroundColor: BRAND.purpleSoft, flexDirection: 'row', gap: 5, paddingVertical: 11, paddingHorizontal: 12, alignItems: 'center' },
   savingsNavIcon: { fontWeight: '900', color: BRAND.purple, fontSize: 15 },
   savingsNavText: { fontWeight: '800', color: BRAND.purple, fontSize: 12 },
