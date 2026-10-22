@@ -51,7 +51,8 @@ export async function publishListingPhoto(
   const imageId = newId();
   if (!validUuid(imageId)) throw new MediaRejection('INVALID_ID', 500, 'Could not generate image identity');
   const path = `${studentId}/${listingId}/${imageId}.png`;
-  const sortOrder = existing.reduce((max, value) => Math.max(max, value.sort_order), -1) + 1;
+  const sortOrder = Array.from({ length: PHOTO_LIMIT }, (_, index) => index)
+    .find(index => !existing.some(value => value.sort_order === index)) ?? PHOTO_LIMIT;
   await deps.storeSanitized(path, result.data, result.mime);
   try {
     // The cutover migration must enforce a transaction-safe six-photo limit.
