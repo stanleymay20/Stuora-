@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Image, Modal, Pressable, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Image, Modal, Pressable, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View } from 'react-native';
 import { supabase } from '../backend/supabase';
 import { botGuidance, botWelcome, euroFromCents, parseBotIntent, safeLike, type BotDomain } from './botCore';
 
@@ -72,6 +72,8 @@ function Action({ title, onPress, subtle = false, disabled = false }: {
 export default function StuoraBotOverlay({ open, onClose, onNavigate }: {
   open: boolean; onClose: () => void; onNavigate: (category: Category) => void;
 }) {
+  const { width } = useWindowDimensions();
+  const desktop = width >= 960;
   const [input, setInput] = useState('');
   const [replies, setReplies] = useState<BotReply[]>([]);
   const [busy, setBusy] = useState(false);
@@ -113,8 +115,15 @@ export default function StuoraBotOverlay({ open, onClose, onNavigate }: {
 
   const navigate = (domain: BotDomain) => { onClose(); onNavigate(resultCategories[domain]); };
   const suggestions = ['Housing in Berlin under €650', 'Working-student jobs in Berlin', 'Study groups in Potsdam'];
-  return <Modal visible={open} animationType="slide" onRequestClose={onClose}>
-    <SafeAreaView style={styles.safeArea}>
+  return <Modal visible={open} animationType={desktop ? 'fade' : 'slide'} transparent={desktop} onRequestClose={onClose}>
+    <View style={[styles.modalHost, desktop && styles.desktopModalHost]}>
+      {desktop ? <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Close Stuora Bot backdrop"
+        onPress={onClose}
+        style={StyleSheet.absoluteFill}
+      /> : null}
+      <SafeAreaView testID="stuora-bot-panel" style={[styles.safeArea, desktop && styles.desktopPanel]}>
       <View style={styles.header}>
         <Image source={require('../../assets/stuora-bot.webp')} style={styles.avatar}
           accessibilityLabel="Stuora Bot smiling robot mascot" />
@@ -149,12 +158,24 @@ export default function StuoraBotOverlay({ open, onClose, onNavigate }: {
           maxLength={200} style={styles.input} multiline />
         <Action title="Ask Stuora Bot" onPress={() => void submit()} disabled={busy || !input.trim()} />
       </View>
-    </SafeAreaView>
+      </SafeAreaView>
+    </View>
   </Modal>;
 }
 
 const styles = StyleSheet.create({
+  modalHost: { flex: 1 },
+  desktopModalHost: {
+    alignItems: 'flex-end', justifyContent: 'flex-end', padding: 26,
+    backgroundColor: 'rgba(17,22,47,0.24)',
+  },
   safeArea: { flex: 1, backgroundColor: '#F8F8FC' },
+  desktopPanel: {
+    flex: 0, width: 480, maxWidth: '100%', height: '84%', maxHeight: 780,
+    borderRadius: 24, overflow: 'hidden', borderWidth: 1, borderColor: '#E3E3EF',
+    shadowColor: '#11162F', shadowOpacity: 0.22,
+    shadowRadius: 24, shadowOffset: { width: 0, height: 14 }, elevation: 16,
+  },
   header: { backgroundColor: '#FFFFFF', flexDirection: 'row', alignItems: 'center', gap: 10,
     borderBottomWidth: 1, borderBottomColor: '#E8E8F1', padding: 14 },
   avatar: { width: 49, height: 49, borderRadius: 16, backgroundColor: '#EEE9FF' },
