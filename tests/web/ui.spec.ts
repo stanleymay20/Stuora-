@@ -80,7 +80,7 @@ test('listing search with zero results offers clear-search instead of misleading
   await expect(page.getByRole('button', { name: 'Post housing listing' })).toBeVisible();
 });
 
-test('mobile homepage retains a genuine Berlin hero and four-up responsive discovery', async ({ page }) => {
+test('mobile homepage retains a location-neutral hero and four-up responsive discovery', async ({ page }) => {
   test.skip(test.info().project.name !== 'mobile-web', 'Mobile-only hero regression');
   await backend(page);
   await page.goto('/');
@@ -392,7 +392,7 @@ test('wide desktop homepage uses the available canvas without hiding controls be
   await page.setViewportSize({ width: 1600, height: 900 });
   await backend(page);
   await page.goto('/');
-  const hero = page.getByLabel('Berlin skyline at sunset').locator('..');
+  const hero = page.getByText('STUDENT LIFE, CONNECTED').locator('..').locator('..');
   await expect(hero).toBeVisible();
   const bounds = await hero.boundingBox();
   expect(bounds).not.toBeNull();
