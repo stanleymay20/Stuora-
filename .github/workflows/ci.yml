@@ -82,6 +82,9 @@ jobs:
       - name: Validate Stuora Auth email and branded error copy
         run: node --test tests/auth-branding.test.mjs
 
+      - name: Reject malicious native Auth deep links
+        run: node --test tests/native-auth-callback.test.mjs
+
       - name: Verify staging-only Auth template rollout procedure
         run: node --test tests/auth-branding-rollout.test.mjs
 

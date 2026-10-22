@@ -155,3 +155,7 @@ Files newly added on draft PR #23:
 ## 2026-10-22 — Staging Auth installer safeguards (not executed)
 - Hardened `scripts/stuora-auth-branding.mjs`: Auth pack paths relative to module instead of CWD; must read every existing string template field before a PATCH so rollback can restore exactly; skips any PATCH for already-identical Stuora templates. Extended `tests/auth-branding-rollout.test.mjs` to exercise mocks for complete backup/exact PATCH/readback, idempotence and missing-field refusal.
 - Await exact-head CI, no provider auth settings changed. Hosted sender/inbox verification still requires secure user-controlled management setup. Staging photo Edge remains v2, compiled write-disabled, JWT protected; production unchanged.
+
+## 2026-10-22 — Native auth callback hardening
+- Added `src/account/nativeAuthCallback.ts`: strict `stuora://auth-callback` allowlist and token-ambiguity rejection before `AuthProvider` calls `supabase.auth.setSession`. New required `tests/native-auth-callback.test.mjs` compiles the TS parser for pure Node hostile-link cases. No credentials, backend, hosted auth settings or real devices required.
+- This guards unrelated deep links, but it is not full PKCE/state binding or real-device acceptance. Do NOT claim GA Auth from pure parser tests. Existing signup/recovery/confirmation flows remain unchanged for legitimate implicit callback URLs. PR draft, production unaffected.

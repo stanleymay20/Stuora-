@@ -3,6 +3,7 @@ import { AppState, Linking, Platform } from 'react-native';
 import type { Session } from '@supabase/supabase-js';
 import { supabase } from '../backend/supabase';
 import type { Database } from '../backend/database.types';
+import { parseStuoraNativeAuthCallback } from './nativeAuthCallback';
 
 export type Profile = Database['public']['Tables']['profiles']['Row'];
 type AuthState = {
@@ -60,21 +61,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     async function handleNativeAuthUrl(raw: string | null) {
       if (!active || Platform.OS === 'web' || !raw) return;
       try {
-        const parsed = new URL(raw);
-        const hash = parsed.hash.startsWith('#') ? parsed.hash.slice(1) : '';
-        const query = parsed.search.startsWith('?') ? parsed.search.slice(1) : '';
-        const params = new URLSearchParams(hash || query);
-        const accessToken = params.get('access_token');
-        const refreshToken = params.get('refresh_token');
-        if (!accessToken || !refreshToken) return;
-        const { error: issue } = await supabase.auth.setSession({ access_token: accessToken, refresh_token: refreshToken });
+        const callback = parseStuoraNativeAuthCallback(raw);
+        if (!callback) {
+          // Only Stuora callback-shaped links get a visible retry message.
+          // Unrelated app links must never become authentication attempts.
+          if (/^stuora:\/\/auth-callback(?:[/?#]|$)/i.test(raw))
+            setError('This Stuora sign-in link is invalid or expired. Request a new one.');
+          return;
+        }
+        const { error: issue } = await supabase.auth.setSession({
+          access_token: callback.accessToken,
+          refresh_token: callback.refreshToken,
+        });
         if (!active) return;
         if (issue) {
           setError('This sign-in link could not be used. Request a new one.');
           return;
         }
         setError('');
-        if (params.get('type') === 'recovery') setRecoveryMode(true);
+        if (callback.recovery) setRecoveryMode(true);
       } catch {
         if (active) setError('This sign-in link could not be read. Request a new one.');
       }
