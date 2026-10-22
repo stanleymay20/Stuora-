@@ -175,7 +175,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(17,22,47,0.24)',
   },
   safeArea: { flex: 1, backgroundColor: '#F8F8FC' },
-  desktopBackdropButton: { ...StyleSheet.absoluteFillObject, zIndex: 0 },
+  desktopBackdropButton: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, zIndex: 0 },
   desktopPanel: {
     position: 'relative', zIndex: 1, flex: 1, minHeight: 0,
     width: 480, maxWidth: '100%', maxHeight: 780,
