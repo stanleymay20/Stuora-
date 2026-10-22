@@ -558,6 +558,16 @@ export type Database = {
           },
         ]
       }
+      student_group_bans: {
+        Row: { group_id: string; user_id: string; banned_by: string; banned_at: string }
+        Insert: { group_id: string; user_id: string; banned_by: string; banned_at?: string }
+        Update: { group_id?: string; user_id?: string; banned_by?: string; banned_at?: string }
+        Relationships: [
+          { foreignKeyName: "student_group_bans_group_id_fkey"; columns: ["group_id"]; isOneToOne: false; referencedRelation: "student_groups"; referencedColumns: ["id"] },
+          { foreignKeyName: "student_group_bans_user_id_fkey"; columns: ["user_id"]; isOneToOne: false; referencedRelation: "profiles"; referencedColumns: ["id"] },
+          { foreignKeyName: "student_group_bans_banned_by_fkey"; columns: ["banned_by"]; isOneToOne: false; referencedRelation: "profiles"; referencedColumns: ["id"] },
+        ]
+      }
       student_group_members: {
         Row: { group_id: string; user_id: string; joined_at: string }
         Insert: { group_id: string; user_id: string; joined_at?: string }
@@ -725,6 +735,14 @@ export type Database = {
       create_student_group: {
         Args: { p_name: string; p_description: string; p_city: string; p_topic: string }
         Returns: string
+      }
+      remove_student_group_member: {
+        Args: { p_group_id: string; p_user_id: string }
+        Returns: undefined
+      }
+      restore_student_group_member: {
+        Args: { p_group_id: string; p_user_id: string }
+        Returns: undefined
       }
       send_student_group_message: {
         Args: { p_group_id: string; p_body: string }
