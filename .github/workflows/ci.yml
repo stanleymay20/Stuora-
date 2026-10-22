@@ -85,6 +85,9 @@ jobs:
       - name: Reject direct public photo uploads in Stuora clients
         run: node --test tests/media-client-lockdown.test.mjs
 
+      - name: Test staging media denial harness without account credentials
+        run: node --test tests/media-quarantine-http.test.mjs
+
       - name: Gate real two-student acceptance to exact approved staging preview
         run: node --test tests/hosted-preview-identity.test.mjs
 
