@@ -1,7 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import * as ImagePicker from 'expo-image-picker';
-import { sanitizeListingImage } from './mediaSanitizer';
-import { ActivityIndicator, Image, Platform, Pressable, StyleSheet, Switch, Text, TextInput, useWindowDimensions, View } from 'react-native';
+import { ActivityIndicator, Image, Pressable, StyleSheet, Switch, Text, TextInput, useWindowDimensions, View } from 'react-native';
 import { useAuth } from '../account/AuthProvider';
 import { supabase } from '../backend/supabase';
 import { Icon } from '../ui/Brand';
@@ -18,8 +16,6 @@ type Condition = Database['public']['Enums']['marketplace_condition'];
 type Draft = { title: string; description: string; city: string; price: string; housingType: string; furnished: boolean; bills: boolean; condition: Condition };
 
 const PAGE_SIZE = 24;
-const MAX_PHOTOS = 6;
-const MAX_PHOTO_BYTES = 5 * 1024 * 1024;
 const blank = (): Draft => ({ title: '', description: '', city: '', price: '', housingType: 'room', furnished: false, bills: false, condition: 'good' });
 const money = (cents: number | null) => `€${((cents ?? 0) / 100).toFixed(2)}`;
 
@@ -29,9 +25,6 @@ function normalizeItem(raw: unknown): Item {
 }
 function mediaUrl(path: string) {
   return supabase.storage.from('listing-media').getPublicUrl(path).data.publicUrl;
-}
-function extensionFor(mime: string) {
-  return mime === 'image/png' ? 'png' : mime === 'image/webp' ? 'webp' : 'jpg';
 }
 function Button({ title, onPress, disabled = false }: { title: string; onPress: () => void; disabled?: boolean }) {
   return <Pressable accessibilityRole="button" accessibilityLabel={title} disabled={disabled} onPress={onPress} style={[s.button, disabled && s.disabled]}><Text style={s.buttonText}>{title}</Text></Pressable>;
@@ -220,58 +213,18 @@ export default function ListingWorkspace({ category, mode = 'browse', search = '
       try {
         const item = await fetchItem(savedId);
         replaceItem(item);
-        setNotice('Listing saved. Add up to six real photos below.');
+        setNotice('Listing saved. Photo uploads are temporarily paused while Stuora completes secure processing.');
       } catch {
         setSelected(null);
-        setNotice('Listing saved. Refresh My listings to add photos.');
+        setNotice('Listing saved. Refresh My listings to manage this listing.');
       }
     } catch {
       setActionError('Could not save. Your input is preserved. Check your connection and account, then retry.');
     } finally { setBusy(false); }
   }
 
-  async function addPhoto() {
-    if (!selected || !userId || selected.owner_id !== userId || selected.status !== 'active') return;
-    if (selected.listing_media.length >= MAX_PHOTOS) return setActionError(`A listing can have up to ${MAX_PHOTOS} photos.`);
-    setActionError(''); setNotice('');
-    try {
-      if (Platform.OS !== 'web') {
-        const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-        if (!permission.granted) return setActionError('Photo-library permission is required to add a listing photo.');
-      }
-      const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], allowsMultipleSelection: false, quality: 0.85 });
-      if (result.canceled || !result.assets?.length) return;
-      const asset = result.assets[0];
-      if (asset.fileSize && asset.fileSize > MAX_PHOTO_BYTES) return setActionError('Choose an image no larger than 5 MB.');
-      setBusy(true);
-      const response = await fetch(asset.uri);
-      if (!response.ok && Platform.OS === 'web') throw new Error('Could not read selected image');
-      const bytes = await response.arrayBuffer();
-      if (bytes.byteLength > MAX_PHOTO_BYTES) return setActionError('Choose an image no larger than 5 MB.');
-      // Validate the true file format and strip EXIF/GPS/XMP before uploading.
-      const { bytes: cleanBytes, mime } = sanitizeListingImage(bytes);
-      const token = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
-      const path = `${userId}/${selected.id}/${token}.${extensionFor(mime)}`;
-      const { error: uploadIssue } = await supabase.storage.from('listing-media').upload(path, cleanBytes, { contentType: mime, upsert: false, cacheControl: '3600' });
-      if (uploadIssue) throw uploadIssue;
-      const nextSort = selected.listing_media.reduce((max, media) => Math.max(max, media.sort_order), -1) + 1;
-      const { data: inserted, error: metadataIssue } = await (supabase.from('listing_media') as any)
-        .insert({ listing_id: selected.id, object_path: path, sort_order: nextSort })
-        .select('id,listing_id,object_path,sort_order,created_at')
-        .single();
-      if (metadataIssue || !inserted) {
-        await supabase.storage.from('listing-media').remove([path]);
-        throw metadataIssue ?? new Error('Could not save photo metadata');
-      }
-      const updated = normalizeItem({ ...selected, listing_media: [...selected.listing_media, inserted] });
-      replaceItem(updated);
-      setNotice('Photo uploaded and attached to this listing.');
-    } catch (err) {
-      setActionError(err instanceof Error && /photo|image|JPEG|PNG|WebP|EXIF|animated/i.test(err.message)
-        ? err.message
-        : 'Could not upload the photo. Your listing was not changed. Check the image and connection, then retry.');
-    } finally { setBusy(false); }
-  }
+  // Client-side raw Storage uploads were removed. Any future image creation
+  // must use the verified, authenticated server-side decoder and RLS cutover.
 
   async function removePhoto(media: Media) {
     if (!selected || !userId || selected.owner_id !== userId) return;
@@ -326,7 +279,7 @@ export default function ListingWorkspace({ category, mode = 'browse', search = '
 
     {form ? initializing || profileLoading ? <ActivityIndicator accessibilityLabel="Loading account" /> : !session || !profile || profileError ? <View style={s.card}><Text style={s.text}>Sign in and complete your profile to publish a listing.</Text><Button title="Open account" onPress={onAccount} /></View> : <View style={s.card}>
       <Text style={s.title}>{editing ? 'Edit listing' : `Publish ${category.toLowerCase()} listing`}</Text>
-      <Text style={s.hint}>Publish first, then attach up to six JPEG, PNG or WebP photos (5 MB each). Embedded location and camera metadata are removed before upload. Images in this public bucket can still be accessed by anyone with the URL, even after archiving until the file is deleted. Do not include documents, personal addresses or identifying details in photos.</Text>
+      <Text style={s.hint}>You can publish a text-only listing now. Photo uploads are temporarily paused while Stuora qualifies secure image processing. Existing public photo URLs may remain accessible until the underlying file is removed. Do not include documents, addresses or identifying details in listing content.</Text>
       <Field label="Listing title" value={draft.title} onChange={v => change('title', v)} />
       <Field label="Listing description" value={draft.description} onChange={v => change('description', v)} multiline />
       <Field label="Listing city" value={draft.city} onChange={v => change('city', v)} />
@@ -344,7 +297,7 @@ export default function ListingWorkspace({ category, mode = 'browse', search = '
       <Text style={s.text}>{selected.description || 'No description provided.'}</Text>
       {selected.housing_details ? <Text>{selected.housing_details.housing_type} · {selected.housing_details.furnished ? 'Furnished' : 'Unfurnished'} · {selected.housing_details.bills_included ? 'Bills included' : 'Bills extra'}</Text> : null}
       {selected.marketplace_details ? <Text>Condition: {selected.marketplace_details.item_condition.replace('_', ' ')} · pickup only</Text> : null}
-      {selected.owner_id === userId && selected.status === 'active' ? <Button title={busy ? 'Working…' : `Add photo (${selected.listing_media.length}/${MAX_PHOTOS})`} onPress={() => void addPhoto()} disabled={busy || selected.listing_media.length >= MAX_PHOTOS} /> : null}
+      {selected.owner_id === userId && selected.status === 'active' ? <Text style={s.hint}>Photo uploads are temporarily paused while Stuora completes secure processing.</Text> : null}
       {selected.owner_id !== userId && selected.status === 'active' ? <>
         <Button title={session && profile && !profileError ? 'Message owner' : 'Sign in to message owner'} onPress={() => void messageOwner()} disabled={busy} />
         {!session || !profile || profileError

@@ -5,9 +5,6 @@ type Media = { id: string; listing_id: string; object_path: string; sort_order: 
 type Stored = { id: string; owner_id: string; kind: string; status: string; title: string; description: string; city: string; price_cents: number; housing_details: Record<string, unknown> | null; marketplace_details: Record<string, unknown> | null; listing_media: Media[] };
 const pixelPng = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9Zuz0AAAAASUVORK5CYII=', 'base64');
 // Deliberately insert a GPS text chunk: only scrubbed bytes may be uploaded.
-const gpsMarker = Buffer.from('GPSLatitude=52.5200 GPSLongitude=13.4050');
-const gpsChunk = Buffer.concat([Buffer.from([0,0,0,gpsMarker.length]), Buffer.from('tEXt'), gpsMarker, Buffer.alloc(4)]);
-const gpsPng = Buffer.concat([pixelPng.subarray(0,33), gpsChunk, pixelPng.subarray(33)]);
 function api() {
   const rows: Stored[] = [];
   let failure = '';
@@ -112,8 +109,8 @@ for (const category of ['Housing', 'Marketplace']) {
     await page.getByLabel('Listing city').fill('Aachen');
     await page.getByLabel(category === 'Housing' ? 'Monthly rent (EUR)' : 'Price (EUR)').fill(category === 'Housing' ? '650.25' : '0');
     await page.getByRole('button', { name: 'Publish listing', exact: true }).click();
-    await expect(page.getByText('Listing saved. Add up to six real photos below.')).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Add photo (0/6)' })).toBeVisible();
+    await expect(page.getByText('Listing saved. Photo uploads are temporarily paused while Stuora completes secure processing.')).toBeVisible();
+    await expect(page.getByRole('button', { name: /^Add photo/ })).toHaveCount(0);
     expect(data.rows[0].price_cents).toBe(category === 'Housing' ? 65025 : 0);
     const secondContext = await browser.newContext(); const second = await secondContext.newPage(); await data.install(second); await second.goto('/'); await explore(second, category);
     await second.getByRole('button', { name: `View ${category} from Alice` }).click();
@@ -130,7 +127,7 @@ for (const category of ['Housing', 'Marketplace']) {
     await page.getByRole('button', { name: 'Edit listing', exact: true }).click();
     await page.getByLabel('Listing title').fill(`${category} edited`);
     await page.getByRole('button', { name: 'Save listing changes' }).click();
-    await expect(page.getByText('Listing saved. Add up to six real photos below.')).toBeVisible();
+    await expect(page.getByText('Listing saved. Photo uploads are temporarily paused while Stuora completes secure processing.')).toBeVisible();
     await expect(page.getByText(`${category} edited`, { exact: true })).toBeVisible();
     await page.getByRole('button', { name: 'Archive listing', exact: true }).click();
     await page.getByRole('button', { name: 'Confirm archive', exact: true }).click();
@@ -145,44 +142,29 @@ for (const category of ['Housing', 'Marketplace']) {
   });
 }
 
-test('owner uploads and removes a real listing photo while public discovery renders it', async ({ page, browser }) => {
-  const data = api(); await data.install(page); await account(page); await signin(page);
-  await page.getByRole('button', { name: 'Create listing', exact: true }).click();
-  await page.getByRole('button', { name: 'Post Marketplace', exact: true }).click();
+test('Stuora paused-photo release blocks direct Storage uploading for owners and visitors', async ({page,browser}) => {
+  const data=api(); await data.install(page); await account(page); await signin(page);
+  await page.getByRole('button',{name:'Create listing',exact:true}).click();
+  await page.getByRole('button',{name:'Post Marketplace',exact:true}).click();
   await page.getByLabel('Listing title').fill('Media desk');
   await page.getByLabel('Listing city').fill('Aachen');
   await page.getByLabel('Price (EUR)').fill('25');
-  await page.getByRole('button', { name: 'Publish listing', exact: true }).click();
-  await expect(page.getByRole('button', { name: 'Add photo (0/6)' })).toBeVisible();
-  const chooser = page.waitForEvent('filechooser');
-  await page.getByRole('button', { name: 'Add photo (0/6)' }).click();
-  const fileChooser = await chooser;
-  await fileChooser.setFiles({ name: 'desk.png', mimeType: 'image/png', buffer: gpsPng });
-  await expect(page.getByText('Photo uploaded and attached to this listing.')).toBeVisible();
-  expect(data.uploadedPhotos).toHaveLength(1);
-  expect(data.uploadedPhotos[0]).toEqual(pixelPng);
-  expect(data.uploadedPhotos[0].includes(gpsMarker)).toBe(false);
-  await expect(page.getByLabel('Media desk photo 1')).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Add photo (1/6)' })).toBeVisible();
-  const invalidChooser = page.waitForEvent('filechooser');
-  await page.getByRole('button', { name: 'Add photo (1/6)' }).click();
-  await (await invalidChooser).setFiles({
-    name: 'another.png', mimeType: 'image/png', buffer: Buffer.from('<svg>not a PNG</svg>'),
-  });
-  await expect(page.getByText('Unsupported or invalid photo format')).toBeVisible();
-  expect(data.uploadedPhotos).toHaveLength(1);
-
-  const publicContext = await browser.newContext(); const publicPage = await publicContext.newPage(); await data.install(publicPage); await publicPage.goto('/'); await explore(publicPage, 'Marketplace');
-  await expect(publicPage.getByLabel('Media desk cover photo')).toBeVisible();
-  await publicPage.getByRole('button', { name: 'View Media desk' }).click();
-  await expect(publicPage.getByLabel('Media desk photo 1')).toBeVisible();
-  await expect(publicPage.getByRole('button', { name: 'Remove photo 1' })).toHaveCount(0);
-  await publicContext.close();
-
-  await page.getByRole('button', { name: 'Remove photo 1' }).click();
-  await expect(page.getByText('Photo removed.')).toBeVisible();
-  await expect(page.getByLabel('Media desk photo 1')).toHaveCount(0);
-  await expect(page.getByRole('button', { name: 'Add photo (0/6)' })).toBeVisible();
+  await page.getByRole('button',{name:'Publish listing',exact:true}).click();
+  await expect(page.getByText('Listing saved. Photo uploads are temporarily paused while Stuora completes secure processing.')).toBeVisible();
+  await expect(page.getByRole('button',{name:/^Add photo/})).toHaveCount(0);
+  await expect(page.getByText('Photo uploads are temporarily paused while Stuora completes secure processing.')).toBeVisible();
+  expect(data.uploadedPhotos).toHaveLength(0);
+  await page.reload(); await explore(page,'Marketplace');
+  await page.getByRole('button',{name:'My listings',exact:true}).click();
+  await page.getByRole('button',{name:'View Media desk'}).click();
+  await expect(page.getByRole('button',{name:/^Add photo/})).toHaveCount(0);
+  const visitor=await browser.newContext(),other=await visitor.newPage();
+  await data.install(other); await other.goto('/'); await explore(other,'Marketplace');
+  await other.getByRole('button',{name:'View Media desk'}).click();
+  await expect(other.getByRole('button',{name:/^Add photo/})).toHaveCount(0);
+  await expect(other.getByRole('button',{name:/^Remove photo/})).toHaveCount(0);
+  expect(data.uploadedPhotos).toHaveLength(0);
+  await visitor.close();
 });
 
 test('anonymous posting gate, listing read failure, validation and save retry preserve input', async ({ page }) => {
@@ -205,7 +187,7 @@ test('anonymous posting gate, listing read failure, validation and save retry pr
   await expect(page.getByText(/Could not save. Your input is preserved./)).toBeVisible();
   await expect(page.getByLabel('Listing title')).toHaveValue('Desk from Alice');
   await page.getByRole('button', { name: 'Publish listing', exact: true }).click();
-  await expect(page.getByText('Listing saved. Add up to six real photos below.')).toBeVisible();
+  await expect(page.getByText('Listing saved. Photo uploads are temporarily paused while Stuora completes secure processing.')).toBeVisible();
   await explore(page, 'Marketplace');
   await expect(page.getByRole('button', { name: 'Refresh listings' })).toBeEnabled();
   data.fail('listings'); await page.getByRole('button', { name: 'Refresh listings' }).click();
