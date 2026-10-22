@@ -2,7 +2,9 @@
 import { ImageMagick, initializeImageMagick, MagickFormat } from "npm:@imagemagick/magick-wasm@0.0.44";
 import { MAX_INPUT_BYTES, MediaRejection } from "./core.ts";
 import { inspectImageHeader, MAX_DECODED_PIXELS, MAX_IMAGE_SIDE } from "./imagePreflight.ts";
-const wasmFile = new URL("magick.wasm", import.meta.resolve("npm:@imagemagick/magick-wasm@0.0.44"));
+// 0.0.44 exports ./magick.wasm -> dist/x86/magick.wasm; the old lookup
+// next to dist/index.js fails at runtime even when deno check passes.
+const wasmFile = new URL(import.meta.resolve("npm:@imagemagick/magick-wasm@0.0.44/magick.wasm"));
 await initializeImageMagick(await Deno.readFile(wasmFile));
 
 function cleanPng(png: Uint8Array): Uint8Array {
