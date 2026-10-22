@@ -4,8 +4,7 @@ import { ImageMagick, MagickFormat } from "npm:@imagemagick/magick-wasm@0.0.44";
 import { decodeAndEncode } from "./processor.ts";
 import { inspectImageHeader } from "./imagePreflight.ts";
 
-const png = Uint8Array.from(atob("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9Zuz0AAAAASUVORK5CYII="),
-  c=>c.charCodeAt(0));
+
 const be32=(n:number)=>Uint8Array.of((n>>>24)&255,(n>>>16)&255,(n>>>8)&255,n&255);
 function crc(bytes:Uint8Array):number {
   let value=0xffffffff;
@@ -23,6 +22,19 @@ function chunk(name:string,data:Uint8Array):Uint8Array {
   const body=concat(Uint8Array.from(name,c=>c.charCodeAt(0)),data);
   return concat(be32(data.length),body,be32(crc(body)));
 }
+// Build a standards-conformant RGBA PNG (valid deflate checksum and PNG CRCs).
+// Old 1x1 base64 fixtures in mock tests fail libpng's actual zlib checksum.
+async function createPixelPng():Promise<Uint8Array> {
+  const scanline=Uint8Array.of(0,255,0,0,0); // filter None, transparent red RGBA
+  const stream=new ReadableStream<Uint8Array>({
+    start(controller){controller.enqueue(scanline);controller.close();}
+  }).pipeThrough(new CompressionStream('deflate'));
+  const compressed=new Uint8Array(await new Response(stream).arrayBuffer());
+  const signature=Uint8Array.of(137,80,78,71,13,10,26,10);
+  const ihdr=concat(be32(1),be32(1),Uint8Array.of(8,6,0,0,0));
+  return concat(signature,chunk('IHDR',ihdr),chunk('IDAT',compressed),chunk('IEND',new Uint8Array()));
+}
+const png=await createPixelPng();
 function metadataInput():Uint8Array {
   const marker=new TextEncoder().encode("GPSLatitude=52.5200;GPSLongitude=13.4050");
   return concat(png.slice(0,33),chunk("tEXt",concat(new TextEncoder().encode("Comment\0"),marker)),png.slice(33));

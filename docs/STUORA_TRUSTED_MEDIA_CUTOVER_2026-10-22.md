@@ -52,3 +52,5 @@
 - CI's separate `trusted-media-edge` job runs real codec tests after typecheck. Failed codec tests are release blockers; do not bypass or relax assertions to turn CI green.
 
 **WASM startup discovery:** actual Deno codec CI caught a `NotFound` startup error from the original `new URL("magick.wasm", import.meta.resolve(package))` path. The pinned 0.0.44 package publishes the WASM only at exported `./magick.wasm` (mapped to `dist/x86/magick.wasm`) or `./x64/magick.wasm`; the previous flat `dist/magick.wasm` does not exist. The loader now uses the **package export subpath**, still pinned at 0.0.44. This must pass real decode tests before the Edge function is even considered for staging.
+
+**Real-codec fixture correction:** initial Deno WASM run proved the loader fix succeeded, then rejected an inherited example 1×1 PNG because its IDAT stream has an invalid zlib checksum. The fixture now constructs a valid RGBA PNG with `CompressionStream('deflate')` and freshly computed PNG CRCs; negative tests still reject malformed files. Browser mocks using arbitrary bytes must not be used to claim actual decoder success.
