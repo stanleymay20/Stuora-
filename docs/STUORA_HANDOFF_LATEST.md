@@ -1,5 +1,11 @@
 # STUORA — CANONICAL CONTINUATION & RELEASE-SECURITY HANDOFF
 
+## 2026-10-22 continuation — redirect-safe acceptance probes
+- Reverified base `f66a03718c2c5c46173deb00b8952ac899c60d14`: PR #23 still draft; Actions #39843246492 has `verify`, `rls-authorization`, and `trusted-media-edge` SUCCESS. Exact-base preview `stuora-preview-cyvev3bdc-stanleymay20s-projects.vercel.app` READY. These identities predate this successor commit; recheck successor CI/deployment.
+- Staging readback: metadata authenticated INSERT=false, metadata rows=0, listing-media objects=0; quarantine migration `20261022191235` present. Storage policies retain owner SELECT/DELETE and avatar policies, with no listing-media INSERT/UPDATE policy. Edge intake remains v2, ACTIVE, verify_jwt=true; no redeployment or activation performed.
+- Source fix: all media-quarantine runner requests reject redirects, including login and exceptional cleanup, preventing 307/308 body replay outside the pinned staging endpoint. Mocked request/stop-on-error coverage and native-fetch loopback 307/308 regression pass; loopback uses fixture credentials only.
+- No staging or production mutations. Real two-account HTTP/browser acceptance remains PENDING: dedicated confirmed staging credentials and operator opt-in are still required through secure local environment. No live login, email installation, media activation or payments performed. Classification remains INTERNAL ALPHA.
+
 > **LIVE CHECKPOINT OVERRIDES STALE HISTORY (2026-10-22, Europe/Berlin).** Read [STUORA_NEXT_CHAT_START_HERE.md](./STUORA_NEXT_CHAT_START_HERE.md) before any older sections below. The earlier `c847...` top checkpoint and old immutable preview details are historical and must NOT be treated as current.
 >
 > Last fully passing CODE commit before this handoff save: `a3dd576da8a7117c63a511b05bcc748c4a7c90ed`, CI [#39842064393](https://github.com/stanleymay20/Stuora-/actions/runs/39842064393) (all three jobs SUCCESS). Vercel exact-code preview READY: `stuora-preview-6zs38mwuo-stanleymay20s-projects.vercel.app`. This documentation-only commit advances HEAD; re-verify the new exact-head run.

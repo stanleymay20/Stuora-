@@ -1,3 +1,4 @@
+import {createServer} from 'node:http';
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {probeMediaQuarantine,validateInputs} from '../scripts/verify-stuora-media-quarantine.mjs';
@@ -20,6 +21,7 @@ function fixture({metaCode=42501,storageStatus=403,storageMessage='new row viola
  const hits=[];
  const respond=(status,obj)=>({ok:status>=200&&status<300,status,text:async()=>JSON.stringify(obj)});
  const impl=async (url,opts)=>{
+  assert.equal(opts.redirect,'error','Every request, including exceptional cleanup, must reject redirects');
   const u=new URL(url);hits.push({url:u.href,method:opts.method||'GET',headers:opts.headers,body:opts.body});
   assert.equal(u.host,'uptjcspizukpjcoayhtn.supabase.co');
   const signIns=hits.filter(h=>h.url.includes('grant_type=password')).length;
@@ -60,4 +62,38 @@ test('inconclusive FK/rejected cross-account fixtures and successful uploads fai
  const insecure=fixture({successUpload:true});
  await assert.rejects(probeMediaQuarantine({env:okEnv,fetchImpl:insecure.impl,uuid:()=>listingId}),/unexpectedly succeeded/);
  assert.equal(insecure.hits.filter(x=>x.method==='DELETE').length,1);
+});
+
+test('redirect failure stops before subsequent login or probe requests',async()=>{
+ for(const stopAt of [1,2,3,4,5]){
+  const m=fixture();let calls=0;
+  await assert.rejects(probeMediaQuarantine({env:okEnv,uuid:()=>listingId,
+   fetchImpl:async(url,opts)=>{
+    calls++;
+    assert.equal(opts.redirect,'error');
+    if(calls===stopAt)throw new TypeError('fetch failed');
+    return m.impl(url,opts);
+   }}),/fetch failed/);
+  assert.equal(calls,stopAt);
+ }
+});
+
+test('native fetch rejects 307/308 without replaying the fixture password body',async()=>{
+ for(const status of [307,308]){
+  let redirected=0;
+  const server=createServer((req,res)=>{
+   if(req.url==='/destination'){redirected++;res.writeHead(200);res.end('{}');return;}
+   res.writeHead(status,{Location:'/destination'});res.end();
+  });
+  await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
+  try{
+   await assert.rejects(probeMediaQuarantine({env:okEnv,uuid:()=>listingId,
+    fetchImpl:(_url,opts)=>fetch('http://127.0.0.1:'+server.address().port+'/redirect',opts)
+   }),/fetch failed/);
+   assert.equal(redirected,0);
+  }finally{
+   server.closeAllConnections();
+   await new Promise(resolve=>server.close(resolve));
+  }
+ }
 });

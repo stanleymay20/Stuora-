@@ -1,4 +1,10 @@
 # STUORA — START HERE IN A NEW CHAT
+
+## 2026-10-22 continuation — redirect-safe acceptance probes
+- Reverified base `f66a03718c2c5c46173deb00b8952ac899c60d14`: PR #23 still draft; Actions #39843246492 has `verify`, `rls-authorization`, and `trusted-media-edge` SUCCESS. Exact-base preview `stuora-preview-cyvev3bdc-stanleymay20s-projects.vercel.app` READY. These identities predate this successor commit; recheck successor CI/deployment.
+- Staging readback: metadata authenticated INSERT=false, metadata rows=0, listing-media objects=0; quarantine migration `20261022191235` present. Storage policies retain owner SELECT/DELETE and avatar policies, with no listing-media INSERT/UPDATE policy. Edge intake remains v2, ACTIVE, verify_jwt=true; no redeployment or activation performed.
+- Source fix: all media-quarantine runner requests reject redirects, including login and exceptional cleanup, preventing 307/308 body replay outside the pinned staging endpoint. Mocked request/stop-on-error coverage and native-fetch loopback 307/308 regression pass; loopback uses fixture credentials only.
+- No staging or production mutations. Real two-account HTTP/browser acceptance remains PENDING: dedicated confirmed staging credentials and operator opt-in are still required through secure local environment. No live login, email installation, media activation or payments performed. Classification remains INTERNAL ALPHA.
 **Authoritative continuation checkpoint: Thursday 22 October 2026, Europe/Berlin.**
 **Read this first, then `docs/STUORA_HANDOFF_LATEST.md` (full historical handoff) and the source. Live branch state can change; never treat this checkpoint as more recent than GitHub/Supabase/Vercel readbacks.**
 

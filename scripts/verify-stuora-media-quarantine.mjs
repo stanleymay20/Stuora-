@@ -31,11 +31,12 @@ export async function probeMediaQuarantine({env,fetchImpl=fetch,uuid=randomUUID}
  const {emails,passwords,key}=validateInputs(env);
  const probe=uuid();
  if(!USER_ID.test(probe))halt('Invalid local test ID');
+ // Never follow redirects: 307/308 can replay password or probe bodies off staging.
  const outcomes=[];
  for(let i=0;i<2;i++){
   const baseHeaders={apikey:key,'Content-Type':'application/json'};
   const login=await fetchImpl(BASE+'/auth/v1/token?grant_type=password',{
-   method:'POST',headers:baseHeaders,
+   method:'POST',redirect:'error',headers:baseHeaders,
    body:JSON.stringify({email:emails[i],password:passwords[i]}),
    signal:AbortSignal.timeout(20000),
   });
@@ -45,7 +46,7 @@ export async function probeMediaQuarantine({env,fetchImpl=fetch,uuid=randomUUID}
   if(typeof access!=='string'||!access.startsWith('eyJ'))halt('Invalid staging access token response');
   const authHeaders={apikey:key,Authorization:'Bearer '+access};
   const user=await fetchImpl(BASE+'/auth/v1/user',{
-   method:'GET',headers:authHeaders,signal:AbortSignal.timeout(20000),
+   method:'GET',redirect:'error',headers:authHeaders,signal:AbortSignal.timeout(20000),
   });
   if(!user.ok)halt('Staging JWT validation failed');
   const owner=await readJson(user);
@@ -62,7 +63,7 @@ export async function probeMediaQuarantine({env,fetchImpl=fetch,uuid=randomUUID}
   const listing=uuid(); if(!USER_ID.test(listing))halt('Invalid test listing ID');
   const path=owner.id+'/'+listing+'/stuora-denial-'+probe+'-'+i+'.png';
   const metadata=await fetchImpl(BASE+'/rest/v1/listing_media',{
-   method:'POST',
+   method:'POST',redirect:'error',
    headers:{...authHeaders,'Content-Type':'application/json',Prefer:'return=representation'},
    body:JSON.stringify({listing_id:listing,object_path:path,sort_order:0}),
    signal:AbortSignal.timeout(20000),
@@ -75,7 +76,7 @@ export async function probeMediaQuarantine({env,fetchImpl=fetch,uuid=randomUUID}
   // response is a stop-ship security failure; attempt prompt cleanup in that
   // exceptional case only, without hiding the primary failure.
   const storage=await fetchImpl(BASE+'/storage/v1/object/listing-media/'+path,{
-   method:'POST',
+   method:'POST',redirect:'error',
    headers:{...authHeaders,'Content-Type':'image/png','x-upsert':'false'},
    body:PIXEL,signal:AbortSignal.timeout(20000),
   });
@@ -83,7 +84,7 @@ export async function probeMediaQuarantine({env,fetchImpl=fetch,uuid=randomUUID}
   if(storage.ok){
    try{
     await fetchImpl(BASE+'/storage/v1/object/listing-media',{
-     method:'DELETE',headers:{...authHeaders,'Content-Type':'application/json'},
+     method:'DELETE',redirect:'error',headers:{...authHeaders,'Content-Type':'application/json'},
      body:JSON.stringify({prefixes:[path]}),signal:AbortSignal.timeout(10000),
     });
    }catch{}
@@ -95,7 +96,7 @@ export async function probeMediaQuarantine({env,fetchImpl=fetch,uuid=randomUUID}
     halt('P0 FAIL: Storage rejection was not an RLS/authorization denial for account '+(i+1));
 
   const publicLookup=await fetchImpl(BASE+'/storage/v1/object/public/listing-media/'+path,{
-   method:'GET',headers:{apikey:key},signal:AbortSignal.timeout(20000),
+   method:'GET',redirect:'error',headers:{apikey:key},signal:AbortSignal.timeout(20000),
   });
   if(publicLookup.ok||publicLookup.status!==404)
     halt('P0 FAIL: attempted upload is publicly retrievable or lookup result is inconclusive');
