@@ -40,8 +40,8 @@ test('Stuora Bot never fabricates jobs or implies a real generative model is act
   await page.route('**/rest/v1/listings?*', async route => route.fulfill({ json: [] }));
   await page.goto('/');
   await page.getByRole('button', { name: 'Open Stuora Bot' }).click();
-  await page.getByRole('button', { name: 'Working-student jobs in Berlin' }).click();
-  await expect(page.getByText(/No matching jobs were returned in Berlin/)).toBeVisible();
+  await page.getByRole('button', { name: 'Working-student jobs' }).click();
+  await expect(page.getByText(/No matching jobs were returned/)).toBeVisible();
   await expect(page.getByText(/It does not use generative AI yet/)).toBeVisible();
   await expect(page.getByRole('button', { name: 'Explore Jobs' })).toBeVisible();
   await page.getByRole('button', { name: 'Close Stuora Bot' }).click();
@@ -200,4 +200,49 @@ test('desktop assistant is a bounded side panel; mobile remains a full-screen mo
     await page.getByRole('button', { name: 'Close Stuora Bot' }).click();
   }
   await expect(page.getByRole('button', { name: 'Open Stuora Bot' })).toBeVisible();
+});
+
+test('selected student city drives grounded Bot results and no Berlin fallback', async ({ page }) => {
+  await backend(page);
+  const botCities: string[] = [];
+  await page.route('**/rest/v1/student_groups?*', async route => {
+    const url = new URL(route.request().url());
+    if (url.searchParams.get('select') === 'id,name,city,topic,description') {
+      botCities.push(url.searchParams.get('city') ?? '');
+    }
+    await route.fulfill({ json: [] });
+  });
+  await page.goto('/');
+  const location = page.getByRole('button', { name: 'Choose student city' });
+  await expect(location).toBeVisible();
+  await expect(location).toContainText('All cities');
+  await location.click();
+  await page.getByRole('textbox', { name: 'Student city name' }).fill('Aachen');
+  await page.getByRole('button', { name: 'Save student city' }).click();
+  await expect(location).toContainText('Aachen');
+  await page.getByRole('button', { name: 'Open Stuora Bot' }).click();
+  await page.getByRole('button', { name: 'Study groups in Aachen' }).click();
+  await expect.poll(() => botCities).toContain('ilike.%Aachen%');
+  await page.getByRole('button', { name: 'Close Stuora Bot' }).click();
+  await page.reload();
+  await expect(location).toContainText('Aachen');
+  await location.click();
+  await page.getByRole('button', { name: 'Show all cities' }).click();
+  await expect(location).toContainText('All cities');
+  await page.getByRole('button', { name: 'Open Stuora Bot' }).click();
+  await page.getByRole('button', { name: 'Study groups' }).click();
+  await expect.poll(() => botCities).toContain('');
+});
+
+test('small full-body Stuora mascot keeps blinking and click affordance', async ({ page }) => {
+  await backend(page);
+  await page.goto('/');
+  const launcher = page.getByRole('button', { name: 'Open Stuora Bot' });
+  const box = await launcher.boundingBox();
+  expect(box).not.toBeNull();
+  expect(box!.width).toBeLessThanOrEqual(110);
+  expect(box!.height).toBeLessThanOrEqual(150);
+  await expect(page.getByTestId('stuora-mascot-eyes')).toBeVisible();
+  await launcher.click();
+  await expect(page.getByText('Connected search beta · Read-only')).toBeVisible();
 });
