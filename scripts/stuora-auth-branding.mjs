@@ -2,11 +2,13 @@ import {readFileSync,writeFileSync,mkdtempSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join,resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
+import {dirname} from 'node:path';
 import {createHash} from 'node:crypto';
 export const STAGING_REF='uptjcspizukpjcoayhtn';
 export const CORE=['confirmation','invite','magic_link','email_change','recovery','reauthentication'];
 export const OPTIONAL=['password_changed_notification','email_changed_notification','phone_changed_notification','identity_linked_notification','identity_unlinked_notification','mfa_factor_enrolled_notification','mfa_factor_unenrolled_notification'];
-const root=resolve('supabase/auth-branding');
+// Resolve relative to this source file, not the shell working directory.
+const root=resolve(dirname(fileURLToPath(import.meta.url)),'../supabase/auth-branding');
 export function preparePatch(includeOptional=false){
  const manifest=JSON.parse(readFileSync(join(root,'subjects.json'),'utf8'));
  if(manifest.brand!=='Stuora'||manifest.stagingOnly!==true||manifest.installed!==false)
@@ -36,8 +38,16 @@ export async function applyStaging({token,fetchImpl=fetch,optional=false}={}){
  if(!before.ok)throw Error('Could not read staging Auth settings; no writes');
  const config=await before.json();
  if(!config||typeof config!=='object')throw Error('Invalid Auth configuration response');
+ // An incomplete management readback cannot support a reliable rollback.
+ // Stop BEFORE any write rather than backing up only some of the fields.
  const old={};
- for(const key of Object.keys(patch))if(Object.hasOwn(config,key))old[key]=config[key];
+ for(const key of Object.keys(patch)){
+   if(!Object.hasOwn(config,key)||typeof config[key]!=='string')
+     throw Error('Staging Auth config omitted restorable template field '+key+'; no writes');
+   old[key]=config[key];
+ }
+ if(Object.entries(patch).every(([key,value])=>old[key]===value))
+   return {...report(patch),readback:'already-matching',write:false};
  const backupFolder=mkdtempSync(join(tmpdir(),'stuora-auth-backup-'));
  const backupPath=join(backupFolder,'staging-before.json');
  writeFileSync(backupPath,JSON.stringify({project:STAGING_REF,previous:old}),{mode:0o600,flag:'wx'});
@@ -49,7 +59,7 @@ export async function applyStaging({token,fetchImpl=fetch,optional=false}={}){
  for(const [key,value] of Object.entries(patch)){
    if(readback[key]!==value)throw Error('Readback mismatch at '+key+'; backup at '+backupPath);
  }
- return {...report(patch),backupPath,readback:'verified'};
+ return {...report(patch),backupPath,readback:'verified',write:true};
 }
 async function cli(){
  const args=process.argv.slice(2);

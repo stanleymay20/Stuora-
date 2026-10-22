@@ -151,3 +151,7 @@ Files newly added on draft PR #23:
 ## 2026-10-22 — Controlled Auth branding rollout script (NOT EXECUTED)
 - New source `scripts/stuora-auth-branding.mjs` with six-core template dry-run default, optional seven security templates, hardcoded staging ref, approval+token guard for Management API PATCH, backups of only affected original fields, and exact staged readback. CI `tests/auth-branding-rollout.test.mjs` verifies scope and no unauthorized network call.
 - **No hosted Auth email settings have been updated**, no token requested/disclosed, no SMTP, DNS or Auth redirect change. Real hosted sender and inbox tests still outstanding. This does not affect native splash or staging locked-photo Edge.
+
+## 2026-10-22 — Staging Auth installer safeguards (not executed)
+- Hardened `scripts/stuora-auth-branding.mjs`: Auth pack paths relative to module instead of CWD; must read every existing string template field before a PATCH so rollback can restore exactly; skips any PATCH for already-identical Stuora templates. Extended `tests/auth-branding-rollout.test.mjs` to exercise mocks for complete backup/exact PATCH/readback, idempotence and missing-field refusal.
+- Await exact-head CI, no provider auth settings changed. Hosted sender/inbox verification still requires secure user-controlled management setup. Staging photo Edge remains v2, compiled write-disabled, JWT protected; production unchanged.
