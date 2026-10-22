@@ -79,6 +79,9 @@ jobs:
       - name: Test isolated Vercel preview origin binding
         run: node --test tests/vercel-preview-origin.test.mjs
 
+      - name: Validate Stuora Auth email and branded error copy
+        run: node --test tests/auth-branding.test.mjs
+
       - name: Validate build environment
         run: npm run check:environment
 

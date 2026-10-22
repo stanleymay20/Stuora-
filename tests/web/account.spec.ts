@@ -51,7 +51,7 @@ test('validation and auth errors preserve retryable state', async ({ page }) => 
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
   await expect(page.getByText('Enter a valid email address.')).toBeVisible();
   await signin(page, 'bad-password');
-  await expect(page.getByText('Invalid login credentials')).toBeVisible();
+  await expect(page.getByText("That email or password didn't work. Check your details and try again.")).toBeVisible();
   await signin(page);
   await page.getByRole('button', { name: 'Create profile', exact: true }).click();
   await expect(page.getByText('Your name must be between 2 and 80 characters.')).toBeVisible();

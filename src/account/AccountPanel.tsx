@@ -4,6 +4,7 @@ import { StuoraMark } from '../ui/Brand';
 import { supabase } from '../backend/supabase';
 import { useAuth } from './AuthProvider';
 import { credentialsError, emailError, newPasswordError, profileError } from './validation';
+import { stuoraAuthError } from './authCopy';
 
 const authRedirectUrl = () => Platform.OS === 'web' && typeof window !== 'undefined'
   ? window.location.origin
@@ -46,7 +47,7 @@ export default function AccountPanel() {
       const result = signup
         ? await supabase.auth.signUp({ email: email.trim(), password, options: { emailRedirectTo: authRedirectUrl() } })
         : await supabase.auth.signInWithPassword({ email: email.trim(), password });
-      if (result.error) { setIssue(result.error.message); return; }
+      if (result.error) { setIssue(stuoraAuthError(result.error, signup ? 'sign-up' : 'sign-in')); return; }
       setPassword('');
       if (signup && !result.data.session) {
         setNotice('Check your email and confirm your account, then return to Stuora.');
