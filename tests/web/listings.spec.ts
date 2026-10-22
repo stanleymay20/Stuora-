@@ -81,6 +81,7 @@ for (const category of ['Housing', 'Marketplace']) {
     await page.getByRole('button', { name: `Post ${category}`, exact: true }).click();
     await page.getByLabel('Listing title').fill(`${category} from Alice`);
     await page.getByLabel('Listing description').fill('A real persistent student listing');
+    await page.getByLabel('Listing city').fill('Aachen');
     await page.getByLabel(category === 'Housing' ? 'Monthly rent (EUR)' : 'Price (EUR)').fill(category === 'Housing' ? '650.25' : '0');
     await page.getByRole('button', { name: 'Publish listing', exact: true }).click();
     await expect(page.getByText('Listing saved. Add up to six real photos below.')).toBeVisible();
@@ -110,7 +111,7 @@ for (const category of ['Housing', 'Marketplace']) {
     await expect(second.getByText(`No ${category.toLowerCase()} listings found.`)).toBeVisible();
     await page.getByRole('button', { name: 'My listings', exact: true }).click();
     await page.getByRole('button', { name: `View ${category} edited` }).click();
-    await expect(page.getByText('Berlin · closed')).toBeVisible();
+    await expect(page.getByText('Aachen · closed')).toBeVisible();
     await expect(page.getByRole('button', { name: 'Edit listing', exact: true })).toHaveCount(0);
     await secondContext.close();
   });
@@ -121,6 +122,7 @@ test('owner uploads and removes a real listing photo while public discovery rend
   await page.getByRole('button', { name: 'Create listing', exact: true }).click();
   await page.getByRole('button', { name: 'Post Marketplace', exact: true }).click();
   await page.getByLabel('Listing title').fill('Media desk');
+  await page.getByLabel('Listing city').fill('Aachen');
   await page.getByLabel('Price (EUR)').fill('25');
   await page.getByRole('button', { name: 'Publish listing', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Add photo (0/6)' })).toBeVisible();
@@ -155,7 +157,9 @@ test('anonymous posting gate, listing read failure, validation and save retry pr
   await page.getByRole('button', { name: 'Create listing', exact: true }).click();
   await page.getByRole('button', { name: 'Publish listing', exact: true }).click();
   await expect(page.getByText('Title must be between 3 and 140 characters.')).toBeVisible();
-  await page.getByLabel('Listing title').fill('Desk from Alice'); await page.getByLabel('Price (EUR)').fill('-1');
+  await page.getByLabel('Listing title').fill('Desk from Alice');
+  await page.getByLabel('Listing city').fill('Aachen');
+  await page.getByLabel('Price (EUR)').fill('-1');
   await page.getByRole('button', { name: 'Publish listing', exact: true }).click();
   await expect(page.getByText(/Enter a EUR price/)).toBeVisible(); expect(data.rows).toHaveLength(0);
   await page.getByLabel('Price (EUR)').fill('35.50'); data.fail('save_student_listing');
