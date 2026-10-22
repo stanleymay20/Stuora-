@@ -70,3 +70,12 @@ Prior staging changes were installed via MCP apply_migration, which generated de
 - Verified live `pg_constraint` readback: `profiles_city_nonblank`, `listings_city_nonblank`, `listings_published_price_required`. Verified live `pg_trigger` readback: `listings_publish_requires_details`, `housing_details_preserve_published_integrity`, `marketplace_details_preserve_published_integrity`, and existing `listings_safety` rate limiter preserved.
 - Deferred commit-time checks read the final parent-child state so atomic listing/rent edits remain valid. **Not a claim of hosted real-account acceptance**. Keep draft PR #23, main/prod unchanged and approved staging alias on last previously qualified preview. Fresh-database CI tests and staging schema checks passed; full JWT and concurrency qualification remains.
 - Historical migration versions remain noncanonical; do **not** run automatic `supabase db push` against staging.
+
+
+## Owner moderation and durable removal — staging
+
+- GitHub draft PR #23 latest fully tested change: `c7ef51f92a18d9e3c0e1e3cde99a5b5660a2a0b3`; full GitHub [CI #39730910971](https://github.com/stanleymay20/Stuora-/actions/runs/39730910971) **SUCCESS**, both `verify` and `rls-authorization` jobs. A SQL dollar-quote error in an earlier attempt was fixed before staging migration.
+- Applied forward-only `supabase/migrations/20261022160000_student_group_owner_removal_bans.sql` **only** to Stuora staging `uptjcspizukpjcoayhtn` under migration name `student_group_owner_removal_bans`; Supabase returned success and recorded version `20261022060126`.
+- PostgreSQL metadata readback confirms owner-scoped `student_group_bans_owner_read`, self-only membership leave policy, `student_group_members_prevent_banned_join` BEFORE INSERT trigger and `student_group_messages_verify_membership_at_insert` BEFORE INSERT trigger. The new owner-only removal/restore RPCs retain approval and role checks inside the database.
+- Parent group row locks serialize join and message insertion with owner ban/removal; voluntary leave remains reversible. Owner restoring eligibility does **not** auto-add the member. New owner moderation panel and browser tests cover confirmation and restore controls.
+- **Outstanding:** hosted JWT two-student real backend tests not executed (private staging credentials + explicit fixture permission required), concurrency behavior not independently tested under live simultaneous clients, UI new code not yet promoted to approved staging hostname. Production unchanged. Not closed-beta/GA-qualified.
