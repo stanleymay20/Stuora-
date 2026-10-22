@@ -331,6 +331,11 @@ for (const inheritedGrants of [false, true]) {
       await expectCount('authenticated', b,
         `insert into public.student_group_members (group_id,user_id) values ('${groupId}','${b}') returning group_id`, 1);
       await expectCount('authenticated', a, `select * from public.student_group_members where group_id = '${groupId}'`, 2);
+      // Leaving voluntarily is reversible; an owner removal is NOT.
+      await expectCount('authenticated', b,
+        `delete from public.student_group_members where group_id='${groupId}' and user_id='${b}' returning user_id`, 1);
+      await expectCount('authenticated', b,
+        `insert into public.student_group_members(group_id,user_id) values ('${groupId}','${b}') returning group_id`, 1);
       const { rows: message } = await as('authenticated', b,
         `select public.send_student_group_message('${groupId}', 'Meeting on Tuesday') id`);
       const messageId = message[0].id;
@@ -369,12 +374,39 @@ for (const inheritedGrants of [false, true]) {
       // Owner may not silently leave their group, preserving its creator membership.
       await expectCount('authenticated', a,
         `delete from public.student_group_members where group_id = '${groupId}' and user_id = '${a}' returning user_id`, 0);
+      // Direct owner deletion is disallowed: only the controlled removal RPC
+      // can create a durable ban and revoke the member atomically.
       await expectCount('authenticated', a,
-        `delete from public.student_group_members where group_id = '${groupId}' and user_id = '${b}' returning user_id`, 1);
+        `delete from public.student_group_members where group_id = '${groupId}' and user_id = '${b}' returning user_id`, 0);
+      await assert.rejects(as('authenticated', b,
+        `select public.remove_student_group_member('${groupId}','${a}')`), e => e.code === '42501');
+      await assert.rejects(as('authenticated', a,
+        `select public.remove_student_group_member('${groupId}','${a}')`), e => e.code === '42501');
+      await assert.rejects(as('anon', null,
+        `select public.remove_student_group_member('${groupId}','${b}')`), e => e.code === '42501');
+      await expectCount('authenticated', a,
+        `select public.remove_student_group_member('${groupId}','${b}')`, 1);
+      await expectCount('authenticated', a,
+        `select * from public.student_group_bans where group_id='${groupId}' and user_id='${b}'`, 1);
+      await expectCount('authenticated', b,
+        `select * from public.student_group_bans where group_id='${groupId}'`, 0);
+      await assert.rejects(as('authenticated', b,
+        `delete from public.student_group_bans where group_id='${groupId}'`), e => e.code === '42501');
+      await assert.rejects(as('authenticated', b,
+        `insert into public.student_group_members(group_id,user_id) values ('${groupId}','${b}')`), e => e.code === '42501');
       await expectCount('authenticated', b, `select * from public.student_group_messages where id = '${messageId}'`, 0);
       await expectCount('authenticated', b, `select * from public.student_group_messages where id = '${otherMessageId}'`, 1);
       await expectCount('authenticated', b, 'select * from public.student_group_messages', 1);
       await expectCount('authenticated', a, `select * from public.student_group_messages where id = '${messageId}'`, 1);
+      // Restoring eligibility does NOT silently re-enrol the student.
+      await assert.rejects(as('authenticated', b,
+        `select public.restore_student_group_member('${groupId}','${b}')`), e => e.code === '42501');
+      await expectCount('authenticated', a,
+        `select public.restore_student_group_member('${groupId}','${b}')`, 1);
+      await expectCount('authenticated', b, `select * from public.student_group_messages where id = '${messageId}'`, 0);
+      await expectCount('authenticated', b,
+        `insert into public.student_group_members(group_id,user_id) values ('${groupId}','${b}') returning group_id`, 1);
+      await expectCount('authenticated', b, `select * from public.student_group_messages where id = '${messageId}'`, 1);
       await expectCount('authenticated', b,
         `delete from public.student_groups where id = '${groupId}' returning id`, 0);
       await expectCount('authenticated', a,
