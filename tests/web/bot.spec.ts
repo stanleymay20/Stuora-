@@ -88,10 +88,56 @@ test('Stuora Bot interprets German and international thousands separators as eur
     ['Find housing in Berlin under €1,200', 'lte.120000'],
     ['Find housing in Berlin under €650,50', 'lte.65050'],
   ] as const) {
-    await page.getByRole('textbox', { name: 'Ask Stuora Bot' }).fill(request);
-    await page.getByRole('button', { name: 'Ask Stuora Bot' }).click();
+    const composer = page.getByRole('textbox', { name: 'Ask Stuora Bot' });
+    const send = page.getByRole('button', { name: 'Ask Stuora Bot' });
+    // Backend interception fires BEFORE the UI receives the async response.
+    // Wait for a complete rendered reply before launching the next search;
+    // clicking while busy is intentionally blocked to prevent duplicate queries.
+    await expect(send).toBeDisabled();
+    await composer.fill(request);
+    await expect(send).toBeEnabled();
+    await send.click();
     await expect.poll(() => filtered.filter(price => price === expected).length).toBe(1);
+    await expect(page.getByText(request, { exact: true })).toBeVisible();
+    await expect(composer).toBeEmpty();
+    await expect(send).toBeDisabled(); // Empty input after a completed search.
   }
+});
+
+test('Stuora Bot blocks duplicate requests while an async search is pending and restores input when finished', async ({ page }) => {
+  await backend(page);
+  let begin!: () => void;
+  const started = new Promise<void>(resolve => { begin = resolve; });
+  let release!: () => void;
+  const held = new Promise<void>(resolve => { release = resolve; });
+  let requests = 0;
+  await page.route('**/rest/v1/listings?*', async route => {
+    const params = new URL(route.request().url()).searchParams;
+    if (params.get('select') === 'id,kind,title,city,price_cents,currency') {
+      requests++;
+      begin();
+      await held;
+    }
+    await route.fulfill({ json: [] }).catch(() => {});
+  });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open Stuora Bot' }).click();
+  const input = page.getByRole('textbox', { name: 'Ask Stuora Bot' });
+  const send = page.getByRole('button', { name: 'Ask Stuora Bot' });
+  const question = 'Housing in Potsdam under €600';
+  await input.fill(question);
+  await send.click();
+  try {
+    await started;
+    await expect(send).toBeDisabled();
+    expect(requests).toBe(1);
+    // The student's draft is preserved while the backend response is pending.
+    await expect(input).toHaveValue(question);
+  } finally { release(); }
+  await expect(page.getByText(question, { exact: true })).toBeVisible();
+  await expect(input).toBeEmpty();
+  await expect(send).toBeDisabled();
+  expect(requests).toBe(1);
 });
 
 test('floating Stuora Bot launcher stays above navigation, opens read-only search, and clears form space', async ({ page }) => {
