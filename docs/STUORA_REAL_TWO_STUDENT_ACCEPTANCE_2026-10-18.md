@@ -4,12 +4,14 @@
 
 ## What is tested
 - Two separate **real, verified test student** accounts use independent Playwright browser contexts.
+- **Fail-closed backend origin guard** on both browser contexts, installed before login: only `uptjcspizukpjcoayhtn.supabase.co` may receive Supabase network requests. A wrong Supabase project is aborted, and both contexts must show actual staging requests. The guard never prints authorization headers, credentials or tokens, and does not mock responses.
+- After each account signs in (creating a profile only when needed), the test reloads the page and verifies the authenticated profile and display name persist.
 - Existing signed-in accounts must work against the **approved staging origin only** (no production calls).
 - A publishes an explicitly marked staging Housing listing, uploads a PNG through real staging Storage, and verifies the image decodes after revisiting the listing. B discovers the same persisted listing and image without gaining owner edit or photo-removal controls; B reloads and fetches the image again.
 - B starts a persisted owner conversation, sends a message, and A receives it in Messages.
 - A creates a public group, B cannot access discussion before joining, B joins and sends a message, A reads it, and B leaves.
 - The suite attempts to **remove the uploaded photo before archiving the listing** and delete the group in `finally`. Cleanup failures **fail the acceptance run** with staging fixture labels; manually verify storage objects and staging data afterward. An interrupted process can still leave fixtures requiring manual cleanup.
-- No mocked Supabase requests, no false student verification flags, no live money, no Stripe, no student-deals code. A passing image-decode check proves fetchability of the staged PNG in Chromium, **not** cross-user raw Storage API denial, MIME-content security, public-object revocation, device gallery permissions, or permanent deletion guarantees.
+- No mocked Supabase requests, no false student verification flags, no live money, no Stripe, no student-deals code. A passing image-decode check proves fetchability of the staged PNG in Chromium, **not** cross-user raw Storage API denial, MIME-content security, public-object revocation, device gallery permissions, or permanent deletion guarantees. A host-only guard catches unexpected `*.supabase.co` requests but does not replace direct two-token REST/Storage negative authorization tests or validate custom-domain external destinations.
 
 ## Prerequisites — private and local
 1. Two distinct email inboxes with accessible, already-confirmed, **dedicated staging** Stuora accounts. Don't use real customer identities, your real accounts, your professor's details or any email accounts you cannot independently access.
