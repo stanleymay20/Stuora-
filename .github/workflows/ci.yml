@@ -73,6 +73,9 @@ jobs:
       - name: Test environment isolation
         run: node --test tests/backend-config.test.mjs
 
+      - name: Test isolated Vercel preview origin binding
+        run: node --test tests/vercel-preview-origin.test.mjs
+
       - name: Validate build environment
         run: npm run check:environment
 

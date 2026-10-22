@@ -72,3 +72,10 @@ Files newly added on draft PR #23:
 4. Produce concise verified progress: exact commit, full three-job CI outcome, staging migration version if applied, file/trigger read-back, blocked release gates, and next safe task.
 
 **Release decision:** INTERNAL ALPHA ONLY. No public beta, GA, uncontrolled real-student signup, LLM/payment/deal activation or production deployment.
+
+## 2026-10-22 checkpoint after 3281232 (supersedes stale above migration status)
+- Staging `uptjcspizukpjcoayhtn` has two **applied** and read-back migrations: `listing_media_six_photo_guard` as `20261022095358`, and `listing_photo_attempt_limits` as `20261022095425`. Public listing-media bucket and direct client upload remain UNCHANGED. Edge image service remains UNDEPLOYED. Production UNTOUCHED.
+- PR #23 stayed draft/unmerged. Commit `3281232478a0c2fe5cb924cbf9f900b32214ea34` passed all three required CI jobs in run `39757771599`.
+- Vercel created READY Preview deployment `dpl_8sDLaQjD9FXnzGaFsqzBYuQ8u2di` at `https://stuora-preview-acez6tl63-stanleymay20s-projects.vercel.app/`. The actual user browser rendered a **blank page**, not a qualified preview. App `src/backend/config.ts` fails before React mount when `window.location.origin` differs from build-time `EXPO_PUBLIC_STUORA_WEB_ORIGIN`; exact runtime console diagnosis remains unverified.
+- Preview build correction in follow-up commit: `scripts/build-vercel-web.mjs` derives the **single immutable preview deployment origin** from trusted `VERCEL_URL`, only for `VERCEL_ENV=preview`, `EXPO_PUBLIC_STUORA_ENV=staging` and the exact dedicated staging Supabase project. It preserves exact-origin checks and refuses production/wrong-team hosts. This only addresses the immutable deployment URL (not arbitrary branch aliases). `vercel.json` uses this wrapper and CI adds negative tests.
+- NEXT: verify exact new commit CI, auto-created Vercel preview SHA and actual browser startup (not just READY). Never claim runtime fixed until confirmed in user browser. If still blank, inspect Chrome DevTools Console and Network, including HTTP content-type. No production/project merge.
