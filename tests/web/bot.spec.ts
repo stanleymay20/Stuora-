@@ -192,11 +192,11 @@ test('desktop assistant is a bounded side panel; mobile remains a full-screen mo
   if (test.info().project.name === 'desktop') {
     expect(bounds!.width).toBeLessThanOrEqual(500);
     expect(bounds!.x + bounds!.width).toBeGreaterThan(viewport!.width - 45);
-    await expect(page.getByRole('button', { name: 'Close Stuora Bot backdrop' })).toBeVisible();
-    await page.getByRole('button', { name: 'Close Stuora Bot backdrop' }).click({ position: { x: 12, y: 12 } });
+    await expect(page.getByRole('button', { name: 'Dismiss assistant backdrop' })).toBeVisible();
+    await page.getByRole('button', { name: 'Dismiss assistant backdrop' }).click({ position: { x: 12, y: 12 } });
   } else {
     expect(bounds!.width).toBeGreaterThanOrEqual(viewport!.width - 2);
-    await expect(page.getByRole('button', { name: 'Close Stuora Bot backdrop' })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Dismiss assistant backdrop' })).toHaveCount(0);
     await page.getByRole('button', { name: 'Close Stuora Bot' }).click();
   }
   await expect(page.getByRole('button', { name: 'Open Stuora Bot' })).toBeVisible();
