@@ -59,7 +59,7 @@ create trigger student_group_members_prevent_banned_join
 -- then recheck membership and ban state at the actual write boundary.
 create function private.guard_student_group_message_insert()
 returns trigger language plpgsql security definer set search_path = ''
-as $
+as $$
 begin
   perform 1 from public.student_groups g
     where g.id = new.group_id for share;
@@ -72,7 +72,7 @@ begin
   end if;
   return new;
 end;
-$;
+$$;
 create trigger student_group_messages_verify_membership_at_insert
   before insert on public.student_group_messages
   for each row execute function private.guard_student_group_message_insert();
