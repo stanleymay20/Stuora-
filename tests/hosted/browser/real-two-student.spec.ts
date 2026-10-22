@@ -197,6 +197,36 @@ test('two independent staging accounts complete actual listing, messaging and gr
 
     await owner.getByRole('button', { name: 'Refresh group discussion' }).click();
     await expect(owner.getByTestId('student-group-message').getByText(groupText, { exact: true })).toBeVisible();
+    // Real hosted membership-moderation acceptance: owner removal revokes
+    // history after reload and prevents a direct rejoin; restoration does not
+    // re-enrol B. All requests use the actual staging Supabase backend.
+    await owner.getByRole('button', { name: 'Refresh group members' }).click();
+    const remove = owner.getByRole('button', { name: /^Remove member [0-9a-f-]{36}$/ });
+    await expect(remove).toHaveCount(1);
+    const buttonName = await remove.getAttribute('aria-label');
+    expect(buttonName).toMatch(/^Remove member [0-9a-f-]{36}$/);
+    const memberId = buttonName!.slice('Remove member '.length);
+    await remove.click();
+    await owner.getByRole('button', { name: 'Confirm remove member ' + memberId }).click();
+    await expect(owner.getByRole('button', { name: 'Restore group access ' + memberId })).toBeVisible();
+
+    await student.reload();
+    await student.getByRole('button', { name: 'Open group ' + groupName }).click();
+    await expect(student.getByText('Join this group to read and post messages.')).toBeVisible();
+    await expect(student.getByTestId('student-group-message')).toHaveCount(0);
+    await student.getByRole('button', { name: 'Join group', exact: true }).click();
+    await expect(student.getByText('Could not join this group.')).toBeVisible();
+    await expect(student.getByLabel('Message to group')).toHaveCount(0);
+
+    await owner.getByRole('button', { name: 'Restore group access ' + memberId }).click();
+    await expect(owner.getByText('Access restored. The student must choose to join again.')).toBeVisible();
+    await student.reload();
+    await student.getByRole('button', { name: 'Open group ' + groupName }).click();
+    await expect(student.getByLabel('Message to group')).toHaveCount(0);
+    await student.getByRole('button', { name: 'Join group', exact: true }).click();
+    await expect(student.getByText('You joined the group.')).toBeVisible();
+    await expect(student.getByTestId('student-group-message').getByText(groupText, { exact: true })).toBeVisible();
+
     await student.getByRole('button', { name: 'Leave group' }).click();
     await expect(student.getByLabel('Message to group')).toHaveCount(0);
     // Confirm leave is persisted server-side, not just optimistic local UI.
