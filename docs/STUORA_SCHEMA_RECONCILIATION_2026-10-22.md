@@ -37,7 +37,7 @@ Prior staging changes were installed via MCP apply_migration, which generated de
 | 20261022033000_fix_student_group_message_rls.sql | 20261022040638 | fix_student_group_message_rls |
 | 20261022050000_private_profile_and_explicit_cities.sql | 20261022042742 | private_profile_and_explicit_cities |
 | 20261022053000_listing_integrity_guard.sql | 20261022043800 | listing_integrity_guard |
-| 20261022115000_gate_unreleased_community_writes.sql | **pending until separately verified/applied** | gate_unreleased_community_writes |
+| 20261022115000_gate_unreleased_community_writes.sql | 20261022052123 | gate_unreleased_community_writes |
 
 ## Safe promotion protocol
 1. Review the canonical sources and check both independent RLS job and full CI at the exact SHA, including browser and Expo gates.
@@ -53,3 +53,10 @@ Prior staging changes were installed via MCP apply_migration, which generated de
 - Group ban/rejoin semantics, media EXIF and public bucket lifetime.
 - Real two-student hosted acceptance and operational readiness.
 - UI gate ≠ API gate; no new deals/Stripe/LLM publishing is authorized.
+
+
+## Verified staging closure — 2026-10-22
+- Exact-head CI #39726912374 at `e5d8cd6dcce891671cc6ade119432a4ce09d75f2` passed both `verify` and `rls-authorization`.
+- Applied only `gate_unreleased_community_writes` via the Stuora staging Supabase connection to `uptjcspizukpjcoayhtn`; Supabase returned success; migration stored as `20261022052123`.
+- Read-back of `pg_proc` + `has_function_privilege` confirms anonymous and authenticated roles have **no EXECUTE** on `public.save_community_listing`, `public.listing_participation`, `public.review_job_application`, or private counterparts.
+- No production writes, no staging alias promotion; hosted JWT-negative tests still pending. Earlier timestamp migration versions must not be blindly replayed.
