@@ -6,7 +6,10 @@ test('profile creation, editing, privacy, reload persistence and logout', async 
   await signin(page);
   await expect(page.getByLabel('Display name')).toBeVisible();
   await page.getByLabel('Display name').fill('Alice Student');
-  await page.getByLabel('Bio', { exact: true }).fill('New to Berlin');
+  await expect(page.getByLabel('City', { exact: true })).toBeEmpty();
+  await expect(page.getByRole('switch', { name: 'Profile discoverable' })).toHaveAttribute('aria-checked', 'false');
+  await page.getByLabel('City', { exact: true }).fill('Aachen');
+  await page.getByLabel('Bio', { exact: true }).fill('New to university');
   await page.getByRole('button', { name: 'Create profile', exact: true }).click();
   await expect(page.getByText('Your profile has been saved.')).toBeVisible();
   await expect(page.getByText(/Student status: unverified/)).toBeVisible();
@@ -18,6 +21,13 @@ test('profile creation, editing, privacy, reload persistence and logout', async 
   await page.getByText('You', { exact: true }).click();
   await expect(page.getByLabel('Display name')).toHaveValue('Alice Student');
   await expect(page.getByLabel('Bio', { exact: true })).toHaveValue('Looking for flatmates');
+  await expect(page.getByRole('switch', { name: 'Profile discoverable' })).toHaveAttribute('aria-checked', 'true');
+  await expect(page.getByLabel('City', { exact: true })).toHaveValue('Aachen');
+  // Existing students can choose to return to private status explicitly.
+  await page.getByRole('switch', { name: 'Profile discoverable' }).click();
+  await page.getByRole('button', { name: 'Save profile', exact: true }).click();
+  await page.reload();
+  await page.getByText('You', { exact: true }).click();
   await expect(page.getByRole('switch', { name: 'Profile discoverable' })).toHaveAttribute('aria-checked', 'false');
   await page.getByRole('button', { name: 'Sign out', exact: true }).click();
   await expect(page.getByText('Welcome to Stuora', { exact: true })).toBeVisible();
