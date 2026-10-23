@@ -48,7 +48,15 @@ jobs:
         run: deno test --allow-read --config supabase/functions/listing-photo-intake/deno.json supabase/functions/listing-photo-intake/processor.test.ts
 
       - name: Typecheck account deletion, AI assistant and external data Edge Functions
-        run: deno check supabase/functions/delete-account/index.ts supabase/functions/stuora-assistant/index.ts supabase/functions/external-data/index.ts
+        shell: bash
+        run: |
+          deno --version
+          set +e
+          deno check supabase/functions/delete-account/index.ts supabase/functions/stuora-assistant/index.ts supabase/functions/external-data/index.ts 2>&1 | tee /tmp/deno-check.log
+          status=${PIPESTATUS[0]}
+          # Surface type errors as annotations so they are readable without raw logs.
+          if [ "$status" -ne 0 ]; then sed 's/\x1b\[[0-9;]*m//g' /tmp/deno-check.log | grep -E 'TS[0-9]+|error|at file' | head -30 | sed 's/^/::error::/'; fi
+          exit $status
 
       - name: Test account deletion, AI grounding, provider licensing and intent parity
         run: deno test --allow-read supabase/functions/_shared supabase/functions/delete-account supabase/functions/external-data supabase/functions/stuora-assistant
