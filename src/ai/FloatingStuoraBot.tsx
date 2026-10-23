@@ -37,6 +37,25 @@ export default function FloatingStuoraBot({
 
   if (!visible) return null;
 
+  // Gen-3 audit: on phones the 106×134 character covered listing actions.
+  // Use a standard 56 px floating button that keeps the same accessible name.
+  if (!desktop) {
+    return (
+      <View pointerEvents="box-none" style={[styles.host, styles.mobileHost]}>
+        <Pressable
+          testID="floating-stuora-bot"
+          accessibilityRole="button"
+          accessibilityLabel="Open Stuora Bot"
+          accessibilityHint="Open the beta assistant for read-only searches of Stuora"
+          onPress={onPress}
+          style={({ pressed }) => [styles.fab, pressed && styles.pressed]}
+        >
+          <View pointerEvents="none" style={styles.fabMascot}><AnimatedStuoraMascot reducedMotion={reduceMotion} active={visible} /></View>
+        </Pressable>
+      </View>
+    );
+  }
+
   return (
     <View pointerEvents="box-none" style={[styles.host, desktop ? styles.desktopHost : styles.mobileHost]}>
       <Pressable
@@ -62,7 +81,10 @@ const styles = StyleSheet.create({
     position: 'absolute', right: 9, zIndex: 30, elevation: 14,
     alignItems: 'center', justifyContent: 'center',
   },
-  mobileHost: { bottom: 75 },
+  mobileHost: { bottom: 78, right: 14 },
+  fab: { width: 56, height: 56, borderRadius: 28, backgroundColor: '#EEE9FF', alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: '#FFFFFF', shadowColor: '#11162F', shadowOpacity: 0.25, shadowRadius: 8, shadowOffset: { width: 0, height: 4 }, elevation: 8, overflow: 'hidden' },
+  // 116×127 rig scaled to 0.4 (≈46×51) and centred inside the 56 px button.
+  fabMascot: { position: 'absolute', left: -30, top: -35.5, transform: [{ scale: 0.4 }] },
   desktopHost: { bottom: 22, right: 20 },
   launcher: {
     width: 106, minHeight: 134,

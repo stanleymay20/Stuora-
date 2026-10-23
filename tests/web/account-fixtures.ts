@@ -49,6 +49,15 @@ export async function backend(page: Page, failProfile = false, resendStatus = 20
       return route.fulfill({ json: session() });
     }
     if (url.pathname.endsWith('/logout')) return route.fulfill({ status: 204 });
+    if (url.pathname.endsWith('/rpc/am_i_moderator')) return route.fulfill({ json: false });
+    if (url.pathname.endsWith('/moderation_notices')) return route.fulfill({ json: [] });
+    if (url.pathname.endsWith('/rpc/set_profile_discovery')) {
+      writes++;
+      const on = req.postDataJSON()?.p_discoverable === true;
+      const stamp = on ? new Date().toISOString() : null;
+      profile = { ...profile, is_discoverable: on, discoverable_consented_at: stamp };
+      return route.fulfill({ json: stamp });
+    }
     if (url.pathname.endsWith('/profiles')) {
       if (req.method() === 'GET') {
         reads++;
@@ -60,7 +69,13 @@ export async function backend(page: Page, failProfile = false, resendStatus = 20
       // Contract: callers may never send trust or authorization flags.
       expect(values).not.toHaveProperty('student_status');
       expect(values).not.toHaveProperty('account_kind');
-      if (req.method() === 'PATCH') expect(url.searchParams.get('id')).toBe(`eq.${userId}`);
+      if (req.method() === 'PATCH') {
+        expect(url.searchParams.get('id')).toBe(`eq.${userId}`);
+        // Gen-3 R-04: discovery is only changed through set_profile_discovery.
+        expect(values).not.toHaveProperty('is_discoverable');
+        expect(values).not.toHaveProperty('discoverable_consented_at');
+      }
+      if (req.method() === 'POST') values.discoverable_consented_at = values.is_discoverable ? new Date().toISOString() : null;
       profile = { ...profile, id: userId, ...values, student_status: 'unverified', account_kind: 'student', avatar_path: null, created_at: new Date().toISOString(), updated_at: new Date().toISOString() };
       return route.fulfill({ json: profile, contentType: 'application/vnd.pgrst.object+json' });
     }

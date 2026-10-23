@@ -2,6 +2,9 @@ import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { supabase } from '../backend/supabase';
 import { EditorialImage } from '../ui/EditorialImage';
+import ExternalFeed from './ExternalFeed';
+import { features } from '../backend/features';
+import { useDebouncedValue } from '../hooks/useDebouncedValue';
 
 export type CommunityCategory = 'Trips' | 'Jobs' | 'Events';
 type CommunityKind = 'trip' | 'job' | 'event';
@@ -55,9 +58,10 @@ function normalize(row: Record<string, unknown>, table: 'trip_details' | 'job_de
   };
 }
 
-export default function CommunityCatalog({ category, search, onHousing }: {
+export default function CommunityCatalog({ category, search: searchInput, preferredCity = '', onHousing }: {
   category: CommunityCategory;
   search: string;
+  preferredCity?: string;
   onHousing: () => void;
 }) {
   const [entries, setEntries] = useState<Entry[]>([]);
@@ -67,7 +71,9 @@ export default function CommunityCatalog({ category, search, onHousing }: {
   const [more, setMore] = useState(false);
   const [revision, setRevision] = useState(0);
   const [selected, setSelected] = useState<string | null>(null);
-  const [city, setCity] = useState<string>('');
+  const [cityInput, setCity] = useState<string>('');
+  const search = useDebouncedValue(searchInput, 300);
+  const city = useDebouncedValue(cityInput, 300);
   useEffect(() => { setPages(1); setSelected(null); }, [category, search, city]);
 
   useEffect(() => {
@@ -140,11 +146,13 @@ export default function CommunityCatalog({ category, search, onHousing }: {
   </View>;
 
   return <View style={styles.list}>
+    {features.externalFeeds && category !== 'Trips'
+      ? <ExternalFeed kind={category === 'Jobs' ? 'jobs' : 'events'} city={city.trim() || preferredCity} search={search} /> : null}
     <View style={styles.info}>
       <Text style={styles.sectionTitle}>Live community {category.toLowerCase()}</Text>
       <Text style={styles.muted}>Only real active records from Stuora are shown. Posting and participation are being qualified separately.</Text>
-      <TextInput value={city} onChangeText={setCity} accessibilityLabel="Filter listings by city" placeholder="Filter by city" placeholderTextColor="#9299AA" style={styles.cityInput} />
-      {city.trim() ? action('Clear city filter', () => setCity('')) : null}
+      <TextInput value={cityInput} onChangeText={setCity} accessibilityLabel="Filter listings by city" placeholder="Filter by city" placeholderTextColor="#646B80" style={styles.cityInput} />
+      {cityInput.trim() ? action('Clear city filter', () => setCity('')) : null}
       {action('Refresh listings', () => setRevision(v => v + 1))}
     </View>
     {!entries.length ? <View style={styles.empty}>

@@ -1,3 +1,7 @@
+# Latest continuation: Gen-3 staging reconciliation
+
+Read `STUORA_NEXT_CHAT_START_HERE.md` and `STUORA_GEN3_STAGING_CHECKPOINT_2026-10-23.md` first. Older branch and staging instructions below are historical.
+
 # STUORA — CANONICAL CONTINUATION & RELEASE-SECURITY HANDOFF
 
 ## 2026-10-23 — Storage denial fixture correction

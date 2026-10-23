@@ -42,7 +42,7 @@ test('Stuora Bot never fabricates jobs or implies a real generative model is act
   await page.getByRole('button', { name: 'Open Stuora Bot' }).click();
   await page.getByRole('button', { name: 'Working-student jobs' }).click();
   await expect(page.getByText(/No matching jobs were returned/)).toBeVisible();
-  await expect(page.getByText(/It does not use generative AI yet/)).toBeVisible();
+  await expect(page.getByText(/It does not use generative AI,/)).toBeVisible();
   await expect(page.getByRole('button', { name: 'Explore Jobs' })).toBeVisible();
   await page.getByRole('button', { name: 'Close Stuora Bot' }).click();
   await expect(page.getByRole('button', { name: 'Open Stuora Bot' })).toBeVisible();
@@ -146,7 +146,14 @@ test('floating Stuora Bot launcher stays above navigation, opens read-only searc
   const launcher = page.getByRole('button', { name: 'Open Stuora Bot' });
   await expect(launcher).toHaveCount(1);
   await expect(launcher).toBeVisible();
-  await expect(page.getByText('SEARCH BETA', { exact: true })).toBeVisible();
+  if (test.info().project.name === 'mobile-web') {
+    // Gen-3 audit: a standard 56 px floating button on phones, not a 106×134 character.
+    const fab = await launcher.boundingBox();
+    expect(Math.round(fab!.width)).toBe(56);
+    expect(Math.round(fab!.height)).toBe(56);
+  } else {
+    await expect(page.getByText('SEARCH BETA', { exact: true })).toBeVisible();
+  }
 
   const bounds = await launcher.boundingBox();
   const viewport = page.viewportSize();

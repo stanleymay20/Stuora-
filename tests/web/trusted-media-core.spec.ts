@@ -8,7 +8,8 @@ const stranger = '22222222-2222-4222-8222-222222222222';
 const listingId = '33333333-3333-4333-8333-333333333333';
 const imageId = '44444444-4444-4444-8444-444444444444';
 const recordId = '55555555-5555-4555-8555-555555555555';
-const output = Uint8Array.of(137,80,78,71,13,10,26,10,0,0,0,0);
+// Minimal "RIFF....WEBP" container: core.ts checks the server-encoded WebP magic.
+const output = Uint8Array.of(82,73,70,70,4,0,0,0,87,69,66,80);
 
 function fixture() {
   const calls: string[] = [];
@@ -23,13 +24,13 @@ function fixture() {
     async transcode(raw) {
       calls.push('transcode');
       expect(raw).toEqual(Uint8Array.of(1,2,3));
-      return { mime: 'image/png', data: output };
+      return { mime: 'image/webp', data: output };
     },
     async storeSanitized(path, data, mime) {
       calls.push('store');
       expect(data).toEqual(output);
-      expect(mime).toBe('image/png');
-      expect(path).toBe(`${owner}/${listingId}/${imageId}.png`);
+      expect(mime).toBe('image/webp');
+      expect(path).toBe(`${owner}/${listingId}/${imageId}.webp`);
       if (config.rejectUpload) throw new Error('Storage unavailable');
     },
     async persistMedia(id, path, sort_order) {
@@ -122,7 +123,7 @@ test('owner removal deletes public bytes before metadata and leaves metadata on 
 });
 test('non-image and unprocessed outputs are rejected before public persistence', async () => {
   const f=fixture();
-  f.deps.transcode = async () => ({ mime:'image/png', data: Uint8Array.of(60,115,118,103) });
+  f.deps.transcode = async () => ({ mime:'image/webp', data: Uint8Array.of(60,115,118,103) });
   await expect(upload(f)).rejects.toMatchObject({ code:'PROCESSING_REJECTED' });
   expect(f.calls).toEqual(['lookup','list']);
 });

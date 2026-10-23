@@ -156,8 +156,8 @@ for (const inheritedGrants of [false, true]) {
       await deny(a, 'update public.student_benefits set verified_at = now()');
       await deny(a, `insert into public.benefit_redemptions (benefit_id, user_id, savings_cents) select id, '${a}', 999999 from public.student_benefits`);
       await deny(a, `insert into public.reports (reporter_id, reported_user_id, reason) values ('${b}', '${c}', 'spam')`);
-      await count('authenticated', a, `insert into public.reports (reporter_id, reported_user_id, reason) values ('${a}', '${c}', 'spam') returning *`, 1);
-      await count('authenticated', b, 'select * from public.reports', 0);
+      await count('authenticated', a, `insert into public.reports (reporter_id, reported_user_id, reason) values ('${a}', '${c}', 'spam') returning id`, 1);
+      await count('authenticated', b, 'select id from public.reports', 0);
       // Existing bookmark table RLS: saved rows belong exclusively to their user.
       await count('authenticated', b, "insert into public.saved_listings (user_id,listing_id) values ('" + b + "','" + house + "') returning *", 1);
       await count('authenticated', b, "select * from public.saved_listings where listing_id='" + house + "'", 1);
@@ -222,8 +222,21 @@ for (const inheritedGrants of [false, true]) {
       const { rows: differentListing } = await as('service_role', a,
         `select public.consume_listing_photo_attempt('${a}','${draft}') as allowed`);
       assert.equal(differentListing[0].allowed, false); assertions++;
-      const { rows: anotherStudent } = await as('service_role', b,
+      // Gen-3 N-02: naming someone else's listing is refused AND never
+      // touches that listing's shared window; another student's own
+      // (listing-free) request is still admitted.
+      const { rows: listingWindowBefore } = await db.query(
+        `select used from private.listing_photo_attempt_windows
+         where scope='listing_hour' and scope_key='${house}'`);
+      const { rows: anotherStudentForeign } = await as('service_role', b,
         `select public.consume_listing_photo_attempt('${b}','${house}') as allowed`);
+      assert.equal(anotherStudentForeign[0].allowed, false); assertions++;
+      const { rows: listingWindowAfter } = await db.query(
+        `select used from private.listing_photo_attempt_windows
+         where scope='listing_hour' and scope_key='${house}'`);
+      assert.deepEqual(listingWindowAfter, listingWindowBefore); assertions++;
+      const { rows: anotherStudent } = await as('service_role', b,
+        `select public.consume_listing_photo_attempt('${b}', null) as allowed`);
       assert.equal(anotherStudent[0].allowed, true); assertions++;
       const { rows: persistedAttempts } = await db.query(
         `select used from private.listing_photo_attempt_windows

@@ -387,7 +387,7 @@ for (const category of ['Housing', 'Marketplace']) {
     await page.getByRole('button', { name: 'View ' + category + ' save-test' }).click();
     await expect(page.getByRole('button', { name: 'Remove from saved', exact: true })).toBeVisible();
     await page.getByRole('button', { name: 'Remove from saved', exact: true }).click();
-    expect(data.saved.has(id)).toBe(false);
+    await expect.poll(() => data.saved.has(id)).toBe(false);
     await expect(page.getByText(/No saved active listings/)).toBeVisible();
   });
 }

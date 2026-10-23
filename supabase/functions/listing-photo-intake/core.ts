@@ -14,7 +14,7 @@ export class MediaRejection extends Error {
 }
 export type ListingAccess = { id: string; owner_id: string; kind: string; status: string };
 export type MediaRecord = { id: string; listing_id: string; object_path: string; sort_order: number; created_at: string };
-export type TranscodedImage = { data: Uint8Array; mime: 'image/png' };
+export type TranscodedImage = { data: Uint8Array; mime: 'image/webp' };
 export interface TrustedMediaDeps {
   getListing(id: string): Promise<ListingAccess | null>;
   getPhotos(id: string): Promise<MediaRecord[]>;
@@ -45,12 +45,14 @@ export async function publishListingPhoto(
     throw new MediaRejection('PHOTO_LIMIT', 409, 'Listing already has six photos');
   // This JPEG/PNG/WebP decoding+re-encoding happens only on the trusted server.
   const result = await deps.transcode(raw);
-  if (result.mime !== 'image/png' || !result.data.length || result.data.length > MAX_OUTPUT_BYTES
-      || ![137,80,78,71].every((n,i) => result.data[i] === n))
+  // Stored photos are always server-encoded WebP ("RIFF....WEBP").
+  if (result.mime !== 'image/webp' || result.data.length < 12 || result.data.length > MAX_OUTPUT_BYTES
+      || ![82,73,70,70].every((n,i) => result.data[i] === n)
+      || ![87,69,66,80].every((n,i) => result.data[i + 8] === n))
     throw new MediaRejection('PROCESSING_REJECTED', 422, 'Photo processing failed');
   const imageId = newId();
   if (!validUuid(imageId)) throw new MediaRejection('INVALID_ID', 500, 'Could not generate image identity');
-  const path = `${studentId}/${listingId}/${imageId}.png`;
+  const path = `${studentId}/${listingId}/${imageId}.webp`;
   const sortOrder = Array.from({ length: PHOTO_LIMIT }, (_, index) => index)
     .find(index => !existing.some(value => value.sort_order === index)) ?? PHOTO_LIMIT;
   // An uncertain Storage error may still have written bytes (e.g. timeout

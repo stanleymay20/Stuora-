@@ -11,9 +11,14 @@ import FloatingStuoraBot from './src/ai/FloatingStuoraBot';
 import { useAuth } from './src/account/AuthProvider';
 import { Icon, StuoraMark } from './src/ui/Brand';
 import { EditorialImage } from './src/ui/EditorialImage';
+import LegalPage, { LegalLinks, type LegalDocument } from './src/legal/LegalPage';
+import { isPlausibleCity } from './src/ai/botCore';
+import { features } from './src/backend/features';
+import { lookupCity, type CityCandidate, ServiceError } from './src/backend/externalData';
 import {
   Platform,
   Image,
+  Linking,
   Modal,
   Pressable,
   SafeAreaView,
@@ -26,20 +31,24 @@ import {
   View,
 } from 'react-native';
 
-type Tab = 'home' | 'explore' | 'create' | 'messages' | 'profile';
+type Tab = 'home' | 'explore' | 'create' | 'messages' | 'profile' | 'legal';
 type Category = 'Housing' | 'Marketplace' | 'Trips' | 'Jobs' | 'Events' | 'People' | 'Groups';
 type PostCategory = 'Housing' | 'Marketplace';
-type Destination = { tab: Tab; category: Category; draftType: PostCategory };
+type Destination = { tab: Tab; category: Category; draftType: PostCategory; legal: LegalDocument };
+const legalRoutes: LegalDocument[] = ['privacy', 'terms', 'imprint', 'safety'];
+const hasOwn = (object: object, key: string) => Object.prototype.hasOwnProperty.call(object, key);
 const WEB_ROUTE_KEY = 'stuora';
 const categoryRoutes: Record<string, Category> = {
   housing: 'Housing', marketplace: 'Marketplace', trips: 'Trips',
   jobs: 'Jobs', events: 'Events', people: 'People', groups: 'Groups',
 };
 function readWebDestination(): Destination {
-  const fallback: Destination = { tab: 'home', category: 'Housing', draftType: 'Marketplace' };
+  const fallback: Destination = { tab: 'home', category: 'Housing', draftType: 'Marketplace', legal: 'privacy' };
   if (Platform.OS !== 'web' || typeof window === 'undefined') return fallback;
   const route = new URLSearchParams(window.location.search).get(WEB_ROUTE_KEY)?.toLowerCase() ?? '';
-  if (route in categoryRoutes) return { ...fallback, tab: 'explore', category: categoryRoutes[route] };
+  // Gen-3 audit: `in` also matched inherited keys such as ?stuora=constructor and crashed rendering.
+  if (hasOwn(categoryRoutes, route)) return { ...fallback, tab: 'explore', category: categoryRoutes[route] };
+  if ((legalRoutes as string[]).includes(route)) return { ...fallback, tab: 'legal', legal: route as LegalDocument };
   if (route === 'explore') return { ...fallback, tab: 'explore' };
   if (route === 'messages') return { ...fallback, tab: 'messages' };
   if (route === 'profile') return { ...fallback, tab: 'profile' };
@@ -47,7 +56,8 @@ function readWebDestination(): Destination {
   if (route === 'create-marketplace' || route === 'create') return { ...fallback, tab: 'create' };
   return fallback;
 }
-function routeForDestination(tab: Tab, category: Category, draftType: PostCategory): string | null {
+function routeForDestination(tab: Tab, category: Category, draftType: PostCategory, legal: LegalDocument): string | null {
+  if (tab === 'legal') return legal;
   if (tab === 'explore') return category.toLowerCase();
   if (tab === 'create') return draftType === 'Housing' ? 'create-housing' : 'create-marketplace';
   if (tab === 'profile' || tab === 'messages') return tab;
@@ -57,8 +67,8 @@ function routeForDestination(tab: Tab, category: Category, draftType: PostCatego
 const BRAND = {
   ink: '#11162F',
   inkSoft: '#252B4A',
-  muted: '#747B91',
-  subtle: '#9AA1B5',
+  muted: '#555C72',
+  subtle: '#646B80',
   line: '#E9EAF1',
   soft: '#FAFAFD',
   purple: '#7048FF',
@@ -105,7 +115,7 @@ function CategoryTile({ item, onPress }: { item: (typeof categories)[number]; on
       accessibilityLabel={`Browse ${item.name}`}
       accessibilityHint={upcoming ? 'Browsing available; posting and participation are coming soon' : undefined}
       onPress={onPress}
-      style={({ pressed }) => [styles.categoryTile, width >= 960 && styles.categoryTileDesktop, pressed && styles.pressed]}
+      style={({ pressed }) => [styles.categoryTile, width < 360 && styles.categoryTileNarrow, width >= 960 && styles.categoryTileDesktop, pressed && styles.pressed]}
     >
       <View style={styles.categoryArtWrap}>
         <EditorialImage kind={item.name === 'Groups' ? 'Community' : item.name} style={styles.categoryPhoto} label={`Stuora editorial image for ${item.name}`} />
@@ -126,7 +136,7 @@ function SearchField({ value, onChangeText, placeholder, onSubmit, onClear, clea
         onSubmitEditing={onSubmit}
         placeholder={placeholder}
         accessibilityLabel={label ?? placeholder}
-        placeholderTextColor="#A2A8B8"
+        placeholderTextColor="#646B80"
         returnKeyType="search"
         style={styles.searchInput}
       />
@@ -175,7 +185,7 @@ export default function App({ onOpenSavings }: { onOpenSavings: () => void }) {
       .catch(() => { /* A storage failure leaves profile city or All cities available. */ });
     return () => { alive = false; };
   }, [cityStorageKey]);
-  const showCityPicker = () => { setCityDraft(preferredCity); setCityError(''); setCityPickerOpen(true); };
+  const showCityPicker = () => { setCityDraft(preferredCity); setCityError(''); setCityCandidates(null); setCityPickerOpen(true); };
   const setSelectedCity = (city: string) => {
     citySelectionVersion.current += 1;
     setCityPreference(city);
@@ -184,15 +194,32 @@ export default function App({ onOpenSavings }: { onOpenSavings: () => void }) {
       // Preference remains valid for this session even if device storage is unavailable.
     });
   };
+  const [cityCandidates, setCityCandidates] = useState<CityCandidate[] | null>(null);
+  const [cityChecking, setCityChecking] = useState(false);
   const saveCity = () => {
     const city = cityDraft.trim().replace(/\s+/g, ' ');
-    if (city.length < 2 || city.length > 120 || !/^[\p{L}\p{M} .'-]+$/u.test(city)) {
-      setCityError('Enter a city name between 2 and 120 characters.');
+    // Gen-3 audit D-16: the picker and Stuora Bot share one plausibility rule.
+    if (city.length > 80 || !isPlausibleCity(city)) {
+      setCityError('Enter a real city name, for example Köln or Halle (Saale).');
       return;
     }
     setSelectedCity(city);
   };
+  const checkCity = async () => {
+    const city = cityDraft.trim().replace(/\s+/g, ' ');
+    if (!isPlausibleCity(city)) { setCityError('Enter a real city name, for example Köln or Halle (Saale).'); return; }
+    setCityChecking(true); setCityError(''); setCityCandidates(null);
+    try {
+      const reply = await lookupCity(city);
+      setCityCandidates(reply.candidates);
+      if (!reply.candidates.length) setCityError('No matching city found. Check the spelling or save it anyway.');
+    } catch (error) {
+      setCityError(error instanceof ServiceError && error.code === 'AUTH' ? 'Sign in to check a city name.' : error instanceof ServiceError ? error.message : 'City check is unavailable right now.');
+    } finally { setCityChecking(false); }
+  };
   const [draftType, setDraftType] = useState<PostCategory>(initialWebDestination.draftType);
+  const [legalDocument, setLegalDocument] = useState<LegalDocument>(initialWebDestination.legal);
+  const openLegal = (doc: LegalDocument) => { setLegalDocument(doc); setTab('legal'); };
   const popstatePending = useRef(false);
   const exploreScrollRef = useRef<ScrollView>(null);
   const [popstateRevision, setPopstateRevision] = useState(0);
@@ -205,6 +232,7 @@ export default function App({ onOpenSavings }: { onOpenSavings: () => void }) {
       setTab(route.tab);
       setCategory(route.category);
       setDraftType(route.draftType);
+      setLegalDocument(route.legal);
       setSearch('');
       setPopstateRevision(value => value + 1);
     };
@@ -218,14 +246,14 @@ export default function App({ onOpenSavings }: { onOpenSavings: () => void }) {
       popstatePending.current = false;
       return;
     }
-    const next = routeForDestination(tab, category, draftType);
+    const next = routeForDestination(tab, category, draftType, legalDocument);
     const url = new URL(window.location.href);
     if (url.searchParams.get(WEB_ROUTE_KEY) === next) return;
     if (next) url.searchParams.set(WEB_ROUTE_KEY, next);
     else url.searchParams.delete(WEB_ROUTE_KEY);
     // Preserve existing callback parameters and hash for Supabase Auth.
     window.history.pushState(null, '', url.pathname + url.search + url.hash);
-  }, [tab, category, draftType, popstateRevision]);
+  }, [tab, category, draftType, legalDocument, popstateRevision]);
   const [preferredConversationId, setPreferredConversationId] = useState<string | null>(null);
 
   useEffect(() => { exploreScrollRef.current?.scrollTo({ y: 0, animated: false }); }, [category]);
@@ -271,7 +299,7 @@ export default function App({ onOpenSavings }: { onOpenSavings: () => void }) {
     <View style={styles.contentFrame}>
       {tab === 'home' && (
         <ScrollView testID="home-scroll" style={styles.pageScroll} contentContainerStyle={[styles.page, isDesktop && styles.pageDesktop]} showsVerticalScrollIndicator={true}>
-          <View style={[styles.hero, isDesktop ? styles.heroDesktop : styles.heroMobile]}>
+          <View style={[styles.hero, isDesktop ? styles.heroDesktop : styles.heroMobile, width < 360 && styles.heroNarrow]}>
             {/* Global student platform: never imply a particular city when none was selected. */}
             <View pointerEvents="none" style={styles.heroOrbOne} />
             <View pointerEvents="none" style={styles.heroOrbTwo} />
@@ -280,7 +308,7 @@ export default function App({ onOpenSavings }: { onOpenSavings: () => void }) {
             ) : null}
             <View style={styles.heroCopy}>
               <Text style={styles.eyebrow}>STUDENT LIFE, CONNECTED</Text>
-              <Text style={[styles.heroTitle, isDesktop ? styles.heroTitleDesktop : styles.heroTitleMobile]}>Find your people.{"\n"}Find your place.{"\n"}Make the most of student life.</Text>
+              <Text style={[styles.heroTitle, isDesktop ? styles.heroTitleDesktop : styles.heroTitleMobile, width < 360 && styles.heroTitleNarrow]}>Find your people.{"\n"}Find your place.{"\n"}Make the most of student life.</Text>
               <Text style={styles.heroText}>Housing, things, trips, jobs and student communities — all in one trusted local network.</Text>
               <View style={styles.heroSearchWrap}>
                 <SearchField value={search} onChangeText={setSearch} label="Search housing listings" placeholder="Search housing listings…" onSubmit={() => { setCategory('Housing'); setTab('explore'); }} />
@@ -301,6 +329,7 @@ export default function App({ onOpenSavings }: { onOpenSavings: () => void }) {
 
           <View style={styles.sectionHeaderInline}><Text style={styles.sectionTitle}>Marketplace</Text><Pressable accessibilityRole="button" accessibilityLabel="See all marketplace" onPress={() => goToCategory('Marketplace')} style={styles.seeAllHitArea}><Text style={styles.linkText}>See all</Text></Pressable></View>
           <ListingWorkspace key={`home-market-${session?.user.id ?? 'public'}`} category="Marketplace" preferredCity={preferredCity} preview onAccount={() => setTab('profile')} onMessage={openListingConversation} onCreate={() => startListing('Marketplace')} />
+          <LegalLinks onNavigate={openLegal} />
         </ScrollView>
       )}
 
@@ -330,7 +359,7 @@ export default function App({ onOpenSavings }: { onOpenSavings: () => void }) {
               <SearchField value={search} onChangeText={setSearch} onClear={() => setSearch('')} clearLabel={`Clear ${category.toLowerCase()} search`} label={category === 'People' ? 'Search people by name' : `Search ${category.toLowerCase()} listings`} placeholder={`Search ${category.toLowerCase()}…`} />
             </View>
           ) : null}
-          {category === 'Housing' || category === 'Marketplace' ? <ListingWorkspace key={`${category}-${session?.user.id ?? 'public'}`} category={category} preferredCity={preferredCity} search={search} onAccount={() => setTab('profile')} onMessage={openListingConversation} onCreate={() => startListing(category)} onClearSearch={() => setSearch('')} /> : category === 'People' ? <PeopleDirectory key={session?.user.id ?? 'public'} search={search} onAccount={() => setTab('profile')} /> : category === 'Groups' ? <GroupWorkspace key={session?.user.id ?? 'public'} onAccount={() => setTab('profile')} /> : <CommunityCatalog key={category} category={category} search={search} onHousing={() => goToCategory('Housing')} />}
+          {category === 'Housing' || category === 'Marketplace' ? <ListingWorkspace key={`${category}-${session?.user.id ?? 'public'}`} category={category} preferredCity={preferredCity} search={search} onAccount={() => setTab('profile')} onMessage={openListingConversation} onCreate={() => startListing(category)} onClearSearch={() => setSearch('')} /> : category === 'People' ? <PeopleDirectory key={session?.user.id ?? 'public'} search={search} onAccount={() => setTab('profile')} /> : category === 'Groups' ? <GroupWorkspace key={session?.user.id ?? 'public'} onAccount={() => setTab('profile')} /> : <CommunityCatalog key={category} category={category} search={search} preferredCity={preferredCity} onHousing={() => goToCategory('Housing')} />}
         </ScrollView>
       )}
 
@@ -365,7 +394,13 @@ export default function App({ onOpenSavings }: { onOpenSavings: () => void }) {
 
       {tab === 'profile' && (
         <ScrollView testID="profile-scroll" style={styles.pageScroll} contentContainerStyle={[styles.page, styles.profilePage]} showsVerticalScrollIndicator={true}>
-          <AccountPanel />
+          <AccountPanel onLegal={openLegal} />
+        </ScrollView>
+      )}
+
+      {tab === 'legal' && (
+        <ScrollView testID="legal-scroll" style={styles.pageScroll} contentContainerStyle={[styles.page, styles.profilePage]} showsVerticalScrollIndicator={true}>
+          <LegalPage document={legalDocument} onNavigate={openLegal} />
         </ScrollView>
       )}
     </View>
@@ -449,6 +484,20 @@ export default function App({ onOpenSavings }: { onOpenSavings: () => void }) {
               value={cityDraft} onChangeText={setCityDraft} onSubmitEditing={saveCity}
               placeholder="Enter a city" placeholderTextColor={BRAND.subtle} style={styles.cityInput} />
             {cityError ? <Text accessibilityRole="alert" style={styles.cityError}>{cityError}</Text> : null}
+            {cityCandidates?.length ? (
+              <View style={styles.cityCandidates}>
+                {cityCandidates.map(c => (
+                  <Pressable key={`${c.name}|${c.region}|${c.countryCode}`} accessibilityRole="button" accessibilityLabel={`Use ${c.name}, ${c.region || c.country}`}
+                    onPress={() => setSelectedCity(c.name)} style={styles.cityCandidate}>
+                    <Text style={styles.cityCandidateName}>{c.name}</Text>
+                    <Text style={styles.cityCandidateMeta}>{[c.region, c.country].filter(Boolean).join(', ')}</Text>
+                  </Pressable>
+                ))}
+                <Pressable accessibilityRole="link" onPress={() => void Linking.openURL('https://www.openstreetmap.org/copyright')}>
+                  <Text style={styles.cityAttribution}>City data © OpenStreetMap contributors</Text>
+                </Pressable>
+              </View>
+            ) : null}
             <View style={styles.cityActions}>
               <Pressable accessibilityRole="button" accessibilityLabel="Show all cities"
                 onPress={() => setSelectedCity('__all__')} style={styles.cityActionSecondary}>
@@ -458,6 +507,12 @@ export default function App({ onOpenSavings }: { onOpenSavings: () => void }) {
                 onPress={() => setCityPickerOpen(false)} style={styles.cityActionSecondary}>
                 <Text style={styles.cityActionSecondaryText}>Cancel</Text>
               </Pressable>
+              {features.cityLookup ? (
+                <Pressable accessibilityRole="button" accessibilityLabel="Check city name" disabled={cityChecking}
+                  onPress={() => void checkCity()} style={styles.cityActionSecondary}>
+                  <Text style={styles.cityActionSecondaryText}>{cityChecking ? 'Checking…' : 'Check city'}</Text>
+                </Pressable>
+              ) : null}
               <Pressable accessibilityRole="button" accessibilityLabel="Save student city"
                 onPress={saveCity} style={styles.cityActionPrimary}><Text style={styles.cityActionPrimaryText}>Save city</Text></Pressable>
             </View>
@@ -519,13 +574,18 @@ const styles = StyleSheet.create({
   logoLetterCompact: { fontSize: 18 },
   brandName: { color: BRAND.ink, fontSize: 26, fontWeight: '900', letterSpacing: -1.2 },
   locationChip: { backgroundColor: BRAND.white, borderWidth: 1, borderColor: BRAND.line, paddingHorizontal: 11, paddingVertical: 8, borderRadius: 999, maxWidth: 150 },
-  locationChipMobile: { backgroundColor: BRAND.white, borderWidth: 1, borderColor: BRAND.line, paddingHorizontal: 7, paddingVertical: 8, borderRadius: 999, maxWidth: 94 },
+  locationChipMobile: { backgroundColor: BRAND.white, borderWidth: 1, borderColor: BRAND.line, paddingHorizontal: 7, paddingVertical: 8, borderRadius: 999, maxWidth: 94, minHeight: 36, justifyContent: 'center' },
   cityModalBackdrop: { flex: 1, backgroundColor: 'rgba(17,22,47,0.35)', alignItems: 'center', justifyContent: 'center', padding: 18 },
   cityModalCard: { backgroundColor: BRAND.white, borderRadius: 20, padding: 22, width: '100%', maxWidth: 450, gap: 13 },
   cityModalTitle: { fontSize: 21, fontWeight: '900', color: BRAND.ink },
   cityModalExplanation: { fontSize: 13, lineHeight: 20, color: BRAND.muted },
   cityInput: { minHeight: 48, borderRadius: 12, paddingHorizontal: 14, borderWidth: 1, borderColor: BRAND.line, fontSize: 15, color: BRAND.ink },
   cityError: { fontSize: 12, color: '#B21F44' },
+  cityCandidates: { gap: 6 },
+  cityCandidate: { minHeight: 44, borderRadius: 11, borderWidth: 1, borderColor: BRAND.line, paddingHorizontal: 12, paddingVertical: 8, justifyContent: 'center' },
+  cityCandidateName: { fontSize: 14, fontWeight: '800', color: BRAND.ink },
+  cityCandidateMeta: { fontSize: 12, color: BRAND.muted },
+  cityAttribution: { fontSize: 11, color: BRAND.muted, textDecorationLine: 'underline', paddingVertical: 6 },
   cityActions: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'flex-end', gap: 8 },
   cityActionSecondary: { paddingHorizontal: 12, paddingVertical: 12, borderRadius: 11, backgroundColor: BRAND.purpleSoft },
   cityActionSecondaryText: { fontSize: 12, fontWeight: '800', color: BRAND.purple },
@@ -543,6 +603,7 @@ const styles = StyleSheet.create({
   hero: { backgroundColor: BRAND.ink, borderRadius: 24, padding: 22, overflow: 'hidden', minHeight: 190, justifyContent: 'space-between' },
   heroDesktop: { minHeight: 292, padding: 34, flexDirection: 'row', alignItems: 'center' },
   heroMobile: { minHeight: 312, padding: 20, justifyContent: 'flex-end' },
+  heroNarrow: { padding: 16, minHeight: 280 },
   heroCopy: { flex: 1, maxWidth: 670, zIndex: 2 },
   heroOrbOne: { position: 'absolute', width: 260, height: 260, borderRadius: 130, backgroundColor: '#2B376D', right: -70, top: -120, opacity: 0.72 },
   heroOrbTwo: { position: 'absolute', width: 180, height: 180, borderRadius: 90, backgroundColor: '#4C2B8A', right: 120, bottom: -135, opacity: 0.55 },
@@ -550,6 +611,7 @@ const styles = StyleSheet.create({
   heroTitle: { color: BRAND.white, fontSize: 31, lineHeight: 36, fontWeight: '900', letterSpacing: -1.2 },
   heroTitleDesktop: { fontSize: 34, lineHeight: 40 },
   heroTitleMobile: { fontSize: 24, lineHeight: 29, letterSpacing: -0.6 },
+  heroTitleNarrow: { fontSize: 21, lineHeight: 26 },
   heroText: { color: '#D3D7E7', marginTop: 11, fontSize: 14, lineHeight: 21, maxWidth: 540 },
   heroSearchWrap: { marginTop: 18, width: '100%', maxWidth: 570 },
   heroCityCard: { alignSelf: 'flex-start', backgroundColor: '#202A55', borderWidth: 1, borderColor: '#34406F', borderRadius: 20, padding: 16, minWidth: 142, alignItems: 'center', zIndex: 2, marginTop: 18 },
@@ -572,6 +634,7 @@ const styles = StyleSheet.create({
   sectionHint: { color: BRAND.subtle, fontSize: 11, marginTop: 2 },
   categoryGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   categoryTile: { flexGrow: 0, flexBasis: '22%', backgroundColor: BRAND.white, borderWidth: 1, borderColor: BRAND.line, borderRadius: 17, paddingBottom: 12, alignItems: 'center', gap: 8, overflow: 'hidden', shadowColor: '#10162F', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.04, shadowRadius: 8, elevation: 1 },
+  categoryTileNarrow: { flexBasis: '30%', flexGrow: 1 },
   categoryTileDesktop: { flexBasis: '13%', minHeight: 121, justifyContent: 'flex-start' },
   categoryArtWrap: { width: '100%', overflow: 'hidden', backgroundColor: '#F1EDFF', position: 'relative', height: 74 },
   categoryPhoto: { width: '100%', height: 74, backgroundColor: '#F4F1FF' },

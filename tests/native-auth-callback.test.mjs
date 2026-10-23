@@ -13,50 +13,44 @@ assert.ok(!(compiled.diagnostics??[]).some(x=>x.category===ts.DiagnosticCategory
 const module={exports:{}};
 runInNewContext(compiled.outputText,{module,exports:module.exports,URL,URLSearchParams});
 const parse=module.exports.parseStuoraNativeAuthCallback;
-const access='eyJhbGciOiJIUzI1NiJ9.example.signature',refresh='refresh_token-valid123';
-const valid='stuora://auth-callback#access_token='+access+'&refresh_token='+refresh+'&token_type=bearer';
-test('Stuora implicit native confirmation and recovery callbacks use only own registered scheme',()=>{
- assert.equal(parse(valid).accessToken,access);
- assert.equal(parse(valid).refreshToken,refresh);
- assert.equal(parse(valid).recovery,false);
- assert.equal(parse(valid+'&type=recovery').recovery,true);
- assert.equal(parse(valid+'&type=signup').recovery,false);
- assert.equal(parse('stuora://auth-callback?access_token='+access+'&refresh_token='+refresh).accessToken,access);
+const code='5f8a2d0c-4b1e-4c9a-9a51-0e3f6c7d8b9a';
+const valid='stuora://auth-callback?code='+code;
+test('PKCE native callbacks yield only a one-time code from the registered scheme',()=>{
+ assert.deepEqual({...parse(valid)},{code});
+ assert.deepEqual({...parse('stuora://auth-callback/?code='+code)},{code});
 });
-test('native Auth parser rejects foreign routes and URLs even with apparently valid credentials',()=>{
- const other=[
-  'https://phishing.example/sign-in#access_token='+access+'&refresh_token='+refresh,
-  'https://uptjcspizukpjcoayhtn.supabase.co/auth/v1/verify#access_token='+access+'&refresh_token='+refresh,
-  'other-app://auth-callback#access_token='+access+'&refresh_token='+refresh,
-  'stuora://other-route#access_token='+access+'&refresh_token='+refresh,
-  'stuora://auth-callback/other#access_token='+access+'&refresh_token='+refresh,
-  'stuora://user:pass@auth-callback#access_token='+access+'&refresh_token='+refresh,
-  'stuora://auth-callback:8000#access_token='+access+'&refresh_token='+refresh,
-  'stuora://auth-callback?type=signup#access_token='+access+'&refresh_token='+refresh,
- ];
- for(const value of other)assert.equal(parse(value),null,value.slice(0,80));
+test('implicit-flow tokens are refused even on the registered route (login CSRF)',()=>{
+ const access='eyJhbGciOiJIUzI1NiJ9.example.signature',refresh='refresh_token-valid123';
+ for(const v of [
+  'stuora://auth-callback#access_token='+access+'&refresh_token='+refresh,
+  'stuora://auth-callback?access_token='+access+'&refresh_token='+refresh,
+  valid+'&access_token='+access,
+  valid+'#access_token='+access,
+ ]) assert.equal(parse(v),null,v.slice(0,80));
 });
-test('ambiguous, invalid and incomplete callbacks never supply a session',()=>{
- const inputs=[
-   null,undefined,'', 'stuora://auth-callback',
-   'stuora://auth-callback?code=unhandled-pkce-code',
-   'stuora://auth-callback#access_token=only',
-   valid+'&access_token=another',
-   valid+'&refresh_token=another',
-   valid+'&type=recovery&type=signup',
-   valid+'&token_type=mac',
-   valid+'&error=access_denied',
-   valid.replace('access_token='+access,'access_token='),
-   valid.replace('refresh_token='+refresh,'refresh_token=a%20b'),
-   ' '+valid, valid+' ',
-   valid+'&access_token='+('a'.repeat(17000))
- ];
- for(const input of inputs)assert.equal(parse(input),null,String(input).slice(0,100));
+test('foreign, ambiguous and malformed callbacks never reach the exchange',()=>{
+ for(const v of [
+  null,undefined,'','stuora://auth-callback',
+  'https://phishing.example/cb?code='+code,
+  'other-app://auth-callback?code='+code,
+  'stuora://other-route?code='+code,
+  'stuora://auth-callback/other?code='+code,
+  'stuora://user:pass@auth-callback?code='+code,
+  'stuora://auth-callback:8000?code='+code,
+  valid+'&code=another',
+  valid+'&error=access_denied',
+  'stuora://auth-callback?code=a%20b',
+  'stuora://auth-callback?code=short',
+  ' '+valid, valid+' ',
+  'stuora://auth-callback?code='+'a'.repeat(5000),
+ ]) assert.equal(parse(v),null,String(v).slice(0,100));
 });
-test('AuthProvider uses audited parser; native callback cannot skip it',()=>{
+test('AuthProvider exchanges the code and the client is configured for PKCE',()=>{
  const provider=readFileSync('src/account/AuthProvider.tsx','utf8');
  assert.match(provider,/parseStuoraNativeAuthCallback\(raw\)/);
- assert.match(provider,/setSession\(\{\s*access_token: callback.accessToken/);
+ assert.match(provider,/exchangeCodeForSession\(callback\.code\)/);
+ assert.doesNotMatch(provider,/auth\.setSession\(/);
  assert.doesNotMatch(provider,/new URL\(raw\)/);
+ assert.match(readFileSync('src/backend/supabase.ts','utf8'),/flowType: 'pkce'/);
  assert.match(readFileSync('app.json','utf8'),/"scheme": "stuora"/);
 });

@@ -4,7 +4,8 @@ on:
   push:
     branches: [main, feat/mvp-shell]
   pull_request:
-    branches: [main]
+    # Also gate stacked PRs that target a feature branch (e.g. remediation PRs).
+    branches: [main, 'feat/**']
 
 jobs:
   # Independent authorization gate: never hide RLS failures behind an npm audit
@@ -46,6 +47,20 @@ jobs:
       - name: Test real WASM JPEG PNG WebP media codecs (local Deno runtime)
         run: deno test --allow-read --config supabase/functions/listing-photo-intake/deno.json supabase/functions/listing-photo-intake/processor.test.ts
 
+      - name: Typecheck account deletion, AI assistant and external data Edge Functions
+        shell: bash
+        run: |
+          deno --version
+          set +e
+          deno check --config supabase/functions/deno.json supabase/functions/delete-account/index.ts supabase/functions/stuora-assistant/index.ts supabase/functions/external-data/index.ts 2>&1 | tee /tmp/deno-check.log
+          status=${PIPESTATUS[0]}
+          # Surface type errors as annotations so they are readable without raw logs.
+          if [ "$status" -ne 0 ]; then sed 's/\x1b\[[0-9;]*m//g' /tmp/deno-check.log | grep -E 'TS[0-9]+|error|at file' | head -30 | sed 's/^/::error::/'; fi
+          exit $status
+
+      - name: Test account deletion, AI grounding, provider licensing and intent parity
+        run: deno test --allow-read --config supabase/functions/deno.json supabase/functions/_shared supabase/functions/delete-account supabase/functions/external-data supabase/functions/stuora-assistant
+
   verify:
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -73,6 +88,9 @@ jobs:
       - name: Audit production dependency baseline
         run: node scripts/audit-production.mjs
 
+      - name: Bound Edge JSON bodies and reject stalled uploads
+        run: node --test tests/edge-http.test.mjs
+
       - name: Test environment isolation
         run: node --test tests/backend-config.test.mjs
 
@@ -91,8 +109,17 @@ jobs:
       - name: Gate real two-student acceptance to exact approved staging preview
         run: node --test tests/hosted-preview-identity.test.mjs
 
-      - name: Reject malicious native Auth deep links
-        run: node --test tests/native-auth-callback.test.mjs
+      - name: Reject malicious native Auth deep links (PKCE only)
+        run: node --test tests/native-auth-callback.test.mjs tests/native-pkce.test.mjs
+
+      - name: Refuse production builds with placeholder legal pages
+        run: node --test tests/legal-config.test.mjs
+
+      - name: Test secret scanner
+        run: node --test tests/secret-scan.test.mjs
+
+      - name: Scan repository for committed secrets
+        run: node scripts/scan-secrets.mjs
 
       - name: Verify staging-only Auth template rollout procedure
         run: node --test tests/auth-branding-rollout.test.mjs
@@ -112,6 +139,9 @@ jobs:
 
       - name: Export web build
         run: npm run export:web
+
+      - name: Scan web bundle for leaked secrets
+        run: node scripts/scan-secrets.mjs
 
       - name: Install browser for account regression tests
         run: npx playwright install --with-deps chromium

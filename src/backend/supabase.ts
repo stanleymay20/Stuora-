@@ -1,4 +1,6 @@
 import 'react-native-url-polyfill/auto';
+import * as ExpoCrypto from 'expo-crypto';
+import { installNativePkceCrypto } from '../account/nativePkceCrypto';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
 import { createClient, processLock } from '@supabase/supabase-js';
@@ -13,12 +15,19 @@ const { url, key } = validateBackendConfig({
   key: process.env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY,
   webOrigin: process.env.EXPO_PUBLIC_STUORA_WEB_ORIGIN,
 }, Platform.OS === 'web' && typeof window !== 'undefined' ? window.location.origin : undefined);
+if (Platform.OS !== 'web') {
+  installNativePkceCrypto(globalThis, ExpoCrypto.getRandomValues, data =>
+    ExpoCrypto.digest(ExpoCrypto.CryptoDigestAlgorithm.SHA256, data));
+}
 export const supabase = createClient<Database>(url, key, {
   auth: {
     storage: AsyncStorage,
     autoRefreshToken: true,
     persistSession: true,
     detectSessionInUrl: Platform.OS === 'web',
+    // Gen-3 audit: PKCE binds every email link to the device that requested it
+    // (prevents login CSRF via an attacker's implicit-flow #access_token link).
+    flowType: 'pkce',
     lock: processLock,
   },
 });
