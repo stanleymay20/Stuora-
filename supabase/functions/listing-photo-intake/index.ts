@@ -85,7 +85,7 @@ async function boundedMultipart(req: Request, limit: number, deadlineMs = BODY_R
     while (true) {
       const remaining = deadline - Date.now();
       if (remaining <= 0) throw new MediaRejection("SLOW_UPLOAD", 408, "Photo upload took too long");
-      let timer: number | undefined;
+      let timer: ReturnType<typeof setTimeout> | undefined;
       const timeout = new Promise<never>((_, reject) => {
         timer = setTimeout(() => reject(new MediaRejection("SLOW_UPLOAD", 408, "Photo upload took too long")), remaining);
       });
