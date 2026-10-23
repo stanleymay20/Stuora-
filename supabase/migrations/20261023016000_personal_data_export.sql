@@ -14,7 +14,11 @@ begin
   if actor is null then
     raise exception 'Sign in to export your data' using errcode = '42501';
   end if;
-  perform private.consume_action(actor, 'export', 5, interval '1 day');
+  -- FK-free window: works before a profile exists (reviewer finding: consume_action
+  -- references profiles and failed with 23503 for profile-less accounts).
+  if not private.bump_service_window('export_student_day', actor::text, 5, interval '1 day') then
+    raise exception 'You can download your data up to 5 times a day' using errcode = 'P0001';
+  end if;
   -- to_jsonb keeps this portable to schemas where auth.users lacks columns.
   select to_jsonb(u) ->> 'email' into v_email from auth.users u where u.id = actor;
   return jsonb_build_object(

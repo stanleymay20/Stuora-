@@ -16,7 +16,7 @@ async function harness({ stopBefore } = {}) {
   await db.exec(`
     create role anon; create role authenticated; create role service_role bypassrls;
     create schema auth;
-    create table auth.users (id uuid primary key, email text);
+    create table auth.users (id uuid primary key, email text, email_confirmed_at timestamptz default now());
     create function auth.uid() returns uuid language sql stable as
       $$ select nullif(current_setting('request.jwt.claim.sub', true), '')::uuid $$;
     create schema storage;
@@ -175,6 +175,10 @@ test('D-11: reporting, moderator decisions, notices and suspension', async () =>
   assert.match(bNotices[0].message, /off-platform payment scam/);
   const { rows: aNotices } = await as(A, `select kind from public.moderation_notices`);
   assert.deepEqual(aNotices.map(n => n.kind), ['report_outcome']);
+  // Reporters see status, never who decided or the sanction text.
+  assert.equal((await as(A, `select status from public.reports where id='${rid}'`)).rows[0].status, 'actioned');
+  await deny(A, `select decided_by from public.reports where id='${rid}'`);
+  await deny(A, `select decision, decision_reason from public.reports`);
   // Suspended account cannot create anything and is hidden from People.
   await deny(B, `select public.save_student_listing(null,'housing','Again','', 'Köln', 100,'room',false,false,'good')`);
   await deny(B, "select public.create_student_group('New scam group','', 'Köln','Other')");
@@ -186,6 +190,12 @@ test('D-11: reporting, moderator decisions, notices and suspension', async () =>
   // Moderators cannot decide reports they are party to; lifting needs a reason.
   const selfReport = (await as(D, `select public.report_content('user', '${M}', 'other', 'Moderator was rude') id`)).rows[0].id;
   await deny(M, `select public.moderate_report('${selfReport}', 'dismiss', 'Not a violation of rules.')`);
+  // Deleting a suspended account does not reset the record: the same email cannot return.
+  const B2 = '00000000-0000-4000-8000-0000000000b2';
+  await db.exec(`insert into public.account_suspensions(user_id, reason) values ('${E}', 'Suspended before deleting account.')`);
+  await db.exec(`delete from public.profiles where id='${E}'; delete from auth.users where id='${E}';
+                 insert into auth.users(id, email) values ('${B2}', ' E@Example.test ')`);
+  await assert.rejects(db.query(`insert into public.profiles(id, display_name, city) values ('${B2}','Eve again','Köln')`), e => e.code === '42501');
   await as(M, `select public.lift_suspension('${B}', 'Appeal accepted after identity check.')`);
   assert.ok((await as(B, `select public.save_student_listing(null,'housing','Legit room','', 'Köln', 40000,'room',false,false,'good') id`)).rows[0].id);
   await db.close();
@@ -226,6 +236,12 @@ test('AI and external data quotas are service-only, fair and throttled', async (
   assert.equal((await svc(`select public.consume_ai_request('${A}') ok`)).rows[0].ok, true);
   const { rows: gw } = await db.query(`select used from private.service_request_windows where scope='ai_global_day'`);
   assert.equal(gw[0].used, 6, 'global AI window counts only admitted requests');
+  // Throwaway accounts (unconfirmed email or no profile) cannot spend shared budget.
+  await db.exec(`update auth.users set email_confirmed_at = null where id='${C}'`);
+  assert.equal((await svc(`select public.consume_ai_request('${C}') ok`)).rows[0].ok, false);
+  const ghost = '00000000-0000-4000-8000-0000000000aa';
+  await db.exec(`insert into auth.users(id, email) values ('${ghost}', 'ghost@example.test')`);
+  assert.equal((await svc(`select public.consume_external_data_request('${ghost}') ok`)).rows[0].ok, false);
   // Suspended students are refused.
   await db.exec(`insert into public.account_suspensions(user_id, reason) values ('${D}', 'Suspended for testing purposes.')`);
   assert.equal((await svc(`select public.consume_ai_request('${D}') ok`)).rows[0].ok, false);
@@ -243,7 +259,7 @@ test('AI and external data quotas are service-only, fair and throttled', async (
   await db.close();
 });
 
-test('D-07 UI: conversation safety state and blocking without exposing ids', async () => {
+test('D-07 UI: conversation safety state and blocking by conversation', async () => {
   const { db } = await harness(); await seed(db);
   const { as, deny, listing } = actors(db);
   const l = await listing(A, 'marketplace', 'Desk', 2500);

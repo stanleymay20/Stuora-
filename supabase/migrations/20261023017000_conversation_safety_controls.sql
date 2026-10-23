@@ -1,7 +1,8 @@
 -- Gen-3 audit D-07 (UI half): students can block the other person in a
--- listing conversation and see whether a thread is closed, without ever
--- learning the other member's account id (conversation_members RLS only
--- exposes the caller's own membership row).
+-- listing conversation and see whether a thread is closed, without needing
+-- the other member's id up front (conversation_members RLS only exposes the
+-- caller's own row). Note: once blocked, the caller's own user_blocks row
+-- (and messages.sender_id) contain that id; this is not a new disclosure.
 begin;
 
 create function public.conversation_safety_state(p_conversation uuid)

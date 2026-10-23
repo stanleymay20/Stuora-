@@ -275,7 +275,7 @@ export default function AccountPanel({ onLegal }: { onLegal?: (doc: LegalDocumen
       {button('Sign out', () => void logout())}
       <ModerationNotices userId={session.user.id} />
       {isModerator ? <ModerationQueue /> : null}
-      {session.user.email ? <AccountDataControls email={session.user.email} /> : null}
+      <AccountDataControls />
     </>}
     {onLegal ? <LegalLinks onNavigate={onLegal} /> : null}
   </View>;

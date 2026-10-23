@@ -1,5 +1,5 @@
-// POST /functions/v1/delete-account  { "confirmation": "DELETE MY ACCOUNT" }
-// Requires a valid user JWT from a sign-in within the last 15 minutes.
+// POST /functions/v1/delete-account  { "confirmation": "DELETE MY ACCOUNT", "password": "…" }
+// Requires a valid user JWT AND the account password, verified here (rate-limited).
 import { createClient } from "npm:@supabase/supabase-js@2.117.3";
 import { allowedOrigins, bearer, corsHeaders, HttpError, json, preflight, readJson } from "../_shared/http.ts";
 import { deleteAccount, type DeleteAccountDeps } from "./core.ts";
@@ -25,7 +25,17 @@ const deps: DeleteAccountDeps = {
     const { error } = await admin.auth.admin.deleteUser(userId);
     if (error) throw new HttpError(503, "AUTH", "Files were removed but the account could not be deleted; retry");
   },
-  now: () => Date.now(),
+  async admitAttempt(userId) {
+    const { data, error } = await admin.rpc("consume_account_deletion_attempt", { p_student: userId });
+    if (error || typeof data !== "boolean") throw new HttpError(503, "QUOTA", "Account deletion is temporarily unavailable");
+    return data;
+  },
+  async verifyPassword(email, password) {
+    // A throwaway client: the resulting session is never returned or stored.
+    const probe = createClient(url, anonKey, { auth: { persistSession: false, autoRefreshToken: false } });
+    const { data, error } = await probe.auth.signInWithPassword({ email, password });
+    return !error && !!data.session;
+  },
 };
 
 Deno.serve(async req => {
@@ -38,8 +48,8 @@ Deno.serve(async req => {
     const userClient = createClient(url, anonKey, { auth: { persistSession: false, autoRefreshToken: false } });
     const { data: { user }, error } = await userClient.auth.getUser(token);
     if (error || !user) throw new HttpError(401, "AUTH", "Invalid user session");
-    const body = await readJson(req, 512);
-    const result = await deleteAccount(deps, user, body.confirmation);
+    const body = await readJson(req, 1024);
+    const result = await deleteAccount(deps, user, body.confirmation, body.password);
     return json(200, { ok: true, removedObjects: result.removedObjects }, cors);
   } catch (err) {
     if (err instanceof HttpError) return json(err.status, { code: err.code, error: err.message }, cors);

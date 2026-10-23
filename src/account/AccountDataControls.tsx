@@ -6,7 +6,7 @@ import { invokeFunction, ServiceError } from '../backend/externalData';
 const PHRASE = 'DELETE MY ACCOUNT';
 
 /** GDPR Art. 15/20 export and Art. 17 erasure, both self-service. */
-export default function AccountDataControls({ email }: { email: string }) {
+export default function AccountDataControls() {
   const [exportState, setExportState] = useState<'idle' | 'busy' | 'done' | 'error' | 'limited'>('idle');
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [password, setPassword] = useState('');
@@ -39,10 +39,8 @@ export default function AccountDataControls({ email }: { email: string }) {
     if (!password) { setDeleteIssue('Enter your password to confirm it is you.'); return; }
     setDeleteBusy(true); setDeleteIssue('');
     try {
-      // A fresh sign-in proves the request comes from the account holder.
-      const { error: authError } = await supabase.auth.signInWithPassword({ email, password });
-      if (authError) { setDeleteIssue('That password did not work.'); return; }
-      await invokeFunction('delete-account', { confirmation: PHRASE });
+      // The server re-checks the password itself; a token alone is never enough.
+      await invokeFunction('delete-account', { confirmation: PHRASE, password });
       await supabase.auth.signOut({ scope: 'local' });
     } catch (error) {
       setDeleteIssue(error instanceof ServiceError ? error.message : 'Your account could not be deleted. Please try again.');

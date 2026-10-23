@@ -63,7 +63,10 @@ export default function ListingWorkspace({ category, mode = 'browse', search: se
   const hasListingFilters = Boolean(cityFilter.trim() || maxPrice.trim());
   // Debounce typed search and filters so each keystroke is not a database query.
   const search = useDebouncedValue(searchInput, 300);
-  const cityQuery = useDebouncedValue(cityFilter, 300);
+  const debouncedCity = useDebouncedValue(cityFilter, 300);
+  // A city chosen elsewhere (picker, profile) applies at once; only typing is debounced,
+  // otherwise a late filter change would reset a listing the student already opened.
+  const cityQuery = cityFilter === preferredCity ? cityFilter : debouncedCity;
   const priceQuery = useDebouncedValue(maxPrice, 300);
   const [revision, setRevision] = useState(0);
   const [pages, setPages] = useState(1);

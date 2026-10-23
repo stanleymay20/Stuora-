@@ -55,7 +55,7 @@ export function ticketmasterProvider(env: Env, timeoutMs = 5000): FeedProvider |
       const data = await res.json() as { _embedded?: { events?: unknown[] } };
       return (data._embedded?.events ?? []).slice(0, 20).flatMap((raw): Opportunity[] => {
         const e = raw as Record<string, any>;
-        const url = safeUrl(e.url, /(^|\.)ticketmaster\.[a-z.]+$|(^|\.)livenation\.[a-z.]+$/);
+        const url = safeUrl(e.url, /^(?:[a-z0-9-]+\.)*(?:ticketmaster\.(?:de|com|co\.uk|at|ch|nl|be|fr|es|it|ie|pl|dk|se|no|fi)|livenation\.(?:de|com|co\.uk))$/);
         const title = cleanText(e.name, 140);
         if (!url || !title || typeof e.id !== "string") return [];
         const venue = e._embedded?.venues?.[0] ?? {};
@@ -95,7 +95,7 @@ export function adzunaProvider(env: Env, timeoutMs = 5000): FeedProvider | null 
       const data = await res.json() as { results?: unknown[] };
       return (data.results ?? []).slice(0, 20).flatMap((raw): Opportunity[] => {
         const j = raw as Record<string, any>;
-        const url = safeUrl(j.redirect_url, /(^|\.)adzuna\.[a-z.]+$/);
+        const url = safeUrl(j.redirect_url, /^(?:[a-z0-9-]+\.)*adzuna\.(?:de|com|co\.uk|at|fr|nl|it|es|pl|ch|be)$/);
         const title = cleanText(j.title, 140);
         if (!url || !title || (typeof j.id !== "string" && typeof j.id !== "number")) return [];
         return [{
@@ -131,7 +131,8 @@ export function bundesagenturProvider(env: Env, timeoutMs = 5000): FeedProvider 
         const ref = typeof j.refnr === "string" && /^[A-Za-z0-9-]{4,64}$/.test(j.refnr) ? j.refnr : null;
         const title = cleanText(j.titel ?? j.beruf, 140);
         if (!ref || !title) return [];
-        const url = safeUrl(j.externeUrl) ?? `https://www.arbeitsagentur.de/jobsuche/jobdetail/${encodeURIComponent(ref)}`;
+        // Always the official BA detail page: employer-supplied externeUrl values are unvetted.
+        const url = `https://www.arbeitsagentur.de/jobsuche/jobdetail/${encodeURIComponent(ref)}`;
         return [{
           id: `bundesagentur:${ref}`, source: "bundesagentur", title,
           subtitle: cleanText(j.arbeitgeber, 120), location: cleanText(j.arbeitsort?.ort, 80) || city,

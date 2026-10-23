@@ -78,7 +78,7 @@ test('legal pages are routable, linked from the app and flag missing operator de
   }
   await page.getByRole('link', { name: 'Privacy notice' }).click();
   await expect(page).toHaveURL(/stuora=privacy/);
-  await expect(page.getByText(/Photos are re-encoded on our server/)).toBeVisible();
+  await expect(page.getByText(/re-encoded on our server and their camera and location metadata is removed/)).toBeVisible();
   await page.goto('/');
   await expect(page.getByRole('link', { name: 'Imprint' }).first()).toBeVisible();
 });

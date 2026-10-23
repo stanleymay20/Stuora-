@@ -7,8 +7,7 @@
 import { HttpError } from "../_shared/http.ts";
 
 export const CONFIRMATION_PHRASE = "DELETE MY ACCOUNT";
-/** Deletion requires a fresh sign-in, so a stolen long-lived session cannot erase an account. */
-export const MAX_SESSION_AGE_MS = 15 * 60 * 1000;
+/** Deletion re-verifies the password on the server: a stolen access token alone cannot erase an account. */
 export const BUCKETS = ["listing-media", "avatars"] as const;
 
 export type StorageEntry = { name: string; id: string | null };
@@ -16,7 +15,10 @@ export interface DeleteAccountDeps {
   list(bucket: string, prefix: string, offset: number): Promise<StorageEntry[]>;
   remove(bucket: string, paths: string[]): Promise<void>;
   deleteUser(userId: string): Promise<void>;
-  now(): number;
+  /** Rate-limited admission for password checks (false = too many attempts). */
+  admitAttempt(userId: string): Promise<boolean>;
+  /** True only if the password is correct for this email (checked against Supabase Auth). */
+  verifyPassword(email: string, password: string): Promise<boolean>;
 }
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -46,15 +48,19 @@ export async function collectUserObjects(deps: DeleteAccountDeps, bucket: string
 
 export async function deleteAccount(
   deps: DeleteAccountDeps,
-  user: { id: string; last_sign_in_at?: string | null },
+  user: { id: string; email?: string | null },
   confirmation: unknown,
+  password: unknown,
 ): Promise<{ removedObjects: number }> {
   if (!uuid.test(user.id)) throw new HttpError(400, "IDENTITY", "Invalid account");
   if (confirmation !== CONFIRMATION_PHRASE)
     throw new HttpError(400, "CONFIRMATION", `Type ${CONFIRMATION_PHRASE} to confirm`);
-  const signedIn = user.last_sign_in_at ? Date.parse(user.last_sign_in_at) : NaN;
-  if (!Number.isFinite(signedIn) || deps.now() - signedIn > MAX_SESSION_AGE_MS)
-    throw new HttpError(401, "REAUTH_REQUIRED", "Sign out and sign in again, then delete your account within 15 minutes");
+  if (typeof password !== "string" || password.length < 1 || password.length > 200 || !user.email)
+    throw new HttpError(401, "REAUTH_REQUIRED", "Enter your password to confirm");
+  if (!(await deps.admitAttempt(user.id)))
+    throw new HttpError(429, "RATE_LIMIT", "Too many attempts. Try again in an hour.");
+  if (!(await deps.verifyPassword(user.email, password)))
+    throw new HttpError(401, "REAUTH_REQUIRED", "That password did not work");
   let removed = 0;
   for (const bucket of BUCKETS) {
     const paths = await collectUserObjects(deps, bucket, user.id);

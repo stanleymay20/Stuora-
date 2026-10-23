@@ -13,13 +13,14 @@ applies the migrations, sets secrets and flips the public switch.
 | Moderation | D-11 reports had no workflow | `report_content`, `moderation_queue`, `moderate_report`, `lift_suspension`, notices, suspensions; suspended accounts cannot create content (`20261023011000`) |
 | Messaging | D-07 archived listings kept accepting messages; 60/min limit | Closed-thread guard, 20/min + 300/day (`20261023012000`); UI shows closed state, block/unblock (`20261023017000`), report per message, Realtime with polling fallback |
 | Directory | R-04 legacy `is_discoverable` without recorded consent | `discoverable_consented_at`, RPC-only changes, legacy rows hidden until confirmed (`20261023013000`); in-app banner |
-| GDPR | D-10 no export; no erasure | `export_my_data()` (5/day); `delete-account` Edge Function (phrase + fresh sign-in, removes Storage first) |
+| GDPR | D-10 no export; no erasure | `export_my_data()` (5/day); `delete-account` Edge Function (phrase + password re-verified server-side, 5 attempts/hour, removes Storage first) |
 | Auth | Login CSRF via implicit `#access_token` links | PKCE everywhere (`flowType: 'pkce'`); native callback accepts only `?code=` and calls `exchangeCodeForSession` |
 | Routing | `?stuora=constructor` crashed rendering | Own-property check + root `ErrorBoundary` |
 | Bot | D-16 "near campus" taken as a city | Shared `isPlausibleCity`; last plausible candidate wins; city picker uses the same rule |
 | UI | Contrast below AA; 106×134 bot covering phone content; filters queried per keystroke | Darker text tokens; 56 px mobile FAB; 300 ms debounce |
 | Groups | Anonymous "Group member" labels; no way to remove an abusive author | Per-group pseudonym tags, "Remove author", report post, open-group disclosure |
 | Legal | No Impressum / privacy notice / terms | `?stuora=privacy|terms|imprint|safety`; production build refuses placeholders |
+| Review | Independent review of this branch | Reporters cannot read decision columns; suspension survives account deletion (email fingerprint); quotas need a confirmed email + profile; export limit works without a profile; exact provider domains, BA links only to arbeitsagentur.de; scanner decodes JWT payloads and fails closed |
 | Ops | No security headers; no secret scan | `vercel.json` headers (CSP in Report-Only first), `scripts/scan-secrets.mjs` on repo and bundle in CI |
 
 ## New services (all optional, all server-side)
@@ -39,7 +40,7 @@ Quotas: 10/min and 200/day per student, 120/min overall. Only allow-listed provi
 
 ## Operator steps (not done by this PR)
 
-1. **Review, then apply migrations** `20261023010000` … `20261023017000` to *staging* with your normal migration
+1. **Review, then apply migrations** `20261023010000` … `20261023017000` in filename order to *staging* with your normal migration
    process. Do not `supabase db push` to production from this branch.
 2. **Set Edge Function secrets** (Supabase → Edge Functions → Secrets). Never in `EXPO_PUBLIC_*` or the repo:
    - always: `STUORA_ALLOWED_WEB_ORIGINS` (comma-separated exact origins)

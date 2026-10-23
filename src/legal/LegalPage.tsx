@@ -19,15 +19,15 @@ function privacy(): Section[] {
     { heading: 'What we process and why', body: [
       'Account: email address and password hash, to provide your account (Art. 6(1)(b) GDPR).',
       'Profile: display name, city, bio and optional avatar. Your profile only appears in the student directory after you switch on discovery and confirm it (Art. 6(1)(a) GDPR); you can switch it off at any time.',
-      'Listings, photos, saved items, messages, groups and group posts you create, to run the service (Art. 6(1)(b) GDPR). Photos are re-encoded on our server and their camera and location metadata is removed before anyone can see them.',
-      'Reports, moderation decisions, blocks, rate-limit counters and security logs, to keep students safe and prevent abuse (Art. 6(1)(f) GDPR). Moderators see the reported content, never who reported it.',
+      'Listings, photos, saved items, messages, groups and group posts you create, to run the service (Art. 6(1)(b) GDPR). Listing photos added through Stuora’s photo processing are re-encoded on our server and their camera and location metadata is removed before anyone can see them. Photos uploaded before that processing was introduced are stored as uploaded; remove and re-add them to strip their metadata.',
+      'Reports, moderation decisions, blocks, rate-limit counters and security logs, to keep students safe and prevent abuse (Art. 6(1)(f) GDPR). Moderators see the reported content, never who reported it, and the person reported is not told who reported them.',
     ] },
     { heading: 'Service providers', body: [
       'Supabase, Inc. hosts our database, sign-in and file storage, and Vercel, Inc. serves the web app, both as processors under Art. 28 GDPR.',
       ...optional,
     ] },
     { heading: 'How long we keep data', body: [
-      'Your data is kept while your account exists. Deleting your account removes your profile, listings, photos, saved items, group memberships, group posts, messages you sent and reports you filed. Reports other students filed about your content, with a copy of the reported text, may be kept for as long as needed to handle abuse.',
+      'Your data is kept while your account exists. Deleting your account removes your profile, listings, photos, saved items, group memberships, group posts, messages you sent and reports you filed. Reports other students filed about your content, with a copy of the reported text, may be kept for as long as needed to handle abuse. If an account is suspended, a one-way fingerprint of its email address is kept so the same address cannot simply re-register. Short-lived rate-limit counters expire within a day.',
     ] },
     { heading: 'Your rights', body: [
       'You can access and download your data (Profile → Download my data), correct your profile, switch off discovery and delete your account (Profile → Delete account) yourself. You also have the rights to restriction, objection and data portability, and you can withdraw consent at any time without affecting earlier processing.',
@@ -64,7 +64,7 @@ function imprint(): Section[] {
 
 function safety(): Section[] {
   return [
-    { heading: 'Report anything that feels wrong', body: ['Every listing, message, group post and profile has a Report button. Reports go to Stuora moderators; the person you report is not told who reported them.'] },
+    { heading: 'Report anything that feels wrong', body: ['Every listing, message, group post and profile has a Report button. Reports go to Stuora moderators; the person you report is not told who reported them. In a one-to-one conversation they may still be able to guess, so block them as well if you feel unsafe.'] },
     { heading: 'Block someone', body: ['In a conversation, choose Block to stop that person from contacting you. You can unblock them later from the same conversation.'] },
     { heading: 'Common scams', body: ['Requests to pay a deposit before a viewing, to move to another app straight away, to send ID documents or to pay by gift card are warning signs. Report them.'] },
     { heading: 'Emergencies', body: ['If you or someone else is in immediate danger, call 112.'] },

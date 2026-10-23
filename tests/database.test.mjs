@@ -156,8 +156,8 @@ for (const inheritedGrants of [false, true]) {
       await deny(a, 'update public.student_benefits set verified_at = now()');
       await deny(a, `insert into public.benefit_redemptions (benefit_id, user_id, savings_cents) select id, '${a}', 999999 from public.student_benefits`);
       await deny(a, `insert into public.reports (reporter_id, reported_user_id, reason) values ('${b}', '${c}', 'spam')`);
-      await count('authenticated', a, `insert into public.reports (reporter_id, reported_user_id, reason) values ('${a}', '${c}', 'spam') returning *`, 1);
-      await count('authenticated', b, 'select * from public.reports', 0);
+      await count('authenticated', a, `insert into public.reports (reporter_id, reported_user_id, reason) values ('${a}', '${c}', 'spam') returning id`, 1);
+      await count('authenticated', b, 'select id from public.reports', 0);
       // Existing bookmark table RLS: saved rows belong exclusively to their user.
       await count('authenticated', b, "insert into public.saved_listings (user_id,listing_id) values ('" + b + "','" + house + "') returning *", 1);
       await count('authenticated', b, "select * from public.saved_listings where listing_id='" + house + "'", 1);

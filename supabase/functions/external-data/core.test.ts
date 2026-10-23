@@ -31,16 +31,18 @@ const TM = {
       dates: { start: { dateTime: "2030-01-02T19:00:00Z" } }, _embedded: { venues: [{ name: "Halle", city: { name: "Köln" } }] } },
     { id: "E2", name: "Phish", url: "https://evil.example/steal", dates: { start: { localDate: "2030-01-01" } } },
     { id: "E3", name: "Early", url: "javascript:alert(1)" },
+    { id: "E4", name: "Lookalike", url: "https://www.ticketmaster.evil.com/e" },
   ] },
 };
 const ADZ = { results: [
   { id: 99, title: "Werkstudent Data <script>x</script>", redirect_url: "https://www.adzuna.de/land/ad/99",
     company: { display_name: "ACME" }, location: { display_name: "Köln" }, created: "2026-10-20T10:00:00Z" },
   { id: 100, title: "Bad link", redirect_url: "http://www.adzuna.de/plain-http" },
+  { id: 101, title: "Lookalike", redirect_url: "https://adzuna.de.evil.com/x" },
 ] };
 const BA = { stellenangebote: [
   { refnr: "10001-1002716922-S", titel: "Werkstudent (m/w/d) IT", arbeitgeber: "Stadtwerke", arbeitsort: { ort: "Köln" },
-    aktuelleVeroeffentlichungsdatum: "2026-10-21" },
+    aktuelleVeroeffentlichungsdatum: "2026-10-21", externeUrl: "https://phish.example/apply" },
   { refnr: "../../etc", titel: "Traversal" },
 ] };
 

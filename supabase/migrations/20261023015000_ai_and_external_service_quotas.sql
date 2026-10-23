@@ -38,11 +38,23 @@ end;
 $$;
 revoke all on function private.bump_service_window(text, text, integer, interval) from public, anon, authenticated;
 
+-- Only real, confirmed students with a profile may spend shared provider budget,
+-- so throwaway sign-ups cannot exhaust the platform-wide windows.
+create function private.is_quota_eligible(p_student uuid)
+returns boolean language sql stable security definer set search_path = '' as $$
+  select p_student is not null
+     and not private.is_suspended(p_student)
+     and exists (select 1 from public.profiles p where p.id = p_student)
+     and exists (select 1 from auth.users u where u.id = p_student
+                  and (to_jsonb(u) ->> 'email_confirmed_at') is not null);
+$$;
+revoke all on function private.is_quota_eligible(uuid) from public, anon, authenticated;
+
 -- AI assistant: 5/minute and 40/day per student, 5,000/day platform-wide.
 create function public.consume_ai_request(p_student uuid)
 returns boolean language plpgsql security definer set search_path = '' as $$
 begin
-  if p_student is null or private.is_suspended(p_student) then return false; end if;
+  if not private.is_quota_eligible(p_student) then return false; end if;
   if not private.bump_service_window('ai_student_minute', p_student::text, 5, interval '1 minute') then return false; end if;
   if not private.bump_service_window('ai_student_day', p_student::text, 40, interval '1 day') then return false; end if;
   return private.bump_service_window('ai_global_day', 'all', 5000, interval '1 day');
@@ -56,7 +68,7 @@ grant execute on function public.consume_ai_request(uuid) to service_role;
 create function public.consume_external_data_request(p_student uuid)
 returns boolean language plpgsql security definer set search_path = '' as $$
 begin
-  if p_student is null or private.is_suspended(p_student) then return false; end if;
+  if not private.is_quota_eligible(p_student) then return false; end if;
   if not private.bump_service_window('ext_student_minute', p_student::text, 10, interval '1 minute') then return false; end if;
   if not private.bump_service_window('ext_student_day', p_student::text, 200, interval '1 day') then return false; end if;
   return private.bump_service_window('ext_global_minute', 'all', 120, interval '1 minute');
@@ -64,6 +76,18 @@ end;
 $$;
 revoke all on function public.consume_external_data_request(uuid) from public, anon, authenticated;
 grant execute on function public.consume_external_data_request(uuid) to service_role;
+
+-- Account deletion re-verifies the password server-side; cap attempts so a
+-- stolen access token cannot be used to guess the password (5 per hour).
+create function public.consume_account_deletion_attempt(p_student uuid)
+returns boolean language plpgsql security definer set search_path = '' as $$
+begin
+  if p_student is null then return false; end if;
+  return private.bump_service_window('delete_attempt_hour', p_student::text, 5, interval '1 hour');
+end;
+$$;
+revoke all on function public.consume_account_deletion_attempt(uuid) from public, anon, authenticated;
+grant execute on function public.consume_account_deletion_attempt(uuid) to service_role;
 
 -- OpenStreetMap Nominatim public policy: at most one request per second
 -- across the whole application, regardless of Edge replica count.

@@ -259,6 +259,57 @@ $$;
 revoke all on function public.moderate_report(uuid, text, text) from public, anon;
 grant execute on function public.moderate_report(uuid, text, text) to authenticated;
 
+-- Reviewer finding: reporters must not read who decided or the sanction text.
+-- Replace the table-wide SELECT with column grants that omit decision fields.
+revoke select on public.reports from authenticated;
+grant select (id, created_at, reporter_id, listing_id, reported_user_id, reason, details, status,
+              group_message_id, message_id) on public.reports to authenticated;
+
+-- Reviewer finding: deleting a suspended account must not reset the record.
+-- A one-way hash of the normalised email survives account deletion
+-- (GDPR Art. 17(3)(e)/Art. 6(1)(f): preventing repeat abuse) and blocks
+-- creating a new profile with the same address until a moderator lifts it.
+create table private.suspended_identities (
+  email_sha256 text primary key check (email_sha256 ~ '^[0-9a-f]{64}$'),
+  suspended_at timestamptz not null default now()
+);
+alter table private.suspended_identities enable row level security;
+revoke all on private.suspended_identities from public, anon, authenticated;
+
+create function private.email_fingerprint(p_user uuid)
+returns text language sql stable security definer set search_path = '' as $$
+  select encode(sha256(convert_to(lower(btrim(to_jsonb(u) ->> 'email')), 'UTF8')), 'hex')
+    from auth.users u where u.id = p_user and (to_jsonb(u) ->> 'email') is not null;
+$$;
+revoke all on function private.email_fingerprint(uuid) from public, anon, authenticated;
+
+create function private.remember_suspended_identity() returns trigger
+language plpgsql security definer set search_path = '' as $$
+declare v_hash text := private.email_fingerprint(new.user_id);
+begin
+  if v_hash is not null then
+    insert into private.suspended_identities (email_sha256) values (v_hash) on conflict do nothing;
+  end if;
+  return new;
+end;
+$$;
+revoke all on function private.remember_suspended_identity() from public, anon, authenticated;
+create trigger account_suspensions_remember_identity after insert on public.account_suspensions
+  for each row execute function private.remember_suspended_identity();
+
+create function private.reject_suspended_identity() returns trigger
+language plpgsql security definer set search_path = '' as $$
+begin
+  if exists (select 1 from private.suspended_identities s where s.email_sha256 = private.email_fingerprint(new.id)) then
+    raise exception 'This email address is suspended from Stuora' using errcode = '42501';
+  end if;
+  return new;
+end;
+$$;
+revoke all on function private.reject_suspended_identity() from public, anon, authenticated;
+create trigger a_profiles_suspended_identity before insert on public.profiles
+  for each row execute function private.reject_suspended_identity();
+
 create function public.lift_suspension(p_user uuid, p_reason text)
 returns void language plpgsql security definer set search_path = '' as $$
 declare actor uuid := (select auth.uid()); v_reason text := btrim(coalesce(p_reason, ''));
@@ -271,6 +322,7 @@ begin
   end if;
   delete from public.account_suspensions where user_id = p_user;
   if not found then raise exception 'Account is not suspended' using errcode = '22023'; end if;
+  delete from private.suspended_identities where email_sha256 = private.email_fingerprint(p_user);
   insert into public.moderation_notices (user_id, kind, message)
   values (p_user, 'suspension_lifted', left('Your Stuora account suspension was lifted. ' || v_reason, 1500));
 end;
