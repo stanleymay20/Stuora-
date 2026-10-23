@@ -49,16 +49,41 @@ export function bearer(req: Request): string {
   return match[1];
 }
 
-/** Reads a JSON body of at most `limit` bytes. */
-export async function readJson(req: Request, limit = 4096): Promise<Record<string, unknown>> {
-  const type = (req.headers.get("content-type") ?? "").toLowerCase();
-  if (!type.startsWith("application/json")) throw new HttpError(415, "BODY", "JSON body required");
+/** Bound bytes while streaming, including requests without Content-Length. */
+export async function readJson(req: Request, limit = 4096, deadlineMs = 15_000): Promise<Record<string, unknown>> {
+  const type = (req.headers.get("content-type") ?? "").split(";", 1)[0].trim().toLowerCase();
+  if (type !== "application/json") throw new HttpError(415, "BODY", "JSON body required");
   const declared = Number(req.headers.get("content-length") ?? 0);
   if (declared > limit) throw new HttpError(413, "BODY", "Request too large");
-  const text = await req.text();
-  if (new TextEncoder().encode(text).length > limit) throw new HttpError(413, "BODY", "Request too large");
+  if (!req.body) throw new HttpError(400, "BODY", "Invalid JSON body");
+  const reader = req.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new HttpError(408, "BODY_TIMEOUT", "Request body timed out")), deadlineMs);
+  });
   try {
-    const value = JSON.parse(text);
+    while (true) {
+      const { done, value } = await Promise.race([reader.read(), timeout]);
+      if (done) break;
+      size += value.byteLength;
+      if (size > limit) throw new HttpError(413, "BODY", "Request too large");
+      chunks.push(value);
+    }
+  } catch (error) {
+    // A hostile stream's cancellation may never resolve. Do not await it.
+    void reader.cancel().catch(() => {});
+    throw error;
+  } finally {
+    clearTimeout(timer);
+    reader.releaseLock();
+  }
+  const bytes = new Uint8Array(size);
+  let offset = 0;
+  for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.byteLength; }
+  try {
+    const value = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
     if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("not an object");
     return value as Record<string, unknown>;
   } catch {

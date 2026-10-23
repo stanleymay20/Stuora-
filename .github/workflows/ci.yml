@@ -88,6 +88,9 @@ jobs:
       - name: Audit production dependency baseline
         run: node scripts/audit-production.mjs
 
+      - name: Bound Edge JSON bodies and reject stalled uploads
+        run: node --test tests/edge-http.test.mjs
+
       - name: Test environment isolation
         run: node --test tests/backend-config.test.mjs
 
