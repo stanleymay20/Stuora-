@@ -45,7 +45,16 @@ async function chat(fetcher: typeof fetch, url: string, key: string, body: unkno
     headers: { "Authorization": `Bearer ${key}`, "Content-Type": "application/json" },
     body: JSON.stringify(body),
   }, timeoutMs);
-  if (!response.ok) throw new Error(`provider status ${response.status}`);
+  if (!response.ok) {
+    // Providers return a machine-readable error code (e.g. json_validate_failed,
+    // model_not_found). Keep only that fixed token, never message text.
+    let code = "";
+    try {
+      const err = await response.json() as { error?: { code?: unknown } };
+      if (typeof err.error?.code === "string" && /^[a-z_]{3,40}$/.test(err.error.code)) code = " " + err.error.code;
+    } catch { /* no JSON error body */ }
+    throw new Error(`provider status ${response.status}${code}`);
+  }
   const data = await response.json() as ChatResponse;
   const content = data.choices?.[0]?.message?.content;
   if (typeof content !== "string" || content.length > 4000) throw new Error("provider returned no content");
@@ -68,7 +77,10 @@ export function groqProvider(env: { GROQ_API_KEY?: string; GROQ_MODEL?: string }
     id: "groq",
     label: "Groq",
     extract: async (query, fetcher) => {
-      const base = { model, temperature: 0, max_completion_tokens: 300, messages: messages(query) };
+      // gpt-oss models spend completion tokens on reasoning; a low effort and a
+      // larger budget stop the JSON from being truncated (Groq then returns 400).
+      const reasoning = /gpt-oss|qwen3|deepseek-r1/i.test(model) ? { reasoning_effort: "low" } : {};
+      const base = { model, temperature: 0, max_completion_tokens: 1024, messages: messages(query), ...reasoning };
       const endpoint = "https://api.groq.com/openai/v1/chat/completions";
       try {
         return await chat(fetcher, endpoint, key, {
@@ -78,8 +90,8 @@ export function groqProvider(env: { GROQ_API_KEY?: string; GROQ_MODEL?: string }
       } catch (err) {
         // Some models reject strict schemas (HTTP 400). Retry once in plain JSON
         // mode; groundModelIntent still discards anything not in the query.
-        if (!(err instanceof Error && err.message === "provider status 400")) throw err;
-        console.warn(JSON.stringify({ event: "provider_failed", provider: "groq", reason: "strict schema rejected; retrying json_object" }));
+        if (!(err instanceof Error && err.message.startsWith("provider status 400"))) throw err;
+        console.warn(JSON.stringify({ event: "provider_failed", provider: "groq", reason: `${err.message}; retrying json_object` }));
         return chat(fetcher, endpoint, key, { ...base, response_format: { type: "json_object" } }, timeoutMs);
       }
     },
