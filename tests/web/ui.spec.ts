@@ -211,6 +211,8 @@ test('real Trips/Jobs/Events catalog queries active persisted rows and keeps par
     if (label === 'Events') {
       await page.getByRole('textbox', {name:'Filter listings by city'}).fill('Berlin');
       await expect(page.getByRole('button', {name:'Clear city filter'})).toBeVisible();
+      // Filters are debounced; wait for the single query instead of one per keystroke.
+      await expect.poll(() => cityFilters.some(value => value.includes('Berlin'))).toBe(true);
     }
     await page.getByRole('button', {name: `View ${expected}`}).click();
     await expect(page.getByText('Publishing, joining, and applying are not enabled until the reviewed safety migration is qualified.')).toBeVisible();

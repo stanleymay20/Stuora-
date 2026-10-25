@@ -77,6 +77,7 @@ function api() {
           if (req.method() === 'PATCH') {
             expect(url.searchParams.get('owner_id')).toBe(`eq.${userId}`);
             expect(req.postDataJSON()).toEqual({ status: 'closed' });
+            expect(url.searchParams.get('status')).toBe('eq.active');
             const item = rows.find(r => `eq.${r.id}` === url.searchParams.get('id'))!; item.status = 'closed';
             return route.fulfill({ json: { id: item.id }, contentType: 'application/vnd.pgrst.object+json' });
           }
@@ -98,8 +99,8 @@ async function explore(page: Page, category: string) {
   else await page.getByText(category, { exact: true }).first().click();
   await page.getByRole('button', { name: `Browse ${category}`, exact: true }).click();
 }
-for (const category of ['Housing', 'Marketplace']) {
-  test(`${category}: publish, second-client read, reload, edit and archive`, async ({ page, browser }) => {
+for (const category of ['Housing', 'Marketplace']) for (const closure of ['archive', 'fulfil']) {
+  test(`${category}: publish, second-client read, reload, edit and ${closure}`, async ({ page, browser }) => {
     const data = api(); await data.install(page); await account(page); await signin(page);
     await expect(page.getByLabel('Display name')).toHaveValue('Alice Student');
     await page.getByRole('button', { name: 'Create listing', exact: true }).click();
@@ -129,9 +130,19 @@ for (const category of ['Housing', 'Marketplace']) {
     await page.getByRole('button', { name: 'Save listing changes' }).click();
     await expect(page.getByText('Listing saved. Photo uploads are temporarily paused while Stuora completes secure processing.')).toBeVisible();
     await expect(page.getByText(`${category} edited`, { exact: true })).toBeVisible();
-    await page.getByRole('button', { name: 'Archive listing', exact: true }).click();
-    await page.getByRole('button', { name: 'Confirm archive', exact: true }).click();
-    await expect(page.getByText('Listing archived. It is no longer publicly discoverable.')).toBeVisible();
+    const action = closure === 'archive' ? 'Archive listing' : category === 'Housing' ? 'Mark room as taken' : 'Mark as sold';
+    const confirm = closure === 'archive' ? 'Confirm archive' : category === 'Housing' ? 'Confirm room taken' : 'Confirm sold';
+    await expect(second.getByRole('button', { name: action, exact: true })).toHaveCount(0);
+    await page.getByRole('button', { name: action, exact: true }).click();
+    await page.getByRole('button', { name: 'Keep listing', exact: true }).click();
+    expect(data.rows[0].status).toBe('active');
+    await page.getByRole('button', { name: action, exact: true }).click();
+    data.fail('listings');
+    await page.getByRole('button', { name: confirm, exact: true }).click();
+    await expect(page.getByText('Could not close the listing. Refresh to check its status, then retry.')).toBeVisible();
+    expect(data.rows[0].status).toBe('active');
+    await page.getByRole('button', { name: confirm, exact: true }).click();
+    await expect(page.getByText(closure === 'archive' ? 'Listing archived. It is no longer publicly discoverable.' : `${category === 'Housing' ? 'Room marked as taken.' : 'Item marked as sold.'} The listing is closed and no longer publicly discoverable. New messages are disabled.`)).toBeVisible();
     await second.reload(); await explore(second, category);
     await expect(second.getByText(`No ${category.toLowerCase()} listings found.`)).toBeVisible();
     await page.getByRole('button', { name: 'My listings', exact: true }).click();
@@ -387,7 +398,7 @@ for (const category of ['Housing', 'Marketplace']) {
     await page.getByRole('button', { name: 'View ' + category + ' save-test' }).click();
     await expect(page.getByRole('button', { name: 'Remove from saved', exact: true })).toBeVisible();
     await page.getByRole('button', { name: 'Remove from saved', exact: true }).click();
-    expect(data.saved.has(id)).toBe(false);
+    await expect.poll(() => data.saved.has(id)).toBe(false);
     await expect(page.getByText(/No saved active listings/)).toBeVisible();
   });
 }

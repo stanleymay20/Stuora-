@@ -3,6 +3,15 @@ import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 
 import { supabase } from '../backend/supabase';
 import { useAuth } from '../account/AuthProvider';
 import type { Database } from '../backend/database.types';
+import ReportButton from '../moderation/ReportButton';
+
+/** A stable per-group pseudonym, so members can tell authors apart without
+ * exposing account ids or linking the same student across groups. */
+function memberTag(groupId: string, authorId: string): string {
+  let h = 0x811c9dc5;
+  for (const ch of groupId + ':' + authorId) { h ^= ch.charCodeAt(0); h = Math.imul(h, 0x01000193) >>> 0; }
+  return h.toString(16).padStart(8, '0').slice(0, 6).toUpperCase();
+}
 
 type Group = Database['public']['Tables']['student_groups']['Row'];
 type GroupMessage = Database['public']['Tables']['student_group_messages']['Row'];
@@ -340,6 +349,7 @@ export default function GroupWorkspace({ onAccount }: { onAccount: () => void })
         </> : joined ? <Action name="Leave group" secondary disabled={busy} onPress={() => void changeMembership(false)} />
           : <Action name={userId ? 'Join group' : 'Sign in to join group'} disabled={busy} onPress={() => void changeMembership(true)} />}
       </View>
+      <Text style={styles.muted}>Open group: any signed-in student can join and read the discussion. Do not share phone numbers, addresses or other private details here.</Text>
       <Text style={styles.subtitle}>Group discussion</Text>
       {!userId ? <Text style={styles.muted}>Sign in and join to participate in the discussion.</Text>
         : !joined ? <Text style={styles.muted}>Join this group to read and post messages. Discussions are private to members.</Text>
@@ -349,11 +359,15 @@ export default function GroupWorkspace({ onAccount }: { onAccount: () => void })
             {!loadingMessages && !messageIssue && !messages.length ? <Text style={styles.muted}>No messages yet. Start the discussion.</Text> : null}
             {messages.map(m => <View key={m.id} testID="student-group-message" style={styles.message}>
               <View style={styles.messageBody}>
-                <Text style={styles.messageAuthor}>{m.author_id === userId ? 'You' : 'Group member'}</Text>
+                <Text style={styles.messageAuthor}>{m.author_id === userId ? 'You' : m.author_id === chosen.owner_id ? 'Group creator' : `Member · ${memberTag(chosen.id, m.author_id)}`}</Text>
                 <Text style={styles.body}>{m.body}</Text>
                 <Text style={styles.muted}>{new Date(m.created_at).toLocaleString()}</Text>
               </View>
               {owner || m.author_id === userId ? <Action name="Remove" label={`Remove group message ${m.id}`} secondary disabled={busy} onPress={() => void removeMessage(m)} /> : null}
+              {owner && m.author_id !== userId ? (confirmRemoveUser === m.author_id
+                ? <><Action name="Confirm remove author" label={`Confirm removing the author of message ${m.id}`} disabled={busy} onPress={() => void removeGroupMember(m.author_id)} /><Action name="Cancel" secondary onPress={() => setConfirmRemoveUser(null)} /></>
+                : <Action name="Remove author" label={`Remove the author of message ${m.id} from the group`} secondary disabled={busy} onPress={() => setConfirmRemoveUser(m.author_id)} />) : null}
+              {m.author_id !== userId ? <ReportButton kind="group_message" targetId={m.id} label="Report" compact /> : null}
             </View>)}
             {moreMessages ? <Action name="Load older group messages" secondary onPress={() => setMessagePages(v => v + 1)} /> : null}
             <Field label="Message to group" value={draft} onChange={setDraft} maxLength={1000} multiline placeholder="Write to your group…" />
@@ -412,7 +426,7 @@ const styles = StyleSheet.create({
   topics: { flexDirection: 'row', flexWrap: 'wrap', gap: 7 },
   topic: { borderWidth: 1, borderColor: '#E5E2F5', backgroundColor: '#F6F6FB', borderRadius: 999, paddingHorizontal: 12, paddingVertical: 8 },
   topicActive: { borderColor: '#7048FF', backgroundColor: '#EEE9FF' },
-  topicText: { color: '#747B91', fontSize: 12, fontWeight: '800' },
+  topicText: { color: '#555C72', fontSize: 12, fontWeight: '800' },
   topicSelectedText: { color: '#7048FF', fontSize: 12, fontWeight: '900' },
   action: { minHeight: 40, backgroundColor: '#7048FF', borderRadius: 11, alignSelf: 'flex-start', paddingHorizontal: 15, paddingVertical: 11, justifyContent: 'center' },
   actionSecondary: { backgroundColor: '#EEE9FF' },

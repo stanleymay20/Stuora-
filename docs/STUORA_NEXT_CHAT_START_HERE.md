@@ -1,5 +1,40 @@
 # STUORA — START HERE IN A NEW CHAT
 
+## 2026-10-25 — Listing fulfilment
+
+Implementation: `9a86015b9bc2000fcd982a1a0276ef5248319b65`. Preview READY: https://stuora-preview-kob8faa04-stanleymay20s-projects.vercel.app . Local typecheck, web export, secret scan and all 42 targeted desktop/mobile listing and safety tests pass. No production rollout or real two-student hosted acceptance.
+
+CI run 40190071152: rls-authorization and trusted-media-edge pass; verify stops at production dependency audit on the new `@expo/cli -> zod` advisory chain (GHSA-mrhx-c7xc-m3w5). Installed Zod 3.25.76 is affected; advisory lists 4.6.6 as patched. Registry latest Expo CLI 58.1.15 still requires Zod ^3.25.76. Do not blindly force a Zod major override, downgrade Expo via npm audit fix, or weaken the baseline to pass. Feature code is tested; the branch is not fully green. Resolve dependency compatibility and rerun CI before release.
+
+Housing owners can choose **Mark room as taken**; Marketplace owners can choose **Mark as sold**. Both require confirmation, update the existing owner-scoped active listing to `closed`, remove it from public discovery and use the already-applied closed-conversation message guard. Archive remains available for withdrawals. The confirmation explains that earlier messages remain readable. Failures retain the open listing and allow retry; there is no optimistic completion announcement. Closed listings retain the generic `closed` status; a separate sold/taken reason is not stored. No automatic fulfilment detection, new schema, media activation or production changes.
+
+
+## 2026-10-23 — Edge deployment checkpoint (supersedes configuration status below)
+
+Implementation commit `7af430985cb05490432c203aa13cae91cbd95447` bounds shared Edge JSON bodies while streaming, enforces a 15-second read deadline, cancels oversize/stalled streams, and rejects invalid UTF-8/media types. All 103 local tests pass; the Deno Edge and database CI jobs pass. All three Actions jobs in run 39902167772 subsequently passed, including browser/native checks.
+
+All four functions are now DEPLOYED to STAGING only from this implementation: delete-account v1, external-data v1, stuora-assistant v1, listing-photo-intake v3. Each is ACTIVE with verify_jwt=true. Readback of deployed photo source confirms TRUSTED_MEDIA_WRITES_COMPILED_IN=false. A live request with the public anon JWT returned 503 FEATURE_DISABLED; this is a disabled-startup check, NOT student acceptance.
+
+Live unauthenticated GETs to each new service return 401. OPTIONS from both ff657b6's preview and 7af4309's preview return 403 ORIGIN: the required STUORA_ALLOWED_WEB_ORIGINS configuration is not approved for them. No origin secrets, provider secrets, feature activation flags or production resources were changed. The connected browser still redirects away from the staging project to unrelated organizations; the dedicated connector can deploy but cannot manage secrets.
+
+The READY immutable implementation preview is `https://stuora-preview-8fydfr387-stanleymay20s-projects.vercel.app` (7af430985cb05490432c203aa13cae91cbd95447). To test this preview, checkout that exact commit; never claim it represents a later documentation commit. Set STUORA_ALLOWED_WEB_ORIGINS through the correct staging dashboard or authenticated CLI, then verify OPTIONS permits this exact origin. Do not add wildcard origins or enable media/provider flags as a workaround.
+
+Still required: two existing confirmed staging accounts supplied securely in the test environment, hosted core and media-denial acceptance with valid owned listing fixtures, actual SMTP delivery/recovery, native device QA, operational moderation and legal/provider readiness. No real account acceptance has been run; no account has been erased. INTERNAL ALPHA; not 100% release-ready.
+
+
+## 2026-10-23 — Gen-3 staging reconciliation (supersedes older branch pointers)
+
+Active continuation: `fix/stuora-gen3-audit-remediation`, PR #27, stacked on PR #23. Do not merge either PR or modify production. Base `e8d5d7a3aad732a54366c6c5929e90c637eaa03d` has five successful checks (three Actions jobs, GitGuardian, Vercel Preview Comments); Actions run 39877956799. Its immutable web preview is `https://stuora-preview-gk07i3e0s-stanleymay20s-projects.vercel.app`. A successor commit needs its own CI and exact preview.
+
+All eight Gen-3 migrations have now been applied individually through the dedicated Stuora connector to STAGING `uptjcspizukpjcoayhtn`. **Do not replay them or run a blanket db push:** hosted migration versions differ from source filenames. See the mapping in `STUORA_GEN3_STAGING_CHECKPOINT_2026-10-23.md`.
+
+Readback: authenticated media INSERT=false; direct discovery UPDATE=false; reporter decision-reason SELECT=false; anon export EXECUTE=false; authenticated AI quota EXECUTE=false; media rows/objects both zero; both message tables in Realtime publication. Listing-media Storage INSERT/UPDATE policies remain absent. No functions redeployed, no secrets changed, no media activation, no production writes. Edge deployment/origin configuration and real two-student hosted acceptance remain pending.
+
+Source follow-up adds pinned expo-crypto and native secure-random/SHA256 bridge before Supabase initialization: prevent the installed SDK's Math.random/plain PKCE fallbacks on runtimes lacking WebCrypto. PKCE remains enabled on both platforms. Typecheck, three crypto/SDK tests, four callback tests and all 11 database tests passed locally. This is NOT physical-device or hosted acceptance.
+
+Earlier uncommitted local work is preserved in the separate `stuora` worktree; this continuation is in `stuora-gen3`. Overlapping safety/error-boundary implementations were not copied over Claude's implementations. INTERNAL ALPHA remains the release classification.
+
+
 ## 2026-10-23 — Storage denial fixture correction
 - The earlier nonexistent-listing Storage probe could also be rejected by the legacy owner policy; it could not independently demonstrate quarantine. No real acceptance had run or passed.
 - The runner now requires distinct `STUORA_TEST_STUDENT_A_LISTING_ID` and `STUORA_TEST_STUDENT_B_LISTING_ID`: existing active Housing/Marketplace listings owned by the corresponding dedicated staging accounts. Both identities and listing fixtures are checked through authenticated HTTP before any media write probes. Storage upload/public-lookup/exceptional-cleanup use the verified owned listing paths. Metadata grant-denial retains a random nonexistent listing to avoid inserting valid metadata unexpectedly.

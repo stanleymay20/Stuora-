@@ -1,7 +1,8 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { AppState, Linking, Platform } from 'react-native';
 import type { Session } from '@supabase/supabase-js';
-import { supabase } from '../backend/supabase';
+import { initialAuthUrl, supabase } from '../backend/supabase';
+import { authCallbackMessage, classifyAuthCallback, stripAuthCallbackParams } from './authCallbackNotice';
 import type { Database } from '../backend/database.types';
 import { parseStuoraNativeAuthCallback } from './nativeAuthCallback';
 
@@ -14,6 +15,9 @@ type AuthState = {
   recoveryMode: boolean;
   recoveryComplete: boolean;
   error: string;
+  /** A one-time explanation of an email link that could not sign the student in. */
+  linkNotice: string;
+  dismissLinkNotice: () => void;
   reloadProfile: () => void;
   finishRecovery: () => void;
 };
@@ -29,6 +33,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [recoveryComplete, setRecoveryComplete] = useState(false);
   const [error, setError] = useState('');
   const [revision, setRevision] = useState(0);
+  const [linkNotice, setLinkNotice] = useState('');
 
   useEffect(() => {
     let active = true;
@@ -48,6 +53,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     // Keep auth callbacks synchronous: querying inside one can deadlock locks.
     void supabase.auth.getSession().then(({ data, error: issue }) => {
+      // Explain links supabase-js could not use (other browser, expired, used).
+      const callback = classifyAuthCallback(initialAuthUrl);
+      if (active && callback && !data.session && typeof window !== 'undefined') {
+        setLinkNotice(authCallbackMessage(callback));
+        window.history.replaceState(window.history.state, '', stripAuthCallbackParams(window.location.href));
+      }
       if (!active || authEvent) return;
       setSession(data.session);
       setError(issue ? 'Could not restore your session. Please sign in again.' : '');
@@ -69,17 +80,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             setError('This Stuora sign-in link is invalid or expired. Request a new one.');
           return;
         }
-        const { error: issue } = await supabase.auth.setSession({
-          access_token: callback.accessToken,
-          refresh_token: callback.refreshToken,
-        });
+        // PKCE: the code is only usable with the verifier stored on this device.
+        // A recovery link emits PASSWORD_RECOVERY through onAuthStateChange.
+        const { error: issue } = await supabase.auth.exchangeCodeForSession(callback.code);
         if (!active) return;
         if (issue) {
-          setError('This sign-in link could not be used. Request a new one.');
+          setError('Open this link on the device where you requested it, or request a new one.');
           return;
         }
         setError('');
-        if (callback.recovery) setRecoveryMode(true);
       } catch {
         if (active) setError('This sign-in link could not be read. Request a new one.');
       }
@@ -144,6 +153,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     recoveryMode,
     recoveryComplete,
     error,
+    linkNotice,
+    dismissLinkNotice: () => setLinkNotice(''),
     reloadProfile: () => setRevision(v => v + 1),
     // Preserve the isolated auth screen across sign-out until the next login.
     finishRecovery: () => setRecoveryComplete(true),

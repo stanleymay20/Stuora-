@@ -1,3 +1,11 @@
+# Latest continuation: Edge functions deployed to staging
+
+Implementation 7af430985cb05490432c203aa13cae91cbd95447: four functions ACTIVE with JWT verification; photo writes remain compiled off and live endpoint returns FEATURE_DISABLED. Current preview CORS is denied until an operator sets the exact origin. Read the newest START HERE section before historical status below.
+
+# Latest continuation: Gen-3 staging reconciliation
+
+Read `STUORA_NEXT_CHAT_START_HERE.md` and `STUORA_GEN3_STAGING_CHECKPOINT_2026-10-23.md` first. Older branch and staging instructions below are historical.
+
 # STUORA — CANONICAL CONTINUATION & RELEASE-SECURITY HANDOFF
 
 ## 2026-10-23 — Storage denial fixture correction

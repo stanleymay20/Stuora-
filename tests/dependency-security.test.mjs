@@ -11,15 +11,15 @@ function recount(r) {
   return r;
 }
 test('accepts controlled findings, fewer paths and complete/partial remediation', () => {
-  assert.equal(validateAudit(report(), 1), 22);
+  assert.equal(validateAudit(report(), 1), 23);
   const clean = report(); clean.vulnerabilities = {};
   assert.equal(validateAudit(recount(clean), 0), 0);
   const reduced = report(); delete reduced.vulnerabilities['@expo/cli'];
   reduced.vulnerabilities.expo.via = reduced.vulnerabilities.expo.via.filter(v => v !== '@expo/cli');
-  assert.equal(validateAudit(recount(reduced), 1), 21);
+  assert.equal(validateAudit(recount(reduced), 1), 22);
   const lower = report(); lower.vulnerabilities.braces.severity = 'moderate';
   lower.vulnerabilities.braces.via[0].severity = 'moderate';
-  assert.equal(validateAudit(recount(lower), 1), 22);
+  assert.equal(validateAudit(recount(lower), 1), 23);
 });
 const cases = {
   'missing data': r => { delete r.vulnerabilities; },

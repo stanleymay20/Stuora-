@@ -73,7 +73,7 @@ export function auditProduction(runAudit = spawnSync) {
   requireValid(!run.error && !run.signal && typeof run.stdout === 'string' && run.stdout.trim(),
     'npm audit failed, timed out or produced no JSON.');
   const count = validateAudit(JSON.parse(run.stdout), run.status);
-  console.log(`Production dependency audit: ${count} known findings (upper bound 22), no increased risk.`);
+  console.log(`Production dependency audit: ${count} known findings (upper bound 23), no increased risk.`);
   return count;
 }
 

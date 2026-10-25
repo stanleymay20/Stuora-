@@ -156,8 +156,8 @@ for (const inheritedGrants of [false, true]) {
       await deny(a, 'update public.student_benefits set verified_at = now()');
       await deny(a, `insert into public.benefit_redemptions (benefit_id, user_id, savings_cents) select id, '${a}', 999999 from public.student_benefits`);
       await deny(a, `insert into public.reports (reporter_id, reported_user_id, reason) values ('${b}', '${c}', 'spam')`);
-      await count('authenticated', a, `insert into public.reports (reporter_id, reported_user_id, reason) values ('${a}', '${c}', 'spam') returning *`, 1);
-      await count('authenticated', b, 'select * from public.reports', 0);
+      await count('authenticated', a, `insert into public.reports (reporter_id, reported_user_id, reason) values ('${a}', '${c}', 'spam') returning id`, 1);
+      await count('authenticated', b, 'select id from public.reports', 0);
       // Existing bookmark table RLS: saved rows belong exclusively to their user.
       await count('authenticated', b, "insert into public.saved_listings (user_id,listing_id) values ('" + b + "','" + house + "') returning *", 1);
       await count('authenticated', b, "select * from public.saved_listings where listing_id='" + house + "'", 1);
@@ -222,8 +222,21 @@ for (const inheritedGrants of [false, true]) {
       const { rows: differentListing } = await as('service_role', a,
         `select public.consume_listing_photo_attempt('${a}','${draft}') as allowed`);
       assert.equal(differentListing[0].allowed, false); assertions++;
-      const { rows: anotherStudent } = await as('service_role', b,
+      // Gen-3 N-02: naming someone else's listing is refused AND never
+      // touches that listing's shared window; another student's own
+      // (listing-free) request is still admitted.
+      const { rows: listingWindowBefore } = await db.query(
+        `select used from private.listing_photo_attempt_windows
+         where scope='listing_hour' and scope_key='${house}'`);
+      const { rows: anotherStudentForeign } = await as('service_role', b,
         `select public.consume_listing_photo_attempt('${b}','${house}') as allowed`);
+      assert.equal(anotherStudentForeign[0].allowed, false); assertions++;
+      const { rows: listingWindowAfter } = await db.query(
+        `select used from private.listing_photo_attempt_windows
+         where scope='listing_hour' and scope_key='${house}'`);
+      assert.deepEqual(listingWindowAfter, listingWindowBefore); assertions++;
+      const { rows: anotherStudent } = await as('service_role', b,
+        `select public.consume_listing_photo_attempt('${b}', null) as allowed`);
       assert.equal(anotherStudent[0].allowed, true); assertions++;
       const { rows: persistedAttempts } = await db.query(
         `select used from private.listing_photo_attempt_windows
@@ -299,13 +312,16 @@ for (const inheritedGrants of [false, true]) {
         where bucket_id='listing-media' returning id`,0);
       await count('authenticated',b,`delete from storage.objects where bucket_id='listing-media' returning id`,0);
       await count('authenticated',a,`delete from storage.objects where bucket_id='listing-media' returning id`,1);
-      // Avatar writing must NOT regress during listing-media quarantine.
-      await count('authenticated',a,`insert into storage.objects(bucket_id,name)
-        values ('avatars','${a}/avatar') returning id`,1);
+      // Avatars are not a feature: direct uploads (which would keep EXIF/GPS) are closed.
+      await deny(a,`insert into storage.objects(bucket_id,name)
+        values ('avatars','${a}/avatar')`);
       await deny(b,`insert into storage.objects(bucket_id,name)
-        values ('avatars','${a}/avatar-2')`);
+        values ('avatars','${a}/avatar')`);
+      await db.query(`insert into storage.objects(bucket_id,name) values ('avatars','${a}/avatar')`);
       await count('authenticated',b,`select * from storage.objects where bucket_id='avatars'`,0);
       await count('authenticated',a,`select * from storage.objects where bucket_id='avatars'`,1);
+      await count('authenticated',a,`update storage.objects set name='${a}/avatar' where bucket_id='avatars' returning id`,0);
+      await count('authenticated',a,`delete from storage.objects where bucket_id='avatars' returning id`,1);
 
       const save = (listingId, kind, title, price = 3500, housingType = 'room', condition = 'good') => `select public.save_student_listing(${listingId ? `'${listingId}'` : 'null'}, '${kind}', '${title}', 'Student listing', 'Berlin', ${price}, '${housingType}', true, true, '${condition}') as id`;
       const { rows: created } = await as('authenticated', a, save(null, 'housing', 'Persistent room', 65000));

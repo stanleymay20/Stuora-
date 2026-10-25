@@ -4,12 +4,14 @@ import { useAuth } from '../account/AuthProvider';
 import { supabase } from '../backend/supabase';
 import { EditorialImage } from '../ui/EditorialImage';
 import type { Database } from '../backend/database.types';
+import ReportButton from '../moderation/ReportButton';
+import { useDebouncedValue } from '../hooks/useDebouncedValue';
 
 type Person = Pick<Database['public']['Tables']['profiles']['Row'], 'id' | 'display_name' | 'city' | 'bio'>;
 const PER_PAGE = 24;
 const escapeLike = (value: string) => value.replace(/[\\%_]/g, '\\$&');
 
-export default function PeopleDirectory({ search, onAccount }: { search: string; onAccount: () => void }) {
+export default function PeopleDirectory({ search: searchInput, onAccount }: { search: string; onAccount: () => void }) {
   const { session, initializing } = useAuth();
   const { width } = useWindowDimensions();
   const [people, setPeople] = useState<Person[]>([]);
@@ -18,7 +20,9 @@ export default function PeopleDirectory({ search, onAccount }: { search: string;
   const [pages, setPages] = useState(1);
   const [more, setMore] = useState(false);
   const [revision, setRevision] = useState(0);
-  const [city, setCity] = useState('');
+  const [cityInput, setCity] = useState('');
+  const search = useDebouncedValue(searchInput, 300);
+  const city = useDebouncedValue(cityInput, 300);
   const [selected, setSelected] = useState<Person | null>(null);
 
   useEffect(() => { setPages(1); setSelected(null); }, [search, city]);
@@ -33,6 +37,8 @@ export default function PeopleDirectory({ search, onAccount }: { search: string;
         let query = supabase.from('profiles')
           .select('id,display_name,city,bio')
           .eq('is_discoverable', true)
+          // Gen-3 R-04: only profiles whose owner confirmed discovery.
+          .not('discoverable_consented_at', 'is', null)
           .order('created_at', { ascending: false })
           .order('id')
           .range(0, pages * PER_PAGE)
@@ -75,6 +81,7 @@ export default function PeopleDirectory({ search, onAccount }: { search: string;
       <Text style={styles.subheading}>About</Text>
       <Text style={styles.description}>{selected.bio?.trim() || 'This student has not added a public bio.'}</Text>
       <Text style={styles.contactNote}>Private conversations currently begin from real marketplace or housing listings.</Text>
+      {selected.id !== session?.user.id ? <ReportButton kind="user" targetId={selected.id} label="Report profile" /> : null}
     </View> : <>
       <View style={styles.filters}>
         <View style={styles.filterCopy}>
@@ -85,7 +92,7 @@ export default function PeopleDirectory({ search, onAccount }: { search: string;
           accessibilityLabel="Filter people by city"
           placeholder="Filter by city"
           placeholderTextColor="#9198AB"
-          value={city}
+          value={cityInput}
           onChangeText={setCity}
           style={styles.cityInput}
         />
@@ -126,9 +133,9 @@ const styles = StyleSheet.create({
   avatarLetter: { color: '#7048FF', fontWeight: '900', fontSize: 29 },
   name: { fontSize: 17, fontWeight: '900', color: '#11162F' },
   bio: { color: '#626A80', fontSize: 13, lineHeight: 19 },
-  city: { color: '#747B91', fontWeight: '700', fontSize: 12 },
+  city: { color: '#555C72', fontWeight: '700', fontSize: 12 },
   link: { color: '#7048FF', fontWeight: '800', fontSize: 12 },
-  muted: { color: '#747B91', fontSize: 12, lineHeight: 19 },
+  muted: { color: '#555C72', fontSize: 12, lineHeight: 19 },
   description: { color: '#252B4A', fontSize: 14, lineHeight: 22 },
   panel: { padding: 20, borderRadius: 18, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E9EAF1', gap: 12 },
   empty: { padding: 28, borderRadius: 20, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E9EAF1', alignItems: 'center', gap: 10 },
@@ -140,7 +147,7 @@ const styles = StyleSheet.create({
   detailHeading: { flexDirection: 'row', gap: 17, alignItems: 'center' },
   detailText: { flex: 1, gap: 5 },
   detailName: { fontSize: 23, fontWeight: '900', color: '#11162F' },
-  consentNote: { fontSize: 11, color: '#747B91' },
+  consentNote: { fontSize: 11, color: '#555C72' },
   subheading: { fontSize: 18, fontWeight: '900', color: '#11162F' },
   contactNote: { padding: 12, borderRadius: 12, backgroundColor: '#F3F0FF', color: '#57458B', fontSize: 12, lineHeight: 18 },
 });

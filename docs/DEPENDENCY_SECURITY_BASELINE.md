@@ -36,3 +36,20 @@ These three upstream build-tool advisories are a documented temporary risk accep
 ## Gate validation
 
 `security/production-audit-baseline.json` records the observed npm audit v2 report as an upper bound. The checker rejects process/registry errors, missing data, inconsistent counts, critical or increased per-package severity, higher advisory CVSS, new advisory identity, changed direct exposure, new vulnerable installation paths, changed package-to-advisory edges and dangling/unrooted chains. Package, path and advisory removals and severity reductions are accepted. Changed advisory affected ranges require review. Failure-path regression tests run before the live audit. No baseline is regenerated automatically. CI checks out the exact PR head; all existing Expo, database, TypeScript, browser and native gates remain mandatory.
+
+## Addendum 2026-10-25: `zod` via `@expo/cli` (GHSA-mrhx-c7xc-m3w5)
+
+- **Advisory:** Zod can exhaust memory when validating oversized constrained collections (high, CVSS 7.5, affected `<4.6.6`). It has no patched 3.x release.
+- **Path:** `expo@57.0.31 → @expo/cli@57.0.32 → zod@3.25.76` (`node_modules/zod`, transitive, not direct). The latest Expo CLI (58.1.15) still declares `zod ^3.25.76`.
+- **Exposure:** build-time only.
+  - Stuora's source never imports `zod`.
+  - The exported web bundle contains no Zod code: a search for `ZodError` in `dist/` returns 0 hits.
+  - The Expo CLI parses local project configuration, not untrusted network input.
+- **Why not force-fixed:**
+  - Overriding to Zod 4 would change the major API under `@expo/cli`.
+  - `npm audit fix --force` would downgrade Expo.
+  - Neither is acceptable without upstream support.
+- **Decision:** accepted as one more exact baseline entry. Only `zod` at `node_modules/zod` and this one advisory are allowed, and the `@expo/cli → zod` edge is added. Every other rule still fails CI: new packages, paths or advisories, higher severity or CVSS, any critical finding.
+- **Remove this entry** as soon as Expo ships a CLI that depends on a patched Zod.
+
+The live audit today reports 5 findings, against an upper bound of 23. The original `braces` and `uuid` chains are no longer present.
