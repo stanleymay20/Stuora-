@@ -13,6 +13,8 @@ if (!url || !anonKey || !serviceKey) throw new Error("stuora-assistant is missin
 const origins = allowedOrigins(env.STUORA_ALLOWED_WEB_ORIGINS);
 const providers = [groqProvider(env), cloudflareProvider(env)].filter((p): p is LlmProvider => p !== null);
 const enabled = env.STUORA_AI_ASSISTANT === "enabled" && providers.length > 0;
+// Boot diagnostic: which switches are present (booleans/counts only, never values).
+console.log(JSON.stringify({ event: "assistant_config", flag: env.STUORA_AI_ASSISTANT === "enabled", providers: providers.map(p => p.id), origins: origins.size }));
 const admin = createClient(url, serviceKey, { auth: { persistSession: false, autoRefreshToken: false } });
 
 const KIND: Record<string, string> = { housing: "housing", marketplace: "marketplace", jobs: "job", events: "event", trips: "trip" };
@@ -74,7 +76,11 @@ Deno.serve(async req => {
     console.log(JSON.stringify({ event: "assistant_reply", source: reply.source, results: reply.results.length }));
     return json(200, reply, cors);
   } catch (err) {
-    if (err instanceof HttpError) return json(err.status, { code: err.code, error: err.message }, cors);
+    if (err instanceof HttpError) {
+      // Reason codes only (FEATURE_DISABLED, AUTH, RATE_LIMIT…): no user, query or key data.
+      console.warn(JSON.stringify({ event: "request_refused", fn: "stuora-assistant", code: err.code, status: err.status }));
+      return json(err.status, { code: err.code, error: err.message }, cors);
+    }
     console.error("stuora-assistant internal failure", err instanceof Error ? err.name : "unknown");
     return json(503, { code: "UNAVAILABLE", error: "Assistant temporarily unavailable" }, cors);
   }

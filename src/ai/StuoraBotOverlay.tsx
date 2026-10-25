@@ -119,8 +119,11 @@ export default function StuoraBotOverlay({ open, preferredCity = '', onClose, on
         try { reply = await askAssistant(text, preferredCity); }
         catch (error) {
           if (error instanceof ServiceError && error.code === 'RATE_LIMIT') { setFailure(error.message); return; }
-          // Any other assistant failure falls back to the on-device keyword search.
+          // Any other assistant failure falls back to the on-device keyword search,
+          // and the label says why so operators can diagnose configuration.
           reply = await searchStuora(text, ac.signal, preferredCity);
+          const why = error instanceof ServiceError ? error.code : 'UNAVAILABLE';
+          reply = { ...reply, sourceLabel: `Keyword search (AI unavailable: ${why})` };
         }
       } else reply = await searchStuora(text, ac.signal, preferredCity);
       if (ac.signal.aborted) return;

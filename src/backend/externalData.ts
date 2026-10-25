@@ -19,6 +19,8 @@ export async function invokeFunction<T>(fn: string, body: Record<string, unknown
   if (error) {
     let code = 'UNAVAILABLE', message = 'This service is temporarily unavailable.';
     const ctx = (error as { context?: unknown }).context;
+    // No HTTP response at all: network failure or the browser blocked it (CORS / origin).
+    if (!(ctx instanceof Response)) code = 'NO_RESPONSE';
     if (ctx instanceof Response) {
       try {
         const payload = await ctx.json();

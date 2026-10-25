@@ -18,6 +18,7 @@ const admin = createClient(url, serviceKey, { auth: { persistSession: false, aut
 const feeds = [ticketmasterProvider(env), adzunaProvider(env), bundesagenturProvider(env)]
   .filter((p): p is FeedProvider => p !== null);
 const cityLookup = nominatimLookup(env);
+console.log(JSON.stringify({ event: "external_config", feeds: feeds.map(f => f.id), cityLookup: cityLookup !== null, origins: origins.size }));
 
 async function rpcBoolean(name: string, args: Record<string, unknown> = {}): Promise<boolean> {
   const { data, error } = await admin.rpc(name, args);
@@ -59,7 +60,11 @@ Deno.serve(async req => {
     }
     throw new HttpError(400, "ACTION", "Unsupported action");
   } catch (err) {
-    if (err instanceof HttpError) return json(err.status, { code: err.code, error: err.message }, cors);
+    if (err instanceof HttpError) {
+      // Reason codes only (FEATURE_DISABLED, AUTH, RATE_LIMIT…): no user, query or key data.
+      console.warn(JSON.stringify({ event: "request_refused", fn: "external-data", code: err.code, status: err.status }));
+      return json(err.status, { code: err.code, error: err.message }, cors);
+    }
     console.error("external-data internal failure", err instanceof Error ? err.name : "unknown");
     return json(503, { code: "UNAVAILABLE", error: "External data temporarily unavailable" }, cors);
   }

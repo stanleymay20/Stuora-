@@ -38,7 +38,11 @@ export function json(status: number, body: unknown, extra: Record<string, string
 /** Returns a response for OPTIONS / forbidden origins, or null to continue. */
 export function preflight(req: Request, allowed: Set<string>, methods = "POST, OPTIONS"): Response | null {
   const origin = req.headers.get("Origin");
-  if (origin && !allowed.has(origin)) return json(403, { code: "ORIGIN", error: "Unapproved origin" }, { "Vary": "Origin" });
+  if (origin && !allowed.has(origin)) {
+    // Diagnostic without data: how many origins are configured, never which.
+    console.warn(JSON.stringify({ event: "origin_rejected", configured: allowed.size }));
+    return json(403, { code: "ORIGIN", error: "Unapproved origin" }, { "Vary": "Origin" });
+  }
   if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: corsHeaders(origin, allowed, methods) });
   return null;
 }
