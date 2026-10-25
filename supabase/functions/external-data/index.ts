@@ -17,7 +17,17 @@ const origins = allowedOrigins(env.STUORA_ALLOWED_WEB_ORIGINS);
 const admin = createClient(url, serviceKey, { auth: { persistSession: false, autoRefreshToken: false } });
 const feeds = [ticketmasterProvider(env), adzunaProvider(env), bundesagenturProvider(env)]
   .filter((p): p is FeedProvider => p !== null);
-const cityLookup = cityLookupChain(env);
+// Stored beside cached cities; city keys always start with a letter, so this cannot collide.
+const BREAKER_KEY = "__refused__";
+const cityLookup = cityLookupChain(env, {
+  async isOpen() {
+    const { data, error } = await admin.rpc("external_cache_get", { p_provider: "nominatim", p_key: BREAKER_KEY });
+    return !error && data !== null;
+  },
+  async trip() {
+    await admin.rpc("external_cache_put", { p_provider: "nominatim", p_key: BREAKER_KEY, p_payload: { refused: true }, p_ttl_seconds: 3600 });
+  },
+});
 console.log(JSON.stringify({ event: "external_config", feeds: feeds.map(f => f.id), cityLookup: cityLookup !== null, origins: origins.size }));
 
 async function rpcBoolean(name: string, args: Record<string, unknown> = {}): Promise<boolean> {

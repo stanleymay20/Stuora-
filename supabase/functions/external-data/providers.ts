@@ -210,16 +210,25 @@ export function photonLookup(env: Env, timeoutMs = 5000) {
   };
 }
 
-/** Nominatim first (when configured), then Photon. Both are OpenStreetMap data. */
-export function cityLookupChain(env: Env) {
+/** Remembers that Nominatim refused this server, so we stop asking for a while. */
+export interface NominatimBreaker { isOpen(): Promise<boolean>; trip(): Promise<void> }
+
+/**
+ * Nominatim first (when configured), then Photon. Both are OpenStreetMap data.
+ * A 403/429 from Nominatim is a policy refusal of our egress IP, not a transient
+ * error: the breaker skips Nominatim until it expires instead of paying a
+ * refused round trip on every lookup.
+ */
+export function cityLookupChain(env: Env, breaker?: NominatimBreaker) {
   const nominatim = nominatimLookup(env);
   const photon = photonLookup(env);
   return async (query: string, fetcher: typeof fetch): Promise<CityCandidate[]> => {
-    if (nominatim) {
+    if (nominatim && !(await breaker?.isOpen().catch(() => false))) {
       try { return await nominatim(query, fetcher); }
       catch (err) {
-        console.warn(JSON.stringify({ event: "provider_failed", provider: "nominatim",
-          reason: err instanceof Error && /^nominatim \d{3}$/.test(err.message) ? err.message : err instanceof Error ? err.name : "unknown" }));
+        const reason = err instanceof Error && /^nominatim \d{3}$/.test(err.message) ? err.message : err instanceof Error ? err.name : "unknown";
+        console.warn(JSON.stringify({ event: "provider_failed", provider: "nominatim", reason }));
+        if (reason === "nominatim 403" || reason === "nominatim 429") await breaker?.trip().catch(() => {});
       }
     }
     return photon(query, fetcher);

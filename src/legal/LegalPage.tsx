@@ -18,7 +18,7 @@ function privacy(): Section[] {
     { heading: 'Controller', body: [`${operator.name}, ${operator.address}. Email: ${operator.email}. Privacy contact: ${operator.privacyContact}.`] },
     { heading: 'What we process and why', body: [
       'Account: email address and password hash, to provide your account (Art. 6(1)(b) GDPR).',
-      'Profile: display name, city, bio and optional avatar. Your profile only appears in the student directory after you switch on discovery and confirm it (Art. 6(1)(a) GDPR); you can switch it off at any time.',
+      'Profile: display name, city and bio. Your profile only appears in the student directory after you switch on discovery and confirm it (Art. 6(1)(a) GDPR); you can switch it off at any time.',
       'Listings, photos, saved items, messages, groups and group posts you create, to run the service (Art. 6(1)(b) GDPR). Listing photos added through Stuora’s photo processing are re-encoded on our server and their camera and location metadata is removed before anyone can see them. Photos uploaded before that processing was introduced are stored as uploaded; remove and re-add them to strip their metadata.',
       'Reports, moderation decisions, blocks, rate-limit counters and security logs, to keep students safe and prevent abuse (Art. 6(1)(f) GDPR). Moderators see the reported content, never who reported it, and the person reported is not told who reported them.',
     ] },

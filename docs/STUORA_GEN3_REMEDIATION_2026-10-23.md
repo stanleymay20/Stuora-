@@ -89,3 +89,15 @@ Staging-only rules:
 Set this once and leave it:
 - `STUORA_ALLOWED_WEB_ORIGINS` = the branch URL above.
 - In Supabase Auth → URL Configuration, add the same branch URL to the Redirect URLs.
+
+## Pipeline audit fixes (2026-10-26)
+
+Ten pipelines were audited end to end on staging, using rolled-back transactions as anon, student, moderator and service role. Fixes:
+- `20261026010000`: reports no longer block account deletion. The old `reports_check` made every reported student's deletion fail with 23514. A report target is now required only when the report is filed.
+- `20261026011000`:
+  - Suspended students can report only harassment or unsafe behaviour.
+  - The unused avatar upload path is closed (direct uploads kept EXIF/GPS).
+  - `avatar_path` is no longer client-writable.
+- `external-data`: a Nominatim 403/429 trips a one-hour breaker, so lookups go straight to Photon instead of paying a refused round trip each time.
+
+Applied to staging (external-data v13). Operator check: Supabase → Auth → URL Configuration → Site URL must be the stable preview URL, not `http://localhost:3000`.

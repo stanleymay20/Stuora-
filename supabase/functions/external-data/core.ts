@@ -49,7 +49,7 @@ export async function lookupCity(deps: ExternalDeps, rawQuery: unknown): Promise
   let candidates: CityCandidate[];
   try { candidates = await deps.cityLookup(query, deps.fetcher); }
   catch (err) {
-    console.warn(JSON.stringify({ event: "provider_failed", provider: "nominatim", reason: failureReason(err) }));
+    console.warn(JSON.stringify({ event: "provider_failed", provider: "city_lookup", reason: failureReason(err) }));
     throw new HttpError(503, "PROVIDER", "City lookup is temporarily unavailable");
   }
   await deps.cachePut("nominatim", key, candidates, 30 * 24 * 3600);

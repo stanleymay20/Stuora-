@@ -312,13 +312,16 @@ for (const inheritedGrants of [false, true]) {
         where bucket_id='listing-media' returning id`,0);
       await count('authenticated',b,`delete from storage.objects where bucket_id='listing-media' returning id`,0);
       await count('authenticated',a,`delete from storage.objects where bucket_id='listing-media' returning id`,1);
-      // Avatar writing must NOT regress during listing-media quarantine.
-      await count('authenticated',a,`insert into storage.objects(bucket_id,name)
-        values ('avatars','${a}/avatar') returning id`,1);
+      // Avatars are not a feature: direct uploads (which would keep EXIF/GPS) are closed.
+      await deny(a,`insert into storage.objects(bucket_id,name)
+        values ('avatars','${a}/avatar')`);
       await deny(b,`insert into storage.objects(bucket_id,name)
-        values ('avatars','${a}/avatar-2')`);
+        values ('avatars','${a}/avatar')`);
+      await db.query(`insert into storage.objects(bucket_id,name) values ('avatars','${a}/avatar')`);
       await count('authenticated',b,`select * from storage.objects where bucket_id='avatars'`,0);
       await count('authenticated',a,`select * from storage.objects where bucket_id='avatars'`,1);
+      await count('authenticated',a,`update storage.objects set name='${a}/avatar' where bucket_id='avatars' returning id`,0);
+      await count('authenticated',a,`delete from storage.objects where bucket_id='avatars' returning id`,1);
 
       const save = (listingId, kind, title, price = 3500, housingType = 'room', condition = 'good') => `select public.save_student_listing(${listingId ? `'${listingId}'` : 'null'}, '${kind}', '${title}', 'Student listing', 'Berlin', ${price}, '${housingType}', true, true, '${condition}') as id`;
       const { rows: created } = await as('authenticated', a, save(null, 'housing', 'Persistent room', 65000));

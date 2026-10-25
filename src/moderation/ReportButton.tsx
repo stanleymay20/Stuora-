@@ -33,7 +33,9 @@ export default function ReportButton({ kind, targetId, label = 'Report', compact
     setBusy(false);
     if (error) {
       setStatus({ ok: false, text: error.code === 'P0001' ? 'You have sent many reports recently. Please try again later.'
-        : error.code === '23505' ? 'You have already reported this.' : 'We could not send this report. Please try again.' });
+        : error.code === '23505' ? 'You have already reported this.'
+        : error.code === '42501' && /suspended/i.test(error.message ?? '') ? 'While your account is suspended you can only report harassment or unsafe behaviour.'
+        : 'We could not send this report. Please try again.' });
       return;
     }
     setStatus({ ok: true, text: 'Thank you. A Stuora moderator will review this. You will see the outcome in your notices.' });

@@ -140,3 +140,28 @@ Deno.test("city lookup falls back to Photon when Nominatim refuses the server (4
   await cityLookupChain({})("Köln", fetcher);
   assert.deepEqual(calls, ["photon.komoot.io"]);
 });
+
+Deno.test("a Nominatim 403 trips the breaker; later lookups go straight to Photon", async () => {
+  const { cityLookupChain } = await import("./providers.ts");
+  const calls: string[] = [];
+  let status = 403;
+  const fetcher = (async (url: string) => {
+    const host = new URL(url).hostname;
+    calls.push(host);
+    if (host === "nominatim.openstreetmap.org") return new Response("x", { status });
+    return new Response(JSON.stringify({ features: [{ properties: { name: "Köln", country: "Germany", countrycode: "DE" } }] }));
+  }) as typeof fetch;
+  let open = false;
+  const breaker = { isOpen: async () => open, trip: async () => { open = true; } };
+  const lookup = cityLookupChain({ STUORA_NOMINATIM_CONTACT: "ops@stuora.example" }, breaker);
+  await lookup("Köln", fetcher);
+  await lookup("Köln", fetcher);
+  assert.deepEqual(calls, ["nominatim.openstreetmap.org", "photon.komoot.io", "photon.komoot.io"]);
+  // A transient 5xx does not trip it; a failing breaker store never blocks lookups.
+  open = false; status = 502; calls.length = 0;
+  await lookup("Köln", fetcher);
+  assert.equal(open, false);
+  const broken = { isOpen: () => Promise.reject(new Error("db")), trip: () => Promise.reject(new Error("db")) };
+  const out = await cityLookupChain({ STUORA_NOMINATIM_CONTACT: "ops@stuora.example" }, broken)("Köln", fetcher);
+  assert.equal(out[0].name, "Köln");
+});

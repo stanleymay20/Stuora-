@@ -223,6 +223,21 @@ test('Erasure: a reported student can still delete their account; the report sur
   await db.close();
 });
 
+test('Suspended students keep only the safety reporting path; avatar_path is not client-writable', async () => {
+  const { db } = await harness();
+  await seed(db);
+  const { as, deny, listing } = actors(db);
+  const l = await listing(C, 'marketplace', 'Lamp', 1500);
+  await db.exec(`insert into public.account_suspensions(user_id, reason) values ('${B}', 'Suspended for scam listings.')`);
+  await deny(B, `select public.report_content('listing', '${l}', 'spam', 'retaliation')`);
+  await deny(B, `select public.report_content('user', '${C}', 'fraud', 'retaliation')`);
+  assert.ok((await as(B, `select public.report_content('user', '${C}', 'harassment', 'Keeps messaging me') id`)).rows[0].id);
+  assert.ok((await as(A, `select public.report_content('listing', '${l}', 'spam', 'Duplicate') id`)).rows[0].id, 'others unaffected');
+  await deny(A, `update public.profiles set avatar_path='${A}/avatar' where id='${A}'`);
+  await deny(D, `insert into public.profiles(id, display_name, city, avatar_path) values ('${D}', 'X', 'Köln', 'x')`);
+  await db.close();
+});
+
 test('D-10: export returns only the caller\'s own data and is rate-limited', async () => {
   const { db } = await harness(); await seed(db);
   const { as, listing } = actors(db);
