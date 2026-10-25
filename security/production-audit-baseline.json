@@ -13,7 +13,8 @@
         "@expo/metro",
         "@expo/metro-config",
         "@expo/prebuild-config",
-        "node-forge"
+        "node-forge",
+        "zod"
       ],
       "effects": [
         "expo"
@@ -498,6 +499,41 @@
         "version": "44.0.6",
         "isSemVerMajor": true
       }
+    },
+    "zod": {
+      "name": "zod",
+      "severity": "high",
+      "isDirect": false,
+      "via": [
+        {
+          "source": 1243066,
+          "name": "zod",
+          "dependency": "zod",
+          "title": "Zod can exhaust memory while validating oversized constrained collections",
+          "url": "https://github.com/advisories/GHSA-mrhx-c7xc-m3w5",
+          "severity": "high",
+          "cwe": [
+            "CWE-770"
+          ],
+          "cvss": {
+            "score": 7.5,
+            "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+          },
+          "range": "<4.6.6"
+        }
+      ],
+      "effects": [
+        "@expo/cli"
+      ],
+      "range": "<4.6.6",
+      "nodes": [
+        "node_modules/zod"
+      ],
+      "fixAvailable": {
+        "name": "expo",
+        "version": "44.0.6",
+        "isSemVerMajor": true
+      }
     }
   },
   "metadata": {
@@ -505,9 +541,9 @@
       "info": 0,
       "low": 0,
       "moderate": 7,
-      "high": 15,
+      "high": 16,
       "critical": 0,
-      "total": 22
+      "total": 23
     },
     "dependencies": {
       "prod": 519,
