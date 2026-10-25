@@ -2,6 +2,10 @@
 
 ## 2026-10-25 — Listing fulfilment
 
+Implementation: `9a86015b9bc2000fcd982a1a0276ef5248319b65`. Preview READY: https://stuora-preview-kob8faa04-stanleymay20s-projects.vercel.app . Local typecheck, web export, secret scan and all 42 targeted desktop/mobile listing and safety tests pass. No production rollout or real two-student hosted acceptance.
+
+CI run 40190071152: rls-authorization and trusted-media-edge pass; verify stops at production dependency audit on the new `@expo/cli -> zod` advisory chain (GHSA-mrhx-c7xc-m3w5). Installed Zod 3.25.76 is affected; advisory lists 4.6.6 as patched. Registry latest Expo CLI 58.1.15 still requires Zod ^3.25.76. Do not blindly force a Zod major override, downgrade Expo via npm audit fix, or weaken the baseline to pass. Feature code is tested; the branch is not fully green. Resolve dependency compatibility and rerun CI before release.
+
 Housing owners can choose **Mark room as taken**; Marketplace owners can choose **Mark as sold**. Both require confirmation, update the existing owner-scoped active listing to `closed`, remove it from public discovery and use the already-applied closed-conversation message guard. Archive remains available for withdrawals. The confirmation explains that earlier messages remain readable. Failures retain the open listing and allow retry; there is no optimistic completion announcement. Closed listings retain the generic `closed` status; a separate sold/taken reason is not stored. No automatic fulfilment detection, new schema, media activation or production changes.
 
 
