@@ -178,7 +178,7 @@ export default function MessageWorkspace({ onAccount, preferredConversationId }:
               <Pressable accessibilityRole="button" accessibilityLabel={safety.blocked_by_me ? 'Unblock this person' : 'Block this person'} disabled={safetyBusy} onPress={() => void toggleBlock()} style={s.safetyButton}><Text style={s.safetyText}>{safety.blocked_by_me ? 'Unblock' : 'Block'}</Text></Pressable>
             </View> : null}
           </View>
-          {safety?.closed ? <Text testID="conversation-closed" style={s.banner}>This listing has been archived, so the conversation is closed. You can still read earlier messages.</Text> : null}
+          {safety?.closed ? <Text testID="conversation-closed" style={s.banner}>This listing has been closed, so the conversation is closed. You can still read earlier messages.</Text> : null}
           {safety?.other_member_left ? <Text style={s.banner}>The other person has left this conversation.</Text> : null}
           {safety?.blocked_by_me ? <Text style={s.banner}>You blocked this person. They cannot start new conversations with you.</Text> : null}
           <ScrollView contentContainerStyle={s.messageList}>

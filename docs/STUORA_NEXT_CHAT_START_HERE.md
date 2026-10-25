@@ -1,5 +1,23 @@
 # STUORA — START HERE IN A NEW CHAT
 
+## 2026-10-25 — Listing fulfilment
+
+Housing owners can choose **Mark room as taken**; Marketplace owners can choose **Mark as sold**. Both require confirmation, update the existing owner-scoped active listing to `closed`, remove it from public discovery and use the already-applied closed-conversation message guard. Archive remains available for withdrawals. The confirmation explains that earlier messages remain readable. Failures retain the open listing and allow retry; there is no optimistic completion announcement. Closed listings retain the generic `closed` status; a separate sold/taken reason is not stored. No automatic fulfilment detection, new schema, media activation or production changes.
+
+
+## 2026-10-23 — Edge deployment checkpoint (supersedes configuration status below)
+
+Implementation commit `7af430985cb05490432c203aa13cae91cbd95447` bounds shared Edge JSON bodies while streaming, enforces a 15-second read deadline, cancels oversize/stalled streams, and rejects invalid UTF-8/media types. All 103 local tests pass; the Deno Edge and database CI jobs pass. All three Actions jobs in run 39902167772 subsequently passed, including browser/native checks.
+
+All four functions are now DEPLOYED to STAGING only from this implementation: delete-account v1, external-data v1, stuora-assistant v1, listing-photo-intake v3. Each is ACTIVE with verify_jwt=true. Readback of deployed photo source confirms TRUSTED_MEDIA_WRITES_COMPILED_IN=false. A live request with the public anon JWT returned 503 FEATURE_DISABLED; this is a disabled-startup check, NOT student acceptance.
+
+Live unauthenticated GETs to each new service return 401. OPTIONS from both ff657b6's preview and 7af4309's preview return 403 ORIGIN: the required STUORA_ALLOWED_WEB_ORIGINS configuration is not approved for them. No origin secrets, provider secrets, feature activation flags or production resources were changed. The connected browser still redirects away from the staging project to unrelated organizations; the dedicated connector can deploy but cannot manage secrets.
+
+The READY immutable implementation preview is `https://stuora-preview-8fydfr387-stanleymay20s-projects.vercel.app` (7af430985cb05490432c203aa13cae91cbd95447). To test this preview, checkout that exact commit; never claim it represents a later documentation commit. Set STUORA_ALLOWED_WEB_ORIGINS through the correct staging dashboard or authenticated CLI, then verify OPTIONS permits this exact origin. Do not add wildcard origins or enable media/provider flags as a workaround.
+
+Still required: two existing confirmed staging accounts supplied securely in the test environment, hosted core and media-denial acceptance with valid owned listing fixtures, actual SMTP delivery/recovery, native device QA, operational moderation and legal/provider readiness. No real account acceptance has been run; no account has been erased. INTERNAL ALPHA; not 100% release-ready.
+
+
 ## 2026-10-23 — Gen-3 staging reconciliation (supersedes older branch pointers)
 
 Active continuation: `fix/stuora-gen3-audit-remediation`, PR #27, stacked on PR #23. Do not merge either PR or modify production. Base `e8d5d7a3aad732a54366c6c5929e90c637eaa03d` has five successful checks (three Actions jobs, GitGuardian, Vercel Preview Comments); Actions run 39877956799. Its immutable web preview is `https://stuora-preview-gk07i3e0s-stanleymay20s-projects.vercel.app`. A successor commit needs its own CI and exact preview.

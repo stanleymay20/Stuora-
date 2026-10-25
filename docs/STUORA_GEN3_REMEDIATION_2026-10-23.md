@@ -1,7 +1,7 @@
 # Stuora — Gen-3 audit remediation, AI and partner data (2026-10-23)
 
 Branch `fix/stuora-gen3-audit-remediation`, stacked on `feat/stuora-ai-business-foundation-20261018` (PR #23).
-Update: all eight migrations are now applied to staging; see `STUORA_GEN3_STAGING_CHECKPOINT_2026-10-23.md`. Functions, secrets and optional provider switches remain pending. Production is unchanged.
+Update: all eight migrations are now applied to staging; see `STUORA_GEN3_STAGING_CHECKPOINT_2026-10-23.md`. All four functions are deployed to staging; origin configuration, provider secrets/switches and real acceptance remain pending. Production is unchanged.
 
 ## What changed
 

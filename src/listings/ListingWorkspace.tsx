@@ -83,7 +83,8 @@ export default function ListingWorkspace({ category, mode = 'browse', search: se
   }, [mode, editing, draft.city, preferredCity, profile?.city]);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState('');
-  const [confirmArchive, setConfirmArchive] = useState(false);
+  const [closeAction, setCloseAction] = useState<'archive' | 'fulfil' | null>(null);
+  const fulfilLabel = kind === 'housing' ? 'Mark room as taken' : 'Mark as sold';
   const [actionError, setActionError] = useState('');
 
   useEffect(() => {
@@ -137,7 +138,7 @@ export default function ListingWorkspace({ category, mode = 'browse', search: se
   }
 
   useEffect(() => {
-    setPages(1); setSelected(null); setEditing(false); setDraft(blank()); setNotice(''); setActionError(''); setConfirmArchive(false);
+    setPages(1); setSelected(null); setEditing(false); setDraft(blank()); setNotice(''); setActionError(''); setCloseAction(null);
   }, [kind, mode, userId, own, search, cityQuery, priceQuery]);
 
   useEffect(() => {
@@ -251,14 +252,14 @@ export default function ListingWorkspace({ category, mode = 'browse', search: se
     } finally { setBusy(false); }
   }
 
-  async function archive() {
-    if (!selected || !userId) return;
+  async function closeListing() {
+    if (!selected || !userId || !closeAction || selected.owner_id !== userId || selected.status !== 'active') return;
     setBusy(true); setActionError('');
     try {
       const { error: issue } = await supabase.from('listings').update({ status: 'closed' }).eq('id', selected.id).eq('owner_id', userId).eq('status', 'active').select('id').single();
       if (issue) throw issue;
-      setSelected(null); setConfirmArchive(false); setNotice('Listing archived. It is no longer publicly discoverable.'); setRevision(v => v + 1);
-    } catch { setActionError('Could not archive. Refresh to check its status, then retry.'); }
+      setSelected(null); setCloseAction(null); setNotice(closeAction === 'archive' ? 'Listing archived. It is no longer publicly discoverable.' : `${kind === 'housing' ? 'Room marked as taken.' : 'Item marked as sold.'} The listing is closed and no longer publicly discoverable. New messages are disabled.`); setRevision(v => v + 1);
+    } catch { setActionError('Could not close the listing. Refresh to check its status, then retry.'); }
     finally { setBusy(false); }
   }
 
@@ -317,8 +318,18 @@ export default function ListingWorkspace({ category, mode = 'browse', search: se
                 onPress={() => void toggleSaved()} disabled={busy || savedState === 'loading' || savedState === 'idle'} />}
         {session && profile && !profileError ? <ReportButton kind="listing" targetId={selected.id} label="Report listing" /> : null}
       </> : null}
-      {selected.owner_id === userId && selected.status === 'active' ? <><Button title="Edit listing" onPress={() => edit(selected)} disabled={busy} />{confirmArchive ? <><Text>Archive this listing? It will disappear from public discovery.</Text><Button title="Confirm archive" onPress={() => void archive()} disabled={busy} /><Button title="Keep listing" onPress={() => setConfirmArchive(false)} disabled={busy} /></> : <Button title="Archive listing" onPress={() => setConfirmArchive(true)} disabled={busy} />}</> : null}
-      <Button title={mode === 'create' ? 'Create another listing' : 'Back to listings'} onPress={() => { setSelected(null); setConfirmArchive(false); setActionError(''); setNotice(''); }} disabled={busy} />
+      {selected.owner_id === userId && selected.status === 'active' ? <>
+        <Button title="Edit listing" onPress={() => edit(selected)} disabled={busy} />
+        {closeAction ? <>
+          <Text>{closeAction === 'archive' ? 'Archive this listing?' : kind === 'housing' ? 'Has this room been taken?' : 'Has this item been sold?'} It will disappear from public discovery and stop accepting new messages. Earlier messages remain readable.</Text>
+          <Button title={closeAction === 'archive' ? 'Confirm archive' : kind === 'housing' ? 'Confirm room taken' : 'Confirm sold'} onPress={() => void closeListing()} disabled={busy} />
+          <Button title="Keep listing" onPress={() => { setCloseAction(null); setActionError(''); }} disabled={busy} />
+        </> : <>
+          <Button title={fulfilLabel} onPress={() => setCloseAction('fulfil')} disabled={busy} />
+          <Button title="Archive listing" onPress={() => setCloseAction('archive')} disabled={busy} />
+        </>}
+      </> : null}
+      <Button title={mode === 'create' ? 'Create another listing' : 'Back to listings'} onPress={() => { setSelected(null); setCloseAction(null); setActionError(''); setNotice(''); }} disabled={busy} />
     </View> : <>
       {!preview ? (
         <View style={s.filters}>
