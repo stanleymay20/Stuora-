@@ -32,6 +32,12 @@ function cleanQuery(value: unknown): string {
   return value.trim();
 }
 
+/** Our own fixed failure strings only (e.g. "nominatim 403"); otherwise the error class. */
+function failureReason(err: unknown): string {
+  if (err instanceof Error && /^(nominatim|ticketmaster|adzuna|bundesagentur) \d{3}$/.test(err.message)) return err.message;
+  return err instanceof Error ? err.name : "unknown";
+}
+
 export async function lookupCity(deps: ExternalDeps, rawQuery: unknown): Promise<CityReply> {
   if (!deps.cityLookup) throw new HttpError(503, "FEATURE_DISABLED", "City lookup is not enabled");
   const query = cleanCity(rawQuery);
@@ -42,7 +48,10 @@ export async function lookupCity(deps: ExternalDeps, rawQuery: unknown): Promise
   if (!(await deps.acquireNominatimSlot())) throw new HttpError(429, "BUSY", "City lookup is busy. Try again in a moment.");
   let candidates: CityCandidate[];
   try { candidates = await deps.cityLookup(query, deps.fetcher); }
-  catch { throw new HttpError(503, "PROVIDER", "City lookup is temporarily unavailable"); }
+  catch (err) {
+    console.warn(JSON.stringify({ event: "provider_failed", provider: "nominatim", reason: failureReason(err) }));
+    throw new HttpError(503, "PROVIDER", "City lookup is temporarily unavailable");
+  }
   await deps.cachePut("nominatim", key, candidates, 30 * 24 * 3600);
   return { candidates, attribution: NOMINATIM_ATTRIBUTION };
 }
@@ -65,7 +74,8 @@ export async function loadFeed(deps: ExternalDeps, kind: unknown, rawCity: unkno
       try {
         rows = await provider.fetch(city, query, deps.fetcher);
         await deps.cachePut(provider.id, key, rows, provider.ttlSeconds);
-      } catch {
+      } catch (err) {
+        console.warn(JSON.stringify({ event: "provider_failed", provider: provider.id, reason: failureReason(err) }));
         sources.push({ ...provider.attribution, status: "error" });
         return;
       }
