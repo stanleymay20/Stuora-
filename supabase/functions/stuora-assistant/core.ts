@@ -85,8 +85,12 @@ export async function runAssistant(deps: AssistantDeps, rawQuery: unknown, rawSe
       grounded = groundModelIntent(query, await provider.extract(query, deps.fetcher));
       source = provider.id; sourceLabel = provider.label;
       break;
-    } catch {
+    } catch (err) {
       // Provider failure or unusable output: try the next provider, then rules.
+      // Log only our own fixed reason strings / error class, never model text or keys.
+      const reason = err instanceof Error && /^provider (status \d{3}|returned no content)$|^no JSON object$/.test(err.message)
+        ? err.message : err instanceof Error ? err.name : "unknown";
+      console.warn(JSON.stringify({ event: "provider_failed", provider: provider.id, reason }));
     }
   }
   const domain = grounded?.domain ?? rules.domain;

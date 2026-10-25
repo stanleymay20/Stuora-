@@ -67,13 +67,22 @@ export function groqProvider(env: { GROQ_API_KEY?: string; GROQ_MODEL?: string }
   return {
     id: "groq",
     label: "Groq",
-    extract: (query, fetcher) => chat(fetcher, "https://api.groq.com/openai/v1/chat/completions", key, {
-      model,
-      temperature: 0,
-      max_completion_tokens: 300,
-      messages: messages(query),
-      response_format: { type: "json_schema", json_schema: { name: "stuora_search_intent", strict: true, schema: INTENT_SCHEMA } },
-    }, timeoutMs),
+    extract: async (query, fetcher) => {
+      const base = { model, temperature: 0, max_completion_tokens: 300, messages: messages(query) };
+      const endpoint = "https://api.groq.com/openai/v1/chat/completions";
+      try {
+        return await chat(fetcher, endpoint, key, {
+          ...base,
+          response_format: { type: "json_schema", json_schema: { name: "stuora_search_intent", strict: true, schema: INTENT_SCHEMA } },
+        }, timeoutMs);
+      } catch (err) {
+        // Some models reject strict schemas (HTTP 400). Retry once in plain JSON
+        // mode; groundModelIntent still discards anything not in the query.
+        if (!(err instanceof Error && err.message === "provider status 400")) throw err;
+        console.warn(JSON.stringify({ event: "provider_failed", provider: "groq", reason: "strict schema rejected; retrying json_object" }));
+        return chat(fetcher, endpoint, key, { ...base, response_format: { type: "json_object" } }, timeoutMs);
+      }
+    },
   };
 }
 

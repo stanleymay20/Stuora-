@@ -99,3 +99,19 @@ Deno.test("providers stay disabled without secrets and send only the query", asy
   }
   assert.equal(sent[0].auth, "Bearer gsk_test");
 });
+
+Deno.test("groq retries once in json_object mode when the strict schema is rejected", async () => {
+  const { groqProvider } = await import("./providers.ts");
+  const bodies: Record<string, unknown>[] = [];
+  const fetcher = (async (_url: string, init: RequestInit) => {
+    const body = JSON.parse(String(init.body));
+    bodies.push(body);
+    if ((body.response_format as { type: string }).type === "json_schema") return new Response("{}", { status: 400 });
+    return new Response(JSON.stringify({ choices: [{ message: { content: '{"domain":"housing","city":"Köln","max_price_eur":600,"keywords":null}' } }] }), { status: 200 });
+  }) as typeof fetch;
+  const out = await groqProvider({ GROQ_API_KEY: "k" })!.extract("housing in Köln under 600", fetcher);
+  assert.match(out, /housing/);
+  assert.deepEqual(bodies.map(b => (b.response_format as { type: string }).type), ["json_schema", "json_object"]);
+  const auth = (async () => new Response("{}", { status: 401 })) as typeof fetch;
+  await assert.rejects(groqProvider({ GROQ_API_KEY: "k" })!.extract("x y", auth), /provider status 401/);
+});
