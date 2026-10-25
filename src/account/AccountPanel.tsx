@@ -115,9 +115,9 @@ export default function AccountPanel({ onLegal }: { onLegal?: (doc: LegalDocumen
       });
       if (resendError) {
         // Do not reveal whether this address belongs to an existing account.
-        setNotice('If your account is awaiting confirmation, please check your inbox. You can try again later.');
+        setNotice('If your account is awaiting confirmation, please check your inbox. You can try again later. Already confirmed? Just sign in, or use Forgot password.');
       } else {
-        setNotice('If your account is awaiting confirmation, check your inbox for a new Stuora email.');
+        setNotice('If your account is awaiting confirmation, check your inbox for a new Stuora email. Already confirmed? Just sign in, or use Forgot password.');
       }
     } catch {
       setIssue('Unable to connect. Please try again later.');

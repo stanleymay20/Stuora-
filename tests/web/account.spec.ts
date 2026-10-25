@@ -61,7 +61,7 @@ test('Stuora resend-confirmation is available after signup and rate-limits accid
   await page.getByRole('button', { name: 'Create account', exact: true }).click();
   await expect(page.getByText(/Check your email and confirm your account, then return to Stuora./)).toBeVisible();
   await page.getByRole('button', { name: 'Resend confirmation email' }).click();
-  await expect(page.getByText('If your account is awaiting confirmation, check your inbox for a new Stuora email.')).toBeVisible();
+  await expect(page.getByText(/If your account is awaiting confirmation, check your inbox for a new Stuora email\./)).toBeVisible();
   expect(api.confirmationsResent()).toBe(1);
   await page.getByRole('button', { name: 'Resend confirmation email' }).click();
   await expect(page.getByText('Please wait a minute before requesting another confirmation email.')).toBeVisible();
@@ -74,7 +74,7 @@ test('Stuora confirmation resend is accessible after reload, with non-enumeratin
   expect(api.confirmationsResent()).toBe(0);
   await page.getByLabel('Email', { exact: true }).fill('unknown@example.invalid');
   await page.getByRole('button', { name: 'Resend confirmation email' }).click();
-  await expect(page.getByText('If your account is awaiting confirmation, please check your inbox. You can try again later.')).toBeVisible();
+  await expect(page.getByText(/If your account is awaiting confirmation, please check your inbox\. You can try again later\./)).toBeVisible();
   expect(api.confirmationsResent()).toBe(1);
   await expect(page.getByLabel('Email', { exact: true })).toHaveValue('unknown@example.invalid');
   await expect(page.getByText('Email rate limit exceeded')).toHaveCount(0);
@@ -85,7 +85,7 @@ test('validation and auth errors preserve retryable state', async ({ page }) => 
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
   await expect(page.getByText('Enter a valid email address.')).toBeVisible();
   await signin(page, 'bad-password');
-  await expect(page.getByText("That email or password didn't work. Check your details and try again.")).toBeVisible();
+  await expect(page.getByText("That email or password didn't work. Check your details, or use Forgot password to set a new one.")).toBeVisible();
   await signin(page);
   await page.getByRole('button', { name: 'Create profile', exact: true }).click();
   await expect(page.getByText('Your name must be between 2 and 80 characters.')).toBeVisible();
