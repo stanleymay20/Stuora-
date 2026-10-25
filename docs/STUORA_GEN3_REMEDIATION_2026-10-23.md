@@ -74,3 +74,18 @@ Quotas: 10/min and 200/day per student, 120/min overall. Only allow-listed provi
 - `npm run typecheck`, `npm run test:database` (PGlite, 11 suites), all `node --test tests/*.test.mjs`
 - Deno: photo intake (12), shared/delete-account/assistant/external-data (17), `deno check` for the new entrypoints
 - `npm run export:web`, secret scan of repo and bundle, Playwright desktop + mobile (including new `safety.spec.ts`)
+
+## Stable preview address (2026-10-25)
+
+Each Vercel preview build now approves two web origins:
+- its immutable deployment URL, which SHA-pinned acceptance runs still use;
+- this branch's stable Git-branch URL, which always serves the newest build of the branch:
+  `https://stuora-preview-git-fix-stuora-gen-ac6adc-stanleymay20s-projects.vercel.app`
+
+Staging-only rules:
+- The alias is accepted only in `staging` mode, never in production.
+- It must match `stuora-preview-git-…-stanleymay20s-projects.vercel.app`.
+
+Set this once and leave it:
+- `STUORA_ALLOWED_WEB_ORIGINS` = the branch URL above.
+- In Supabase Auth → URL Configuration, add the same branch URL to the Redirect URLs.

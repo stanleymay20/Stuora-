@@ -5,6 +5,8 @@ export type BackendEnvironment = {
   url?: string;
   key?: string;
   webOrigin?: string;
+  /** Staging only: the stable Vercel Git-branch URL of the same deployment. */
+  webOriginAlias?: string;
 };
 
 function fail(message: string): never { throw new Error(`Stuora configuration: ${message}`); }
@@ -17,7 +19,7 @@ function origin(value: string, label: string): URL {
 
 // This protects deployment configuration mistakes; RLS remains the authorization boundary.
 export function validateBackendConfig(input: BackendEnvironment, currentWebOrigin?: string) {
-  const { mode, url, key, webOrigin } = input;
+  const { mode, url, key, webOrigin, webOriginAlias } = input;
   if (!['production', 'staging', 'development', 'test'].includes(mode ?? '')) fail('an explicit environment mode is required.');
   if (!url || !key) fail('backend URL and publishable key are required; no defaults are permitted.');
   const backend = origin(url, 'Backend URL');
@@ -36,7 +38,16 @@ export function validateBackendConfig(input: BackendEnvironment, currentWebOrigi
     const approved = origin(webOrigin, 'Web origin');
     if (approved.protocol !== 'https:' || approved.port || !approved.hostname.includes('.') ||
       /(^|\.)(localhost|invalid|local|test)$/.test(approved.hostname) || /^\d+(\.\d+){3}$/.test(approved.hostname)) fail('hosted builds require a public HTTPS web origin.');
-    if (currentWebOrigin && currentWebOrigin !== webOrigin) fail('this web origin is not approved for this build.');
+    const publicOrigin = (value: string, label: string) => {
+      const parsed = origin(value, label);
+      if (parsed.protocol !== 'https:' || parsed.port || !parsed.hostname.includes('.') ||
+        /(^|\.)(localhost|invalid|local|test)$/.test(parsed.hostname) || /^\d+(\.\d+){3}$/.test(parsed.hostname)) fail(`hosted builds require a public HTTPS ${label.toLowerCase()}.`);
+    };
+    if (webOriginAlias) {
+      if (mode !== 'staging') fail('only staging previews may have a branch alias origin.');
+      publicOrigin(webOriginAlias, 'Alias origin');
+    }
+    if (currentWebOrigin && currentWebOrigin !== webOrigin && currentWebOrigin !== webOriginAlias) fail('this web origin is not approved for this build.');
   }
-  return { mode, url, key, webOrigin };
+  return { mode, url, key, webOrigin, webOriginAlias };
 }

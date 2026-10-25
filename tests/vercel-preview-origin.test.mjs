@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { derivePreviewWebOrigin } from '../scripts/build-vercel-web.mjs';
+import { derivePreviewBranchOrigin, derivePreviewWebOrigin } from '../scripts/build-vercel-web.mjs';
 import { validateBackendConfig } from '../scripts/load-backend-config.mjs';
 
 const base = {
@@ -44,6 +44,28 @@ test('Vercel preview refuses wrong backend, environment or deployment hostname',
   for (const change of mutations) {
     assert.throws(() => derivePreviewWebOrigin({ ...base, ...change }), 'must reject ' + JSON.stringify(change));
   }
+});
+
+const BRANCH = 'stuora-preview-git-fix-stuora-gen-ac6adc-stanleymay20s-projects.vercel.app';
+test('the stable Git-branch URL is approved alongside the immutable URL, staging only', () => {
+  const env = { ...base, VERCEL_BRANCH_URL: BRANCH };
+  const alias = derivePreviewBranchOrigin(env);
+  assert.equal(alias, 'https://' + BRANCH);
+  const cfg = { mode: 'staging', url: base.EXPO_PUBLIC_SUPABASE_URL, key: base.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY,
+    webOrigin: derivePreviewWebOrigin(env), webOriginAlias: alias };
+  assert.equal(validateBackendConfig(cfg, alias).mode, 'staging');
+  assert.equal(validateBackendConfig(cfg, cfg.webOrigin).mode, 'staging');
+  assert.throws(() => validateBackendConfig(cfg, 'https://stuora-preview-git-other-123456-stanleymay20s-projects.vercel.app'), /not approved/);
+  assert.throws(() => validateBackendConfig({ ...cfg, mode: 'production', url: 'https://mljmifovcthvtuquvyzf.supabase.co' }, alias), /branch alias/);
+  assert.throws(() => validateBackendConfig({ ...cfg, webOriginAlias: 'http://' + BRANCH }, alias));
+  assert.equal(derivePreviewBranchOrigin({ ...base, VERCEL_BRANCH_URL: '' }), null);
+  assert.equal(derivePreviewBranchOrigin({ ...env, VERCEL_ENV: 'production' }), null);
+  for (const bad of [
+    'stuora-preview-acez6tl63-stanleymay20s-projects.vercel.app',
+    'stuora-preview-git-x-other-team.vercel.app',
+    BRANCH + '.evil.com', 'https://' + BRANCH, BRANCH + '/path',
+    'stuora-preview-git-' + 'a'.repeat(60) + '-stanleymay20s-projects.vercel.app',
+  ]) assert.throws(() => derivePreviewBranchOrigin({ ...base, VERCEL_BRANCH_URL: bad }), bad);
 });
 
 test('outside Preview never modifies origin, including production deploys and local tests', () => {
