@@ -34,7 +34,7 @@ function cleanQuery(value: unknown): string {
 
 /** Our own fixed failure strings only (e.g. "nominatim 403"); otherwise the error class. */
 function failureReason(err: unknown): string {
-  if (err instanceof Error && /^(nominatim|ticketmaster|adzuna|bundesagentur) \d{3}$/.test(err.message)) return err.message;
+  if (err instanceof Error && /^(nominatim|photon|ticketmaster|adzuna|bundesagentur) \d{3}$/.test(err.message)) return err.message;
   return err instanceof Error ? err.name : "unknown";
 }
 

@@ -13,7 +13,7 @@ function privacy(): Section[] {
   const optional: string[] = [];
   if (features.aiAssistant) optional.push('Stuora Bot (optional): when you ask the Bot a question, the text of that question — never your name, email or messages — is sent from our server to Groq, Inc. (USA) and, if Groq is unavailable, to Cloudflare, Inc. (USA) to recognise what you are looking for. Results always come from Stuora itself. Transfers rely on the EU–US Data Privacy Framework or standard contractual clauses.');
   if (features.externalFeeds) optional.push('Jobs and events feeds (optional): the city and search words you choose are sent from our server — not from your device — to Ticketmaster, Adzuna and/or the Bundesagentur für Arbeit to show their public listings. Opening a listing takes you to that provider, whose own privacy notice applies.');
-  if (features.cityLookup) optional.push('City check (optional): the city name you type is sent from our server to OpenStreetMap Nominatim (OpenStreetMap Foundation, UK). No location, GPS or IP address of yours is shared.');
+  if (features.cityLookup) optional.push('City check (optional): the city name you type is sent from our server to OpenStreetMap Nominatim (OpenStreetMap Foundation, UK) or, if that is unavailable, to Photon (komoot GmbH, Germany), which uses the same OpenStreetMap data. No location, GPS or IP address of yours is shared.');
   return [
     { heading: 'Controller', body: [`${operator.name}, ${operator.address}. Email: ${operator.email}. Privacy contact: ${operator.privacyContact}.`] },
     { heading: 'What we process and why', body: [

@@ -116,3 +116,27 @@ Deno.test("city lookup identifies Stuora, respects the throttle and caches 30 da
   await assert.rejects(lookupCity(busy.d, "Köln"), { code: "BUSY" });
   await assert.rejects(lookupCity(deps().d, "Köln"), { code: "FEATURE_DISABLED" });
 });
+
+Deno.test("city lookup falls back to Photon when Nominatim refuses the server (403)", async () => {
+  const { cityLookupChain } = await import("./providers.ts");
+  const calls: string[] = [];
+  const fetcher = (async (url: string) => {
+    const host = new URL(url).hostname;
+    calls.push(host);
+    if (host === "nominatim.openstreetmap.org") return new Response("blocked", { status: 403 });
+    return new Response(JSON.stringify({ features: [
+      { properties: { name: "Halle (Saale)", state: "Saxony-Anhalt", country: "Germany", countrycode: "DE" } },
+      { properties: { name: "Halle (Saale)", state: "Saxony-Anhalt", country: "Germany", countrycode: "DE" } },
+      { properties: { name: "<b>Halle</b>", state: "North Rhine-Westphalia", country: "Germany", countrycode: "DE" } },
+      { properties: { name: "Nowhere", countrycode: "XYZ" } },
+    ] }), { status: 200 });
+  }) as typeof fetch;
+  const lookup = cityLookupChain({ STUORA_NOMINATIM_CONTACT: "ops@stuora.example" });
+  const out = await lookup("Halle (Saale)", fetcher);
+  assert.deepEqual(calls, ["nominatim.openstreetmap.org", "photon.komoot.io"]);
+  assert.deepEqual(out.map(c => c.name), ["Halle (Saale)", "Halle"]);
+  // Without a contact, Photon alone still works.
+  calls.length = 0;
+  await cityLookupChain({})("Köln", fetcher);
+  assert.deepEqual(calls, ["photon.komoot.io"]);
+});

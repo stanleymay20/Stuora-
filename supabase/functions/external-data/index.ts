@@ -7,7 +7,7 @@ import { createClient } from "npm:@supabase/supabase-js@2.117.3";
 import { allowedOrigins, bearer, corsHeaders, HttpError, json, preflight, readJson } from "../_shared/http.ts";
 import { type ExternalDeps, loadFeed, lookupCity } from "./core.ts";
 import {
-  adzunaProvider, bundesagenturProvider, type FeedProvider, nominatimLookup, ticketmasterProvider,
+  adzunaProvider, bundesagenturProvider, cityLookupChain, type FeedProvider, ticketmasterProvider,
 } from "./providers.ts";
 
 const env = Deno.env.toObject();
@@ -17,7 +17,7 @@ const origins = allowedOrigins(env.STUORA_ALLOWED_WEB_ORIGINS);
 const admin = createClient(url, serviceKey, { auth: { persistSession: false, autoRefreshToken: false } });
 const feeds = [ticketmasterProvider(env), adzunaProvider(env), bundesagenturProvider(env)]
   .filter((p): p is FeedProvider => p !== null);
-const cityLookup = nominatimLookup(env);
+const cityLookup = cityLookupChain(env);
 console.log(JSON.stringify({ event: "external_config", feeds: feeds.map(f => f.id), cityLookup: cityLookup !== null, origins: origins.size }));
 
 async function rpcBoolean(name: string, args: Record<string, unknown> = {}): Promise<boolean> {

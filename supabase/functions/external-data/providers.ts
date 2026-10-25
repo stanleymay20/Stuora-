@@ -170,12 +170,58 @@ export function nominatimLookup(env: Env, timeoutMs = 5000) {
       const r = raw as Record<string, any>;
       const a = r.address ?? {};
       const name = cleanText(a.city ?? a.town ?? a.village ?? a.municipality ?? r.name, 80);
-      const countryCode = cleanText(a.country_code, 2).toUpperCase();
+      const countryCode = typeof a.country_code === "string" && /^[a-z]{2}$/i.test(a.country_code) ? a.country_code.toUpperCase() : "";
       if (!name || !/^[A-Z]{2}$/.test(countryCode)) return [];
       const key = `${name.toLowerCase()}|${countryCode}`;
       if (seen.has(key)) return [];
       seen.add(key);
       return [{ name, region: cleanText(a.state ?? a.county, 80), country: cleanText(a.country, 80), countryCode }];
     });
+  };
+}
+
+/**
+ * Photon (photon.komoot.io): OpenStreetMap-based geocoder, no key, fair use.
+ * Used as a fallback because the public Nominatim server refuses (HTTP 403)
+ * many shared cloud IP ranges, including Edge Function egress.
+ */
+export function photonLookup(env: Env, timeoutMs = 5000) {
+  const contact = env.STUORA_NOMINATIM_CONTACT?.trim();
+  const agent = contact && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contact) ? `Stuora/0.1 (student platform; ${contact})` : "Stuora/0.1 (student platform)";
+  return async (query: string, fetcher: typeof fetch): Promise<CityCandidate[]> => {
+    const params = new URLSearchParams({ q: query, limit: "8", lang: "en" });
+    for (const tag of ["place:city", "place:town", "place:village", "place:municipality"]) params.append("osm_tag", tag);
+    const res = await fetchWithTimeout(fetcher, `https://photon.komoot.io/api/?${params}`, {
+      headers: { Accept: "application/json", "User-Agent": agent },
+    }, timeoutMs);
+    if (!res.ok) throw new Error(`photon ${res.status}`);
+    const data = await res.json() as { features?: unknown[] };
+    const seen = new Set<string>();
+    return (Array.isArray(data.features) ? data.features : []).flatMap((raw): CityCandidate[] => {
+      const p = ((raw as Record<string, any>)?.properties ?? {}) as Record<string, any>;
+      const name = cleanText(p.name, 80);
+      const countryCode = typeof p.countrycode === "string" && /^[a-z]{2}$/i.test(p.countrycode) ? p.countrycode.toUpperCase() : "";
+      if (!name || !/^[A-Z]{2}$/.test(countryCode)) return [];
+      const key = `${name.toLowerCase()}|${countryCode}`;
+      if (seen.has(key)) return [];
+      seen.add(key);
+      return [{ name, region: cleanText(p.state ?? p.county, 80), country: cleanText(p.country, 80), countryCode }];
+    }).slice(0, 5);
+  };
+}
+
+/** Nominatim first (when configured), then Photon. Both are OpenStreetMap data. */
+export function cityLookupChain(env: Env) {
+  const nominatim = nominatimLookup(env);
+  const photon = photonLookup(env);
+  return async (query: string, fetcher: typeof fetch): Promise<CityCandidate[]> => {
+    if (nominatim) {
+      try { return await nominatim(query, fetcher); }
+      catch (err) {
+        console.warn(JSON.stringify({ event: "provider_failed", provider: "nominatim",
+          reason: err instanceof Error && /^nominatim \d{3}$/.test(err.message) ? err.message : err instanceof Error ? err.name : "unknown" }));
+      }
+    }
+    return photon(query, fetcher);
   };
 }
