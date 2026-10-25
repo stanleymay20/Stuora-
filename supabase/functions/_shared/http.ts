@@ -13,7 +13,9 @@ export class HttpError extends Error {
 }
 
 export function allowedOrigins(raw: string | undefined): Set<string> {
-  return new Set((raw ?? "").split(",").map(v => v.trim())
+  // Tolerate the common copy-paste forms "https://host/" and quoted values;
+  // browsers send the bare origin. Anything with a path is still rejected.
+  return new Set((raw ?? "").split(",").map(v => v.trim().replace(/^["']|["']$/g, "").replace(/\/$/, "").toLowerCase())
     .filter(v => /^https:\/\/[a-z0-9.-]+(?::[0-9]{2,5})?$/.test(v) || /^http:\/\/(localhost|127\.0\.0\.1):[0-9]{2,5}$/.test(v)));
 }
 
