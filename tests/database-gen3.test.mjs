@@ -201,6 +201,28 @@ test('D-11: reporting, moderator decisions, notices and suspension', async () =>
   await db.close();
 });
 
+test('Erasure: a reported student can still delete their account; the report survives', async () => {
+  const { db } = await harness();
+  await seed(db);
+  const { as, listing } = actors(db);
+  const l = await listing(A, 'housing', 'Deposit first');
+  const g = (await as(A, "select public.create_student_group('Essay help','', 'Köln','Study') id")).rows[0].id;
+  const gm = (await as(A, `select public.send_student_group_message('${g}','buy answers') id`)).rows[0].id;
+  await as(B, `insert into public.student_group_members(group_id,user_id) values ('${g}','${B}')`);
+  const r1 = (await as(B, `select public.report_content('listing', '${l}', 'fraud', 'Deposit before viewing') id`)).rows[0].id;
+  const r2 = (await as(B, `select public.report_content('group_message', '${gm}', 'prohibited', 'Selling answers') id`)).rows[0].id;
+  await db.exec(`insert into public.moderators(user_id) values ('${M}')`);
+  await as(M, `select public.moderate_report('${r2}', 'remove_content', 'Selling exam answers is prohibited.')`);
+  // What the delete-account Edge Function does with the service role.
+  await db.exec(`delete from auth.users where id='${A}'`);
+  const { rows } = await db.query(`select id, listing_id, reported_user_id, content_snapshot from public.reports where id in ('${r1}','${r2}') order by id`);
+  assert.equal(rows.length, 2, 'reports kept for abuse handling');
+  assert.ok(rows.every(r => r.listing_id === null && r.reported_user_id === null && r.content_snapshot), 'targets detached, snapshot kept');
+  // A target is still required when filing.
+  await assert.rejects(db.query(`insert into public.reports(reporter_id, reason) values ('${B}', 'spam')`), e => e.code === '23514');
+  await db.close();
+});
+
 test('D-10: export returns only the caller\'s own data and is rate-limited', async () => {
   const { db } = await harness(); await seed(db);
   const { as, listing } = actors(db);
