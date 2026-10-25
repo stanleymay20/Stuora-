@@ -47,7 +47,7 @@ test('confirmation-required signup never shows a signed-in account', async ({ pa
   await page.getByRole('checkbox', { name: 'I am at least 16 years old' }).click();
   await page.getByRole('checkbox', { name: 'I accept the terms of use and have read the privacy notice' }).click();
   await page.getByRole('button', { name: 'Create account', exact: true }).click();
-  await expect(page.getByText('Check your email and confirm your account, then return to Stuora.')).toBeVisible();
+  await expect(page.getByText(/Check your email and confirm your account, then return to Stuora./)).toBeVisible();
   await expect(page.getByLabel('Display name')).toHaveCount(0);
 });
 
@@ -59,7 +59,7 @@ test('Stuora resend-confirmation is available after signup and rate-limits accid
   await page.getByRole('checkbox', { name: 'I am at least 16 years old' }).click();
   await page.getByRole('checkbox', { name: 'I accept the terms of use and have read the privacy notice' }).click();
   await page.getByRole('button', { name: 'Create account', exact: true }).click();
-  await expect(page.getByText('Check your email and confirm your account, then return to Stuora.')).toBeVisible();
+  await expect(page.getByText(/Check your email and confirm your account, then return to Stuora./)).toBeVisible();
   await page.getByRole('button', { name: 'Resend confirmation email' }).click();
   await expect(page.getByText('If your account is awaiting confirmation, check your inbox for a new Stuora email.')).toBeVisible();
   expect(api.confirmationsResent()).toBe(1);

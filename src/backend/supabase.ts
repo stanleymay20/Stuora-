@@ -20,6 +20,8 @@ if (Platform.OS !== 'web') {
   installNativePkceCrypto(globalThis, ExpoCrypto.getRandomValues, data =>
     ExpoCrypto.digest(ExpoCrypto.CryptoDigestAlgorithm.SHA256, data));
 }
+// Captured BEFORE the client initialises: supabase-js may rewrite the URL.
+export const initialAuthUrl = Platform.OS === 'web' && typeof window !== 'undefined' ? window.location.href : null;
 export const supabase = createClient<Database>(url, key, {
   auth: {
     storage: AsyncStorage,

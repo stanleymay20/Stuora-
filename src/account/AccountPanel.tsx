@@ -69,7 +69,8 @@ export default function AccountPanel({ onLegal }: { onLegal?: (doc: LegalDocumen
       if (result.error) { setIssue(stuoraAuthError(result.error, signup ? 'sign-up' : 'sign-in')); return; }
       setPassword('');
       if (signup && !result.data.session) {
-        setNotice('Check your email and confirm your account, then return to Stuora.');
+        // Supabase hides whether the address already has an account (anti-enumeration).
+        setNotice('Check your email and confirm your account, then return to Stuora. Already have an account with this email? Sign in, or use Forgot password.');
         setSignup(false);
       }
     } catch { setIssue('Unable to connect. Please try again.'); }

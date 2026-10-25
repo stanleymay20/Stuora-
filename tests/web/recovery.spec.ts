@@ -72,3 +72,20 @@ test('an implicit-flow token link from someone else never signs this browser in 
   await expect(page.getByText('Your Stuora Passport', { exact: true })).toHaveCount(0);
   expect(api.passwordUpdates()).toBe(0);
 });
+
+test('an email link opened in another browser explains what to do and is removed from the URL', async ({ page }) => {
+  await backend(page);
+  await page.goto('/?code=5f8a2d0c-4b1e-4c9a-9a51-0e3f6c7d8b9a');
+  await expect(page.getByTestId('auth-link-notice')).toContainText('opened in a different browser');
+  await expect(page).not.toHaveURL(/code=/);
+  await page.getByRole('button', { name: 'Dismiss link message' }).click();
+  await expect(page.getByTestId('auth-link-notice')).toHaveCount(0);
+});
+
+test('an expired or reused email link says so instead of failing silently', async ({ page }) => {
+  await backend(page);
+  await page.goto('/?error=access_denied&error_code=otp_expired&error_description=Email+link+is+invalid+or+has+expired');
+  await expect(page.getByTestId('auth-link-notice')).toContainText('expired or was already used');
+  await expect(page).not.toHaveURL(/error_code/);
+  await expect(page.getByText('Email link is invalid')).toHaveCount(0);
+});

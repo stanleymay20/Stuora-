@@ -110,7 +110,7 @@ jobs:
         run: node --test tests/hosted-preview-identity.test.mjs
 
       - name: Reject malicious native Auth deep links (PKCE only)
-        run: node --test tests/native-auth-callback.test.mjs tests/native-pkce.test.mjs
+        run: node --test tests/native-auth-callback.test.mjs tests/native-pkce.test.mjs tests/auth-callback-notice.test.mjs
 
       - name: Refuse production builds with placeholder legal pages
         run: node --test tests/legal-config.test.mjs
