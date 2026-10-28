@@ -107,3 +107,7 @@ See `docs/LISTINGS_CHECKPOINT.md` for the current verification evidence and rele
 ## Environment isolation
 
 Backend configuration is mandatory. Development uses local Supabase; staging uses a separate hosted project; production uses the controlled Stuora project and an exact approved HTTPS web origin. No development, preview or test build defaults to production. CI browser contracts use `https://stuora-test.invalid`, intercepted by Playwright. See `docs/ENVIRONMENT_ISOLATION.md` for build settings and qualification limits.
+
+## Engineering governance
+
+Stuora development follows the proposed [engineering standards](ENGINEERING_STANDARDS.md), [architecture boundaries](ARCHITECTURE.md), and [contribution workflow](CONTRIBUTING.md). Use the [release checklist](RELEASE_CHECKLIST.md) and the existing [commercial GA release gate](docs/GA_RELEASE_GATE.md) to distinguish code-complete from safely releasable. See [architecture decision records](docs/adr/README.md) for rationale; these governance documents take effect after their review PR is merged.
