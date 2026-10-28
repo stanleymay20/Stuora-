@@ -1,0 +1,13 @@
+# Stuora ownership. A CODEOWNERS file requests review; branch protection/rulesets must
+# separately require code owner approval and required CI. Owners need repository write access.
+# Do not add a collaborator as a path owner without an agreed review responsibility.
+* @stanleymay20
+
+# Explicit high-risk areas remain founder-reviewed until ownership is delegated.
+/.github/ @stanleymay20
+/supabase/ @stanleymay20
+/security/ @stanleymay20
+/src/backend/ @stanleymay20
+/src/account/ @stanleymay20
+/src/ai/ @stanleymay20
+/docs/adr/ @stanleymay20
