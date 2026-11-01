@@ -4,9 +4,9 @@
 Expo/React Native already targets Android. Native bundle export is checked in CI, but a bundle export is not an installed APK or runtime acceptance test.
 
 ## Backend isolation (mandatory)
-Do not point an internal APK at production. Provision a separate hosted Supabase staging project and apply the reviewed migrations before issuing APKs. EAS environment named `preview` must provide:
+Do not point an internal APK at production. The dedicated hosted staging project `uptjcspizukpjcoayhtn` was verified ACTIVE_HEALTHY on 2026-11-01. It has 31 recorded migrations and 27/27 public tables with RLS enabled. Before issuing APKs, reconcile its migration history against the current repository and verify staging Auth and API behavior. The production project was INACTIVE at inspection. EAS environment named `preview` must provide:
 - `EXPO_PUBLIC_STUORA_ENV=staging`
-- `EXPO_PUBLIC_SUPABASE_URL=https://<staging-project>.supabase.co`
+- `EXPO_PUBLIC_SUPABASE_URL=https://uptjcspizukpjcoayhtn.supabase.co`
 - `EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY=<staging publishable key>`
 - `EXPO_PUBLIC_STUORA_WEB_ORIGIN=https://<approved-staging-web-origin>`
 
