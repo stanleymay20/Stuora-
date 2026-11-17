@@ -2,6 +2,7 @@ import React, { createContext, useContext, useEffect, useState } from 'react';
 import { AppState, Linking, Platform } from 'react-native';
 import type { Session } from '@supabase/supabase-js';
 import { supabase } from '../backend/supabase';
+import { parseStuoraNativeAuthCallback } from './nativeAuthCallback';
 import type { Database } from '../backend/database.types';
 
 export type Profile = Database['public']['Tables']['profiles']['Row'];
@@ -11,9 +12,11 @@ type AuthState = {
   profile: Profile | null;
   profileLoading: boolean;
   recoveryMode: boolean;
+  recoveryComplete: boolean;
   error: string;
   reloadProfile: () => void;
   finishRecovery: () => void;
+  dismissRecovery: () => void;
 };
 const AuthContext = createContext<AuthState | null>(null);
 
@@ -24,6 +27,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loadedUser, setLoadedUser] = useState<string | undefined>(undefined);
   const [profileLoading, setProfileLoading] = useState(false);
   const [recoveryMode, setRecoveryMode] = useState(false);
+  const [recoveryComplete, setRecoveryComplete] = useState(false);
   const [error, setError] = useState('');
   const [revision, setRevision] = useState(0);
 
@@ -34,7 +38,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (!active) return;
       authEvent = true;
       if (event === 'PASSWORD_RECOVERY') setRecoveryMode(true);
-      if (event === 'SIGNED_OUT') setRecoveryMode(false);
+      if (event === 'SIGNED_OUT') { setRecoveryMode(false); setRecoveryComplete(false); }
+      if (event === 'SIGNED_IN') setRecoveryComplete(false);
       setSession(next);
       setInitializing(false);
     });
@@ -54,21 +59,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     async function handleNativeAuthUrl(raw: string | null) {
       if (!active || Platform.OS === 'web' || !raw) return;
       try {
-        const parsed = new URL(raw);
-        const hash = parsed.hash.startsWith('#') ? parsed.hash.slice(1) : '';
-        const query = parsed.search.startsWith('?') ? parsed.search.slice(1) : '';
-        const params = new URLSearchParams(hash || query);
-        const accessToken = params.get('access_token');
-        const refreshToken = params.get('refresh_token');
-        if (!accessToken || !refreshToken) return;
-        const { error: issue } = await supabase.auth.setSession({ access_token: accessToken, refresh_token: refreshToken });
+        const callback = parseStuoraNativeAuthCallback(raw);
+        if (!callback) {
+          if (/^stuora:\/\/auth-callback(?:[/?#]|$)/i.test(raw))
+            setError('This Stuora sign-in link is invalid or expired. Request a new one.');
+          return;
+        }
+        const { error: issue } = await supabase.auth.setSession({ access_token: callback.accessToken, refresh_token: callback.refreshToken });
         if (!active) return;
         if (issue) {
           setError('This sign-in link could not be used. Request a new one.');
           return;
         }
         setError('');
-        if (params.get('type') === 'recovery') setRecoveryMode(true);
+        if (callback.recovery) setRecoveryMode(true);
       } catch {
         if (active) setError('This sign-in link could not be read. Request a new one.');
       }
@@ -131,9 +135,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     profile: profile?.id === userId ? profile : null,
     profileLoading: profileLoading || (!!userId && loadedUser !== userId),
     recoveryMode,
+    recoveryComplete,
     error,
     reloadProfile: () => setRevision(v => v + 1),
-    finishRecovery: () => setRecoveryMode(false),
+    dismissRecovery: () => setRecoveryComplete(false),
+    finishRecovery: () => { setRecoveryMode(false); setRecoveryComplete(true); },
   }}>{children}</AuthContext.Provider>;
 }
 
