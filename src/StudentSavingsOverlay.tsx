@@ -1,12 +1,12 @@
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, Modal, Pressable, SafeAreaView, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { supabase } from './backend/supabase';
 import type { Database } from './backend/database.types';
 type Benefit = Database['public']['Tables']['student_benefits']['Row'];
 function euro(cents: number, currency: string) { return new Intl.NumberFormat('de-DE', { style: 'currency', currency }).format(cents / 100); }
 function date(value: string | null) { return value ? new Date(value).toLocaleDateString('de-DE', { timeZone: 'Europe/Berlin' }) : 'No end date specified'; }
 export default function StudentSavingsOverlay() {
-  const { width } = useWindowDimensions();
   const [open, setOpen] = useState(false);
   const [benefits, setBenefits] = useState<Benefit[]>([]);
   const [loading, setLoading] = useState(false);
@@ -30,7 +30,7 @@ export default function StudentSavingsOverlay() {
     void load(); return () => { clearTimeout(timeout); ac.abort(); };
   }, [open, pages, revision]);
   return <>
-    <Pressable accessibilityRole="button" accessibilityLabel="Open Student Savings" onPress={() => { setPages(1); setOpen(true); }} style={[styles.floatingButton, { bottom: width >= 960 ? 96 : 152 }]}><Text style={styles.floatingIcon}>€</Text><View><Text style={styles.floatingLabel}>Student Savings</Text><Text style={styles.floatingValue}>Browse verified benefits</Text></View></Pressable>
+    <Pressable accessibilityRole="button" accessibilityLabel="Open Student Savings" onPress={() => { setPages(1); setOpen(true); }} style={styles.floatingButton}><Text style={styles.floatingIcon}>€</Text><View style={{ flex: 1 }}><Text style={styles.floatingLabel}>Student Savings</Text><Text style={styles.floatingValue}>Browse verified benefits</Text></View><Text style={styles.floatingIcon}>›</Text></Pressable>
     <Modal visible={open} animationType="slide" onRequestClose={() => setOpen(false)}><SafeAreaView style={styles.safeArea}>
       <View style={styles.header}><View><Text style={styles.eyebrow}>STUORA SAVINGS</Text><Text style={styles.title}>Student life for less.</Text></View><Pressable accessibilityRole="button" accessibilityLabel="Close Student Savings" onPress={() => setOpen(false)} style={styles.closeButton}><Text style={styles.closeText}>Close</Text></Pressable></View>
       <ScrollView contentContainerStyle={styles.page}>
@@ -56,9 +56,6 @@ export default function StudentSavingsOverlay() {
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: '#F7F7FB' },
   floatingButton: {
-    position: 'absolute',
-    right: 16,
-    zIndex: 999,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
@@ -66,6 +63,7 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     paddingHorizontal: 14,
     paddingVertical: 11,
+    minHeight: 64,
     shadowColor: '#000000',
     shadowOffset: { width: 0, height: 5 },
     shadowOpacity: 0.16,

@@ -13,6 +13,7 @@ export async function backend(page: Page, failProfile = false) {
   let reads = 0;
   let recoveries = 0;
   let passwordUpdates = 0;
+  let discoveryWrites = 0;
   await page.route('https://stuora-test.invalid/**', async route => {
     const req = route.request();
     const url = new URL(req.url());
@@ -37,6 +38,15 @@ export async function backend(page: Page, failProfile = false) {
       return route.fulfill({ json: session() });
     }
     if (url.pathname.endsWith('/logout')) return route.fulfill({ status: 204 });
+    if (url.pathname.endsWith('/rpc/set_profile_discovery')) {
+      expect(req.method()).toBe('POST');
+      expect(profile).not.toBeNull();
+      const { p_discoverable } = req.postDataJSON();
+      expect(typeof p_discoverable).toBe('boolean');
+      discoveryWrites++;
+      profile = { ...profile, is_discoverable: p_discoverable };
+      return route.fulfill({ json: p_discoverable ? new Date().toISOString() : null });
+    }
     if (url.pathname.endsWith('/profiles')) {
       if (req.method() === 'GET') {
         reads++;
@@ -48,13 +58,15 @@ export async function backend(page: Page, failProfile = false) {
       // Contract: callers may never send trust or authorization flags.
       expect(values).not.toHaveProperty('student_status');
       expect(values).not.toHaveProperty('account_kind');
+      // Hosted staging deliberately disallows direct discovery updates.
+      expect(values).not.toHaveProperty('is_discoverable');
       if (req.method() === 'PATCH') expect(url.searchParams.get('id')).toBe(`eq.${userId}`);
-      profile = { ...profile, id: userId, ...values, student_status: 'unverified', account_kind: 'student', avatar_path: null, created_at: new Date().toISOString(), updated_at: new Date().toISOString() };
+      profile = { is_discoverable: false, ...profile, id: userId, ...values, student_status: 'unverified', account_kind: 'student', avatar_path: null, created_at: new Date().toISOString(), updated_at: new Date().toISOString() };
       return route.fulfill({ json: profile, contentType: 'application/vnd.pgrst.object+json' });
     }
     return route.fulfill({ status: 404, json: { message: `Unexpected endpoint in test: ${url.pathname}` } });
   });
-  return { writes: () => writes, recoveries: () => recoveries, passwordUpdates: () => passwordUpdates };
+  return { writes: () => writes, recoveries: () => recoveries, passwordUpdates: () => passwordUpdates, discoveryWrites: () => discoveryWrites };
 }
 export async function account(page: Page) {
   await page.goto('/');

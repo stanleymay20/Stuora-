@@ -696,6 +696,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      set_profile_discovery: {
+        Args: { p_discoverable: boolean }
+        Returns: string | null
+      }
       save_student_listing: {
         Args: {
           p_bills_included: boolean

@@ -93,9 +93,10 @@ for (const category of ['Housing', 'Marketplace']) {
     await page.reload(); await explore(page, category);
     await page.getByRole('button', { name: `View ${category} from Alice` }).click();
     if (test.info().project.name === 'mobile-web') {
-      const savings = await page.getByRole('button', { name: 'Open Student Savings' }).boundingBox();
+      // Savings lives on Home, so it cannot cover listing details or forms.
+      await expect(page.getByRole('button', { name: 'Open Student Savings' })).toHaveCount(0);
       const nav = await page.getByRole('button', { name: 'Create listing', exact: true }).boundingBox();
-      expect(savings!.y + savings!.height).toBeLessThanOrEqual(nav!.y);
+      expect(nav!.height).toBeGreaterThanOrEqual(44);
     }
     await page.screenshot({ path: test.info().outputPath('listing-detail.png') });
     await page.getByRole('button', { name: 'Edit listing', exact: true }).click();
