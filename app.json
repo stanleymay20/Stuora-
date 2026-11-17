@@ -1,9 +1,9 @@
 {
   "expo": {
-    "name": "Stuora",
+    "name": "Stuora Preview",
     "slug": "stuora",
     "scheme": "stuora",
-    "version": "0.1.0",
+    "version": "0.1.1",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
     "plugins": [
@@ -21,7 +21,8 @@
       "bundleIdentifier": "com.stuora.app"
     },
     "android": {
-      "package": "com.stuora.app"
+      "package": "com.stuora.app.preview",
+      "versionCode": 2
     },
     "web": {
       "bundler": "metro"

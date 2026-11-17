@@ -1,10 +1,36 @@
 import { expect, test } from '@playwright/test';
 import { account, backend, signin } from './account-fixtures';
+
+test('discovery failure preserves profile details and can be retried', async ({ page }) => {
+  const api = await backend(page);
+  let failDiscovery = true;
+  await page.route('**/rest/v1/rpc/set_profile_discovery', async route => {
+    if (!failDiscovery) return route.fallback();
+    failDiscovery = false;
+    return route.fulfill({ status: 403, json: { code: '42501', message: 'Discovery unavailable' } });
+  });
+  await account(page); await signin(page);
+  await page.getByLabel('Display name').fill('Alice Student');
+  await page.getByRole('switch', { name: 'Profile discoverable' }).click();
+  await page.getByRole('button', { name: 'Create profile', exact: true }).click();
+  await expect(page.getByText('Your profile details were saved, but discovery could not be updated. Choose the discovery setting and save again.')).toBeVisible();
+  await expect(page.getByText('Your profile has been saved.')).toHaveCount(0);
+  await expect(page.getByLabel('Display name')).toHaveValue('Alice Student');
+  await expect(page.getByRole('switch', { name: 'Profile discoverable' })).toHaveAttribute('aria-checked', 'false');
+  await expect(page.getByRole('button', { name: 'Open Student Savings' })).toHaveCount(0);
+  await page.getByRole('switch', { name: 'Profile discoverable' }).click();
+  // The retry must update the created row, rather than attempting another INSERT.
+  await page.getByRole('button', { name: 'Save profile', exact: true }).click();
+  await expect(page.getByText('Your profile has been saved.')).toBeVisible();
+  expect(api.discoveryWrites()).toBe(1);
+});
 test('profile creation, editing, privacy, reload persistence and logout', async ({ page }) => {
   const api = await backend(page);
   await account(page);
   await signin(page);
   await expect(page.getByLabel('Display name')).toBeVisible();
+  await expect(page.getByRole('switch', { name: 'Profile discoverable' })).toHaveAttribute('aria-checked', 'false');
+  await page.screenshot({ path: test.info().outputPath('profile.png'), fullPage: true });
   await page.getByLabel('Display name').fill('Alice Student');
   await page.getByLabel('Bio', { exact: true }).fill('New to Berlin');
   await page.getByRole('button', { name: 'Create profile', exact: true }).click();
@@ -18,6 +44,13 @@ test('profile creation, editing, privacy, reload persistence and logout', async 
   await page.getByText('You', { exact: true }).click();
   await expect(page.getByLabel('Display name')).toHaveValue('Alice Student');
   await expect(page.getByLabel('Bio', { exact: true })).toHaveValue('Looking for flatmates');
+  await expect(page.getByRole('switch', { name: 'Profile discoverable' })).toHaveAttribute('aria-checked', 'true');
+  expect(api.discoveryWrites()).toBe(1);
+  await page.getByRole('switch', { name: 'Profile discoverable' }).click();
+  await page.getByRole('button', { name: 'Save profile', exact: true }).click();
+  await expect.poll(api.discoveryWrites).toBe(2);
+  await page.reload();
+  await page.getByText('You', { exact: true }).click();
   await expect(page.getByRole('switch', { name: 'Profile discoverable' })).toHaveAttribute('aria-checked', 'false');
   await page.getByRole('button', { name: 'Sign out', exact: true }).click();
   await expect(page.getByText('Welcome to Stuora', { exact: true })).toBeVisible();

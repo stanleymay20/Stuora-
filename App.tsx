@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
 import AccountPanel from './src/account/AccountPanel';
+import StudentSavingsOverlay from './src/StudentSavingsOverlay';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import ListingWorkspace from './src/listings/ListingWorkspace';
 import MessageWorkspace from './src/messages/MessageWorkspace';
 import PeopleDirectory from './src/people/PeopleDirectory';
@@ -9,7 +11,6 @@ import {
   Platform,
   Image,
   Pressable,
-  SafeAreaView,
   ScrollView,
   StatusBar,
   StyleSheet,
@@ -165,6 +166,7 @@ export default function App() {
           <View style={styles.categoryGrid}>
             {categories.map((item) => <CategoryTile key={item.name} item={item} onPress={() => goToCategory(item.name)} />)}
           </View>
+          <StudentSavingsOverlay />
 
           <View style={styles.sectionHeaderInline}><Text style={styles.sectionTitle}>Community housing</Text><Pressable accessibilityRole="button" accessibilityLabel="See all housing" onPress={() => goToCategory('Housing')}><Text style={styles.linkText}>See all</Text></Pressable></View>
           <ListingWorkspace key={`home-${session?.user.id ?? 'public'}`} category="Housing" preview onAccount={() => setTab('profile')} onMessage={() => setTab('messages')} />
@@ -225,7 +227,7 @@ export default function App() {
       {tab === 'messages' && <MessageWorkspace onAccount={() => setTab('profile')} />}
 
       {tab === 'profile' && (
-        <ScrollView contentContainerStyle={[styles.page, styles.profilePage]} showsVerticalScrollIndicator={false}>
+        <ScrollView contentContainerStyle={[styles.page, styles.profilePage]} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag" automaticallyAdjustKeyboardInsets showsVerticalScrollIndicator={false}>
           <AccountPanel />
         </ScrollView>
       )}
@@ -268,7 +270,7 @@ export default function App() {
               {bottomNav.map((item) => {
                 const isCreate = item.key === 'create';
                 return (
-                  <Pressable key={item.key} accessibilityRole="button" accessibilityLabel={isCreate ? 'Create listing' : item.label} onPress={() => setTab(item.key)} style={styles.navButton}>
+                  <Pressable key={item.key} accessibilityRole="button" accessibilityState={{ selected: tab === item.key }} accessibilityLabel={isCreate ? 'Create listing' : item.label} onPress={() => setTab(item.key)} style={styles.navButton}>
                     <View style={[styles.navIconWrap, isCreate && styles.navIconCreate, tab === item.key && !isCreate && styles.navIconActive]}><Icon name={isCreate ? 'plus' : item.key === 'explore' ? 'search' : item.key} size={isCreate ? 25 : 21} color={isCreate ? BRAND.white : tab === item.key ? BRAND.purple : BRAND.muted} /></View>
                     {!isCreate ? <Text style={[styles.navLabel, tab === item.key && styles.navLabelActive]}>{item.label}</Text> : null}
                   </Pressable>
@@ -322,7 +324,7 @@ const styles = StyleSheet.create({
   notificationButton: { width: 36, height: 36, borderRadius: 12, backgroundColor: BRAND.white, borderWidth: 1, borderColor: BRAND.line, alignItems: 'center', justifyContent: 'center' },
   miniAvatar: { width: 36, height: 36, borderRadius: 12, backgroundColor: BRAND.purple, alignItems: 'center', justifyContent: 'center' },
   miniAvatarText: { color: BRAND.white, fontWeight: '900' },
-  page: { width: '100%', padding: 16, paddingBottom: 112, gap: 16 },
+  page: { width: '100%', padding: 16, paddingBottom: 28, gap: 16 },
   pageDesktop: { maxWidth: 1180, alignSelf: 'center', padding: 28, paddingBottom: 60 },
   mobileWelcomeRow: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 14 },
   greeting: { color: BRAND.muted, fontSize: 12, fontWeight: '700' },
@@ -441,7 +443,7 @@ const styles = StyleSheet.create({
   composerPlaceholder: { color: BRAND.subtle, fontSize: 12 },
   sendButton: { width: 34, height: 34, borderRadius: 17, backgroundColor: BRAND.purple, alignItems: 'center', justifyContent: 'center' },
   sendButtonText: { color: BRAND.white, fontSize: 12 },
-  profilePage: { maxWidth: 820, alignSelf: 'center', width: '100%' },
+  profilePage: { maxWidth: 580, alignSelf: 'center', width: '100%' },
   profileHero: { backgroundColor: BRAND.white, borderRadius: 20, borderWidth: 1, borderColor: BRAND.line, padding: 18, flexDirection: 'row', alignItems: 'center', gap: 14 },
   profileAvatar: { width: 70, height: 70, borderRadius: 24, backgroundColor: BRAND.purple, alignItems: 'center', justifyContent: 'center' },
   profileAvatarText: { color: BRAND.white, fontSize: 30, fontWeight: '900' },
@@ -461,14 +463,14 @@ const styles = StyleSheet.create({
   menuRowLast: { borderBottomWidth: 0 },
   menuText: { color: BRAND.ink, fontWeight: '700', fontSize: 12 },
   chevron: { color: BRAND.subtle, fontSize: 20 },
-  bottomNav: { backgroundColor: BRAND.white, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: BRAND.line, paddingHorizontal: 8, paddingTop: 7, paddingBottom: Platform.OS === 'ios' ? 17 : 9, flexDirection: 'row' },
-  navButton: { flex: 1, alignItems: 'center', justifyContent: 'center', minHeight: 47, gap: 2 },
+  bottomNav: { backgroundColor: BRAND.white, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: BRAND.line, paddingHorizontal: 8, paddingVertical: 6, flexDirection: 'row' },
+  navButton: { flex: 1, alignItems: 'center', justifyContent: 'center', minHeight: 52, gap: 3 },
   navIconWrap: { width: 29, height: 29, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
   navIconActive: { backgroundColor: BRAND.purpleSoft },
   navIconCreate: { width: 43, height: 43, borderRadius: 22, backgroundColor: BRAND.purple, marginTop: -16, shadowColor: '#6D4AFF', shadowOffset: { width: 0, height: 5 }, shadowOpacity: 0.24, shadowRadius: 8, elevation: 5 },
   navIcon: { color: BRAND.muted, fontWeight: '900', fontSize: 17 },
   navIconCreateText: { color: BRAND.white, fontSize: 24 },
-  navLabel: { color: BRAND.muted, fontSize: 9, fontWeight: '800' },
+  navLabel: { color: '#626A80', fontSize: 11, fontWeight: '700' },
   navLabelActive: { color: BRAND.purple },
   pressed: { opacity: 0.72 },
 });

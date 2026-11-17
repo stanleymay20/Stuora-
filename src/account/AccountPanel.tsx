@@ -20,14 +20,14 @@ export default function AccountPanel() {
   const [name, setName] = useState('');
   const [city, setCity] = useState('Berlin');
   const [bio, setBio] = useState('');
-  const [discoverable, setDiscoverable] = useState(true);
+  const [discoverable, setDiscoverable] = useState(false);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState('');
   const [issue, setIssue] = useState('');
 
   useEffect(() => {
     setName(profile?.display_name ?? ''); setCity(profile?.city ?? 'Berlin');
-    setBio(profile?.bio ?? ''); setDiscoverable(profile?.is_discoverable ?? true);
+    setBio(profile?.bio ?? ''); setDiscoverable(profile?.is_discoverable ?? false);
   }, [profile]);
   useEffect(() => {
     setPassword(''); setNewPassword(''); setConfirmPassword(''); setNotice(''); setIssue('');
@@ -90,17 +90,31 @@ export default function AccountPanel() {
     const validation = profileError(name, city, bio);
     if (validation) { setIssue(validation); return; }
     setBusy(true); setIssue(''); setNotice('');
-    const values = { display_name: name.trim(), city: city.trim(), bio: bio.trim(), is_discoverable: discoverable };
+    // Discovery changes require the server's consent/suspension checks.
+    const values = { display_name: name.trim(), city: city.trim(), bio: bio.trim() };
+    let detailsSaved = false;
     try {
       const query = profile
         ? supabase.from('profiles').update(values).eq('id', session.user.id)
         : supabase.from('profiles').insert({ id: session.user.id, ...values });
       const result = await query.select('*').single();
       if (result.error) { setIssue('Your profile could not be saved. Please retry.'); return; }
-      reloadProfile();
+      detailsSaved = true;
+      if (result.data.is_discoverable !== discoverable) {
+        const { error: discoveryError } = await supabase.rpc('set_profile_discovery', { p_discoverable: discoverable });
+        if (discoveryError) {
+          setIssue('Your profile details were saved, but discovery could not be updated. Choose the discovery setting and save again.');
+          return;
+        }
+      }
       setNotice('Your profile has been saved.');
-    } catch { setIssue('Unable to connect. Your changes have not been saved.'); }
-    finally { setBusy(false); }
+    } catch { setIssue(detailsSaved
+      ? 'Your profile details were saved, but discovery could not be updated. Choose the discovery setting and save again.'
+      : 'Unable to connect. Your changes have not been saved.'); }
+    finally {
+      if (detailsSaved) reloadProfile();
+      setBusy(false);
+    }
   }
 
   async function logout() {
@@ -112,8 +126,8 @@ export default function AccountPanel() {
     finally { setBusy(false); }
   }
 
-  const button = (label: string, action: () => void, disabled = false) => (
-    <Pressable accessibilityRole="button" accessibilityLabel={label} disabled={busy || disabled} onPress={action} style={[styles.button, (busy || disabled) && styles.disabled]}><Text style={styles.buttonText}>{busy ? 'Please wait…' : label}</Text></Pressable>
+  const button = (label: string, action: () => void, disabled = false, secondary = false) => (
+    <Pressable accessibilityRole="button" accessibilityLabel={label} accessibilityState={{ disabled: busy || disabled, busy }} disabled={busy || disabled} onPress={action} style={[styles.button, secondary && styles.secondaryButton, (busy || disabled) && styles.disabled]}><Text style={[styles.buttonText, secondary && styles.secondaryButtonText]}>{busy ? 'Please wait…' : label}</Text></Pressable>
   );
 
   if (initializing) return <View style={styles.card}><ActivityIndicator /><Text>Restoring your session…</Text></View>;
@@ -154,18 +168,24 @@ export default function AccountPanel() {
       <Text style={styles.description}>{session.user.email}</Text>
       <Text style={styles.trust}>{session.user.email_confirmed_at ? 'Email confirmed' : 'Email not confirmed'} · Student status: {profile?.student_status ?? 'unverified'}</Text>
       {profileLoading ? <ActivityIndicator /> : error ? button('Retry profile', reloadProfile) : <>
-        <Text style={styles.label}>{profile ? 'Edit your profile' : 'Build your profile'}</Text>
+        <Text accessibilityRole="header" style={styles.sectionHeading}>{profile ? 'Edit your profile' : 'Build your profile'}</Text>
+        <View style={styles.field}>
         <Text style={styles.label}>Display name</Text>
         <TextInput accessibilityLabel="Display name" maxLength={80} value={name} onChangeText={setName} editable={!busy} style={styles.input} />
+        </View>
+        <View style={styles.field}>
         <Text style={styles.label}>City</Text>
         <TextInput accessibilityLabel="City" maxLength={120} value={city} onChangeText={setCity} editable={!busy} style={styles.input} />
+        </View>
+        <View style={styles.field}>
         <Text style={styles.label}>Bio (optional)</Text>
         <TextInput accessibilityLabel="Bio" maxLength={600} multiline value={bio} onChangeText={setBio} editable={!busy} style={[styles.input, styles.bio]} />
-        <Pressable accessibilityRole="switch" aria-checked={discoverable} accessibilityState={{ checked: discoverable, disabled: busy }} accessibilityLabel="Profile discoverable" disabled={busy} onPress={() => setDiscoverable(v => !v)}><Text style={styles.link}>{discoverable ? '✓' : '○'} Let signed-in students discover my profile</Text></Pressable>
+        </View>
+        <Pressable style={styles.discoveryRow} accessibilityRole="switch" aria-checked={discoverable} accessibilityState={{ checked: discoverable, disabled: busy }} accessibilityLabel="Profile discoverable" disabled={busy} onPress={() => setDiscoverable(v => !v)}><Text style={styles.discoveryLabel}>Let signed-in students discover my profile</Text><View style={[styles.switchTrack, discoverable && styles.switchOn]}><View style={[styles.switchThumb, discoverable && styles.switchThumbOn]} /></View></Pressable>
         <Text style={styles.description}>Your display name, city and bio are visible when discovery is enabled. Your email is not part of your public profile.</Text>
         {button(profile ? 'Save profile' : 'Create profile', () => void save())}
       </>}
-      {button('Sign out', () => void logout())}
+      {button('Sign out', () => void logout(), false, true)}
     </>}
   </View>;
 }
@@ -174,15 +194,25 @@ const styles = StyleSheet.create({
   welcome: { minHeight: 190, borderRadius: 16, overflow: 'hidden', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#11162F' },
   welcomeTitle: { color: '#FFFFFF', fontSize: 30, fontWeight: '900' },
   welcomeSubtitle: { color: '#FFFFFF', fontSize: 14 },
-  card: { padding: 24, backgroundColor: '#fff', borderRadius: 20, borderWidth: 1, borderColor: '#E9EAF1', gap: 12 },
-  heading: { color: '#11162F', fontSize: 24, fontWeight: '800' },
-  description: { color: '#747B91', fontSize: 13, lineHeight: 20 },
+  card: { padding: 18, backgroundColor: '#fff', borderRadius: 18, borderWidth: 1, borderColor: '#E9EAF1', gap: 14 },
+  heading: { color: '#11162F', fontSize: 22, fontWeight: '800' },
+  description: { color: '#626A80', fontSize: 14, lineHeight: 21 },
+  sectionHeading: { color: '#11162F', fontSize: 17, fontWeight: '700', marginTop: 6 },
+  field: { gap: 6 },
   label: { color: '#11162F', fontWeight: '700' },
   input: { backgroundColor: '#F7F7FB', borderColor: '#E9EAF1', borderWidth: 1, borderRadius: 12, padding: 14, color: '#11162F', fontSize: 16 },
   bio: { minHeight: 90, textAlignVertical: 'top' },
-  button: { backgroundColor: '#7048FF', padding: 15, borderRadius: 12, alignItems: 'center' },
-  buttonText: { color: '#fff', fontWeight: '800' }, disabled: { opacity: 0.45 },
+  button: { backgroundColor: '#7048FF', padding: 14, minHeight: 48, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  buttonText: { color: '#fff', fontSize: 15, fontWeight: '700' }, disabled: { opacity: 0.45 },
+  secondaryButton: { backgroundColor: '#F7F7FB', borderWidth: 1, borderColor: '#E9EAF1' },
+  secondaryButtonText: { color: '#424B65' },
+  discoveryRow: { flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 48 },
+  discoveryLabel: { flex: 1, color: '#252B4A', fontSize: 14, fontWeight: '600', lineHeight: 21 },
+  switchTrack: { width: 44, height: 26, borderRadius: 13, padding: 3, backgroundColor: '#CDD1DE', justifyContent: 'center' },
+  switchOn: { backgroundColor: '#7048FF' },
+  switchThumb: { width: 20, height: 20, borderRadius: 10, backgroundColor: '#fff' },
+  switchThumbOn: { alignSelf: 'flex-end' },
   link: { color: '#7048FF', paddingVertical: 8, fontWeight: '700' },
-  error: { color: '#B42318', lineHeight: 20 }, notice: { color: '#167348', lineHeight: 20 },
+  error: { color: '#B42318', backgroundColor: '#FFF1F0', padding: 12, borderRadius: 10, lineHeight: 21 }, notice: { color: '#12603D', backgroundColor: '#EDF8F1', padding: 12, borderRadius: 10, lineHeight: 21 },
   trust: { color: '#252B4A', fontSize: 13, lineHeight: 20 },
 });
