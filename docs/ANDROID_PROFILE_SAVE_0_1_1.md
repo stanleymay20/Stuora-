@@ -38,6 +38,23 @@ updates the existing row. There are no new database grants, policies or RPCs.
 
 ## Build
 
+### Built artifact qualification (2026-11-17)
+
+Native `assembleRelease` succeeded (381 tasks; 353 executed, 28 up to date).
+The APK was built from the source tree published as `e1796fab20aa3069cece83b1e4646dca2e49e832`.
+Artifact: `Stuora-Android-Preview-0.1.1-arm64.apk`, 29,197,850 bytes.
+SHA-256: `53a15aad9a79bf13707bafc652ac39873443ce1ef1ac1cbc1fb424303f683077`.
+Verified APK v2 signature, ZIP integrity and 16 KiB alignment. Manifest reports
+`com.stuora.app.preview`, version 0.1.1/code 2 and minimum Android API 24.
+Only ARM64 libraries are packaged. The bundle contains the expected staging
+project and its publishable key, the native callback, the consent RPC and the
+partial-save feedback. The safe-area native module and callback intent filter
+are packaged. Physical-device qualification remains outstanding.
+
+All 46 browser scenarios are covered: 44 passed in the full run; two assertions
+about the removed floating Savings control were updated, after which all eight
+mobile listing cases passed. TypeScript and the hosted rollback checks passed.
+
 Use Node >=22.13, Java 21, Android SDK platform/build-tools 36, NDK 27.1.12297006
 and CMake 3.22.1 with this lockfile. Configure the four staging public environment
 variables described in ANDROID_BUILD.md. Run npm ci, Expo Android prebuild,
