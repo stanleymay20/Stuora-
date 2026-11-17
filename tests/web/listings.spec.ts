@@ -83,8 +83,8 @@ for (const category of ['Housing', 'Marketplace']) {
     await page.getByLabel('Listing description').fill('A real persistent student listing');
     await page.getByLabel(category === 'Housing' ? 'Monthly rent (EUR)' : 'Price (EUR)').fill(category === 'Housing' ? '650.25' : '0');
     await page.getByRole('button', { name: 'Publish listing', exact: true }).click();
-    await expect(page.getByText('Listing saved. Add up to six real photos below.')).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Add photo (0/6)' })).toBeVisible();
+    await expect(page.getByText('Listing saved. Photo uploads are temporarily paused.')).toBeVisible();
+    await expect(page.getByRole('button', { name: /^Add photo/ })).toHaveCount(0);
     expect(data.rows[0].price_cents).toBe(category === 'Housing' ? 65025 : 0);
     const secondContext = await browser.newContext(); const second = await secondContext.newPage(); await data.install(second); await second.goto('/'); await explore(second, category);
     await second.getByRole('button', { name: `View ${category} from Alice` }).click();
@@ -102,7 +102,7 @@ for (const category of ['Housing', 'Marketplace']) {
     await page.getByRole('button', { name: 'Edit listing', exact: true }).click();
     await page.getByLabel('Listing title').fill(`${category} edited`);
     await page.getByRole('button', { name: 'Save listing changes' }).click();
-    await expect(page.getByText('Listing saved. Add up to six real photos below.')).toBeVisible();
+    await expect(page.getByText('Listing saved. Photo uploads are temporarily paused.')).toBeVisible();
     await expect(page.getByText(`${category} edited`, { exact: true })).toBeVisible();
     await page.getByRole('button', { name: 'Archive listing', exact: true }).click();
     await page.getByRole('button', { name: 'Confirm archive', exact: true }).click();
@@ -117,33 +117,13 @@ for (const category of ['Housing', 'Marketplace']) {
   });
 }
 
-test('owner uploads and removes a real listing photo while public discovery renders it', async ({ page, browser }) => {
-  const data = api(); await data.install(page); await account(page); await signin(page);
-  await page.getByRole('button', { name: 'Create listing', exact: true }).click();
-  await page.getByRole('button', { name: 'Post Marketplace', exact: true }).click();
-  await page.getByLabel('Listing title').fill('Media desk');
-  await page.getByLabel('Price (EUR)').fill('25');
-  await page.getByRole('button', { name: 'Publish listing', exact: true }).click();
-  await expect(page.getByRole('button', { name: 'Add photo (0/6)' })).toBeVisible();
-  const chooser = page.waitForEvent('filechooser');
-  await page.getByRole('button', { name: 'Add photo (0/6)' }).click();
-  const fileChooser = await chooser;
-  await fileChooser.setFiles({ name: 'desk.png', mimeType: 'image/png', buffer: pixelPng });
-  await expect(page.getByText('Photo uploaded and attached to this listing.')).toBeVisible();
-  await expect(page.getByLabel('Media desk photo 1')).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Add photo (1/6)' })).toBeVisible();
-
-  const publicContext = await browser.newContext(); const publicPage = await publicContext.newPage(); await data.install(publicPage); await publicPage.goto('/'); await explore(publicPage, 'Marketplace');
-  await expect(publicPage.getByLabel('Media desk cover photo')).toBeVisible();
-  await publicPage.getByRole('button', { name: 'View Media desk' }).click();
-  await expect(publicPage.getByLabel('Media desk photo 1')).toBeVisible();
-  await expect(publicPage.getByRole('button', { name: 'Remove photo 1' })).toHaveCount(0);
-  await publicContext.close();
-
-  await page.getByRole('button', { name: 'Remove photo 1' }).click();
-  await expect(page.getByText('Photo removed.')).toBeVisible();
-  await expect(page.getByLabel('Media desk photo 1')).toHaveCount(0);
-  await expect(page.getByRole('button', { name: 'Add photo (0/6)' })).toBeVisible();
+test('owner photo creation remains paused and sends no raw upload', async ({ page }) => {
+  let uploads=0;
+  await page.route('**/storage/v1/object/**',async route=>{if(route.request().method()==='POST')uploads++;await route.abort();});
+  const data=api(); await data.install(page); await account(page); await signin(page);
+  await page.getByText('Home',{exact:true}).first().click();
+  await expect(page.getByRole('button',{name:/^Add photo/})).toHaveCount(0);
+  expect(uploads).toBe(0);
 });
 
 test('anonymous posting gate, listing read failure, validation and save retry preserve input', async ({ page }) => {
@@ -164,7 +144,7 @@ test('anonymous posting gate, listing read failure, validation and save retry pr
   await expect(page.getByText(/Could not save. Your input is preserved./)).toBeVisible();
   await expect(page.getByLabel('Listing title')).toHaveValue('Desk from Alice');
   await page.getByRole('button', { name: 'Publish listing', exact: true }).click();
-  await expect(page.getByText('Listing saved. Add up to six real photos below.')).toBeVisible();
+  await expect(page.getByText('Listing saved. Photo uploads are temporarily paused.')).toBeVisible();
   await explore(page, 'Marketplace');
   await expect(page.getByRole('button', { name: 'Refresh listings' })).toBeEnabled();
   data.fail('listings'); await page.getByRole('button', { name: 'Refresh listings' }).click();

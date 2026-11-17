@@ -3,7 +3,7 @@
     "name": "Stuora Preview",
     "slug": "stuora",
     "scheme": "stuora",
-    "version": "0.1.1",
+    "version": "0.1.2",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
     "plugins": [
@@ -22,7 +22,7 @@
     },
     "android": {
       "package": "com.stuora.app.preview",
-      "versionCode": 2
+      "versionCode": 3
     },
     "web": {
       "bundler": "metro"

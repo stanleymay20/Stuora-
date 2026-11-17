@@ -29,7 +29,6 @@ test('web recovery callback creates a recovery session and updates password', as
     type: 'recovery',
   });
   await page.goto(`/#${hash.toString()}`);
-  await page.getByText('You', { exact: true }).click();
   await expect(page.getByText('Choose a new password', { exact: true })).toBeVisible();
 
   await page.getByLabel('New password', { exact: true }).fill('short');
@@ -49,4 +48,6 @@ test('web recovery callback creates a recovery session and updates password', as
   await expect(page.getByText('Password updated successfully. Your Stuora account is ready.')).toBeVisible();
   expect(api.passwordUpdates()).toBe(1);
   await expect(page.getByText('Your Stuora Passport', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Continue to Stuora' }).click();
+  await expect(page.getByText('Home', { exact: true }).first()).toBeVisible();
 });

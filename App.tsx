@@ -97,6 +97,8 @@ export default function App() {
   const { width } = useWindowDimensions();
   const isDesktop = width >= 960;
   const [tab, setTab] = useState<Tab>('home');
+  const [preferredConversationId, setPreferredConversationId] = useState<string | null>(null);
+  const openConversation = (id: string) => { setPreferredConversationId(id); setTab('messages'); };
   const [category, setCategory] = useState<Category>('Housing');
   const [search, setSearch] = useState('');
   const [draftType, setDraftType] = useState<'Housing' | 'Marketplace'>('Marketplace');
@@ -169,10 +171,10 @@ export default function App() {
           <StudentSavingsOverlay />
 
           <View style={styles.sectionHeaderInline}><Text style={styles.sectionTitle}>Community housing</Text><Pressable accessibilityRole="button" accessibilityLabel="See all housing" onPress={() => goToCategory('Housing')}><Text style={styles.linkText}>See all</Text></Pressable></View>
-          <ListingWorkspace key={`home-${session?.user.id ?? 'public'}`} category="Housing" preview onAccount={() => setTab('profile')} onMessage={() => setTab('messages')} />
+          <ListingWorkspace key={`home-${session?.user.id ?? 'public'}`} category="Housing" preview onAccount={() => setTab('profile')} onMessage={openConversation} />
 
           <View style={styles.sectionHeaderInline}><Text style={styles.sectionTitle}>Marketplace</Text><Pressable accessibilityRole="button" accessibilityLabel="See all marketplace" onPress={() => goToCategory('Marketplace')}><Text style={styles.linkText}>See all</Text></Pressable></View>
-          <ListingWorkspace key={`home-market-${session?.user.id ?? 'public'}`} category="Marketplace" preview onAccount={() => setTab('profile')} onMessage={() => setTab('messages')} />
+          <ListingWorkspace key={`home-market-${session?.user.id ?? 'public'}`} category="Marketplace" preview onAccount={() => setTab('profile')} onMessage={openConversation} />
         </ScrollView>
       )}
 
@@ -193,7 +195,7 @@ export default function App() {
               </Pressable>
             ))}
           </ScrollView>
-          {category === 'Housing' || category === 'Marketplace' ? <ListingWorkspace key={`${category}-${session?.user.id ?? 'public'}`} category={category} search={search} onAccount={() => setTab('profile')} onMessage={() => setTab('messages')} /> : category === 'People' ? <PeopleDirectory key={session?.user.id ?? 'public'} search={search} onAccount={() => setTab('profile')} /> : <View style={styles.emptyState}><Icon name={category} size={40} color={BRAND.purple} /><Text style={styles.emptyTitle}>{category} is not available yet</Text><Text style={styles.emptyText}>Posting and participation will open after persistence and permissions are verified. No sample offers are displayed.</Text></View>}
+          {category === 'Housing' || category === 'Marketplace' ? <ListingWorkspace key={`${category}-${session?.user.id ?? 'public'}`} category={category} search={search} onAccount={() => setTab('profile')} onMessage={openConversation} /> : category === 'People' ? <PeopleDirectory key={session?.user.id ?? 'public'} search={search} onAccount={() => setTab('profile')} /> : <View style={styles.emptyState}><Icon name={category} size={40} color={BRAND.purple} /><Text style={styles.emptyTitle}>{category} is not available yet</Text><Text style={styles.emptyText}>Posting and participation will open after persistence and permissions are verified. No sample offers are displayed.</Text></View>}
         </ScrollView>
       )}
 
@@ -215,7 +217,7 @@ export default function App() {
                 </Pressable>
               ))}
             </View>
-            <ListingWorkspace key={`${draftType}-${session?.user.id ?? 'public'}`} category={draftType} mode="create" onAccount={() => setTab('profile')} onMessage={() => setTab('messages')} />
+            <ListingWorkspace key={`${draftType}-${session?.user.id ?? 'public'}`} category={draftType} mode="create" onAccount={() => setTab('profile')} onMessage={openConversation} />
             <View style={styles.noteCard}>
               <Text style={styles.noteTitle}>Stuora quality rule</Text>
               <Text style={styles.noteText}>If a feature appears in the product, it must work end-to-end. Payments, production verification and media upload stay hidden until their backend flows are ready.</Text>
@@ -224,7 +226,7 @@ export default function App() {
         </ScrollView>
       )}
 
-      {tab === 'messages' && <MessageWorkspace onAccount={() => setTab('profile')} />}
+      {tab === 'messages' && <MessageWorkspace preferredConversationId={preferredConversationId} onAccount={() => setTab('profile')} />}
 
       {tab === 'profile' && (
         <ScrollView contentContainerStyle={[styles.page, styles.profilePage]} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag" automaticallyAdjustKeyboardInsets showsVerticalScrollIndicator={false}>

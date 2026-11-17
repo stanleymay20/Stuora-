@@ -59,7 +59,7 @@ function Photo({ media, title, index, removable, disabled, onRemove }: { media: 
   </View>;
 }
 
-export default function ListingWorkspace({ category, mode = 'browse', search = '', preview = false, onAccount, onMessage }: { category: 'Housing' | 'Marketplace'; mode?: 'browse' | 'create'; search?: string; preview?: boolean; onAccount: () => void; onMessage?: () => void }) {
+export default function ListingWorkspace({ category, mode = 'browse', search = '', preview = false, onAccount, onMessage }: { category: 'Housing' | 'Marketplace'; mode?: 'browse' | 'create'; search?: string; preview?: boolean; onAccount: () => void; onMessage?: (id: string) => void }) {
   const { session, profile, profileLoading, initializing, error: profileError } = useAuth();
   const kind: Kind = category === 'Housing' ? 'housing' : 'marketplace';
   const userId = session?.user.id;
@@ -148,54 +148,13 @@ export default function ListingWorkspace({ category, mode = 'browse', search = '
       try {
         const item = await fetchItem(savedId);
         replaceItem(item);
-        setNotice('Listing saved. Add up to six real photos below.');
+        setNotice('Listing saved. Photo uploads are temporarily paused.');
       } catch {
         setSelected(null);
-        setNotice('Listing saved. Refresh My listings to add photos.');
+        setNotice('Listing saved. Refresh My listings to view it.');
       }
     } catch {
       setActionError('Could not save. Your input is preserved. Check your connection and account, then retry.');
-    } finally { setBusy(false); }
-  }
-
-  async function addPhoto() {
-    if (!selected || !userId || selected.owner_id !== userId || selected.status !== 'active') return;
-    if (selected.listing_media.length >= MAX_PHOTOS) return setActionError(`A listing can have up to ${MAX_PHOTOS} photos.`);
-    setActionError(''); setNotice('');
-    try {
-      if (Platform.OS !== 'web') {
-        const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-        if (!permission.granted) return setActionError('Photo-library permission is required to add a listing photo.');
-      }
-      const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], allowsMultipleSelection: false, quality: 0.85 });
-      if (result.canceled || !result.assets?.length) return;
-      const asset = result.assets[0];
-      if (asset.fileSize && asset.fileSize > MAX_PHOTO_BYTES) return setActionError('Choose an image no larger than 5 MB.');
-      setBusy(true);
-      const response = await fetch(asset.uri);
-      if (!response.ok && Platform.OS === 'web') throw new Error('Could not read selected image');
-      const bytes = await response.arrayBuffer();
-      if (bytes.byteLength > MAX_PHOTO_BYTES) return setActionError('Choose an image no larger than 5 MB.');
-      const mime = imageMime(asset, response.headers.get('content-type'));
-      if (!ALLOWED_IMAGE_TYPES.has(mime)) return setActionError('Choose a JPEG, PNG or WebP image.');
-      const token = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
-      const path = `${userId}/${selected.id}/${token}.${extensionFor(mime)}`;
-      const { error: uploadIssue } = await supabase.storage.from('listing-media').upload(path, bytes, { contentType: mime, upsert: false, cacheControl: '3600' });
-      if (uploadIssue) throw uploadIssue;
-      const nextSort = selected.listing_media.reduce((max, media) => Math.max(max, media.sort_order), -1) + 1;
-      const { data: inserted, error: metadataIssue } = await (supabase.from('listing_media') as any)
-        .insert({ listing_id: selected.id, object_path: path, sort_order: nextSort })
-        .select('id,listing_id,object_path,sort_order,created_at')
-        .single();
-      if (metadataIssue || !inserted) {
-        await supabase.storage.from('listing-media').remove([path]);
-        throw metadataIssue ?? new Error('Could not save photo metadata');
-      }
-      const updated = normalizeItem({ ...selected, listing_media: [...selected.listing_media, inserted] });
-      replaceItem(updated);
-      setNotice('Photo uploaded and attached to this listing.');
-    } catch {
-      setActionError('Could not upload the photo. Your listing was not changed. Check the image and connection, then retry.');
     } finally { setBusy(false); }
   }
 
@@ -233,10 +192,10 @@ export default function ListingWorkspace({ category, mode = 'browse', search = '
     if (selected.owner_id === userId || selected.status !== 'active') return;
     setBusy(true);
     try {
-      const { error: issue } = await (supabase.rpc as any)('start_listing_conversation', { p_listing_id: selected.id });
-      if (issue) throw issue;
+      const { data: conversationId, error: issue } = await (supabase.rpc as any)('start_listing_conversation', { p_listing_id: selected.id });
+      if (issue || typeof conversationId !== 'string') throw issue ?? new Error('Missing conversation');
       setNotice('Conversation ready. Opening Messages…');
-      onMessage?.();
+      onMessage?.(conversationId);
     } catch {
       setActionError('Could not start a secure conversation. Check that the listing is still active, then retry.');
     } finally { setBusy(false); }
@@ -250,7 +209,7 @@ export default function ListingWorkspace({ category, mode = 'browse', search = '
 
     {form ? initializing || profileLoading ? <ActivityIndicator accessibilityLabel="Loading account" /> : !session || !profile || profileError ? <View style={s.card}><Text style={s.text}>Sign in and complete your profile to publish a listing.</Text><Button title="Open account" onPress={onAccount} /></View> : <View style={s.card}>
       <Text style={s.title}>{editing ? 'Edit listing' : `Publish ${category.toLowerCase()} listing`}</Text>
-      <Text style={s.hint}>Publish the listing first, then attach up to six JPEG, PNG or WebP photos (5 MB each).</Text>
+      <Text style={s.hint}>Publish a text-only listing. Photo uploads are temporarily paused while secure image processing is qualified.</Text>
       <Field label="Listing title" value={draft.title} onChange={v => change('title', v)} />
       <Field label="Listing description" value={draft.description} onChange={v => change('description', v)} multiline />
       <Field label="Listing city" value={draft.city} onChange={v => change('city', v)} />
@@ -268,7 +227,7 @@ export default function ListingWorkspace({ category, mode = 'browse', search = '
       <Text style={s.text}>{selected.description || 'No description provided.'}</Text>
       {selected.housing_details ? <Text>{selected.housing_details.housing_type} · {selected.housing_details.furnished ? 'Furnished' : 'Unfurnished'} · {selected.housing_details.bills_included ? 'Bills included' : 'Bills extra'}</Text> : null}
       {selected.marketplace_details ? <Text>Condition: {selected.marketplace_details.item_condition.replace('_', ' ')} · pickup only</Text> : null}
-      {selected.owner_id === userId && selected.status === 'active' ? <Button title={busy ? 'Working…' : `Add photo (${selected.listing_media.length}/${MAX_PHOTOS})`} onPress={() => void addPhoto()} disabled={busy || selected.listing_media.length >= MAX_PHOTOS} /> : null}
+      {selected.owner_id === userId && selected.status === 'active' ? <Text style={s.hint}>Photo uploads are temporarily paused while secure image processing is qualified.</Text> : null}
       {selected.owner_id !== userId && selected.status === 'active' ? <Button title={session && profile ? 'Message owner' : 'Sign in to message owner'} onPress={() => void messageOwner()} disabled={busy} /> : null}
       {selected.owner_id === userId && selected.status === 'active' ? <><Button title="Edit listing" onPress={() => edit(selected)} disabled={busy} />{confirmArchive ? <><Text>Archive this listing? It will disappear from public discovery.</Text><Button title="Confirm archive" onPress={() => void archive()} disabled={busy} /><Button title="Keep listing" onPress={() => setConfirmArchive(false)} disabled={busy} /></> : <Button title="Archive listing" onPress={() => setConfirmArchive(true)} disabled={busy} />}</> : null}
       <Button title={mode === 'create' ? 'Create another listing' : 'Back to listings'} onPress={() => { setSelected(null); setConfirmArchive(false); setActionError(''); setNotice(''); }} disabled={busy} />
