@@ -76,7 +76,7 @@ jobs:
         run: deno test --allow-read --config supabase/functions/deno.json supabase/functions/_shared supabase/functions/delete-account supabase/functions/external-data supabase/functions/stuora-assistant
 
   verify:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     env:
       EXPO_PUBLIC_STUORA_ENV: test
