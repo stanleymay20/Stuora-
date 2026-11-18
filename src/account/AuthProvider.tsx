@@ -20,6 +20,7 @@ type AuthState = {
   dismissLinkNotice: () => void;
   reloadProfile: () => void;
   finishRecovery: () => void;
+  dismissRecovery: () => void;
 };
 const AuthContext = createContext<AuthState | null>(null);
 
@@ -158,6 +159,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     reloadProfile: () => setRevision(v => v + 1),
     // Preserve the isolated auth screen across sign-out until the next login.
     finishRecovery: () => setRecoveryComplete(true),
+    dismissRecovery: () => { if (!session && !recoveryMode) setRecoveryComplete(false); },
   }}>{children}</AuthContext.Provider>;
 }
 

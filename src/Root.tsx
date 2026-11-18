@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { SafeAreaProvider, SafeAreaView, initialWindowMetrics } from 'react-native-safe-area-context';
 import App from '../App';
 import AccountPanel from './account/AccountPanel';
 import { AuthProvider, useAuth } from './account/AuthProvider';
@@ -8,13 +9,16 @@ import ErrorBoundary from './ui/ErrorBoundary';
 
 // A password-recovery session must not expose the rest of the app.
 function RootContent() {
-  const { recoveryMode, recoveryComplete, linkNotice, dismissLinkNotice } = useAuth();
+  const { recoveryMode, recoveryComplete, linkNotice, dismissLinkNotice, session, dismissRecovery } = useAuth();
   const [savingsOpen, setSavingsOpen] = useState(false);
   if (recoveryMode || recoveryComplete) {
     return (
+      <SafeAreaView style={styles.root}>
       <ScrollView contentContainerStyle={styles.recovery} keyboardShouldPersistTaps="handled">
         <View style={styles.recoveryCard}><AccountPanel /></View>
+        {recoveryComplete && !session && <Pressable accessibilityRole="button" style={styles.bannerClose} onPress={dismissRecovery}><Text style={styles.bannerCloseText}>Continue to Stuora</Text></Pressable>}
       </ScrollView>
+      </SafeAreaView>
     );
   }
   const banner = linkNotice ? (
@@ -27,7 +31,7 @@ function RootContent() {
 }
 
 export default function Root() {
-  return <ErrorBoundary><AuthProvider><RootContent /></AuthProvider></ErrorBoundary>;
+  return <ErrorBoundary><SafeAreaProvider initialMetrics={initialWindowMetrics}><AuthProvider><RootContent /></AuthProvider></SafeAreaProvider></ErrorBoundary>;
 }
 
 const styles = StyleSheet.create({

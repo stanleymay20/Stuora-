@@ -1,5 +1,6 @@
 export function emailError(email: string): string {
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) return 'Enter a valid email address.';
+  if (email.trim().split('@')[1].toLowerCase() !== 'gisma-student.com') return 'Use your GISMA student email address.';
   return '';
 }
 

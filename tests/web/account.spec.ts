@@ -40,7 +40,7 @@ test('profile creation, editing, privacy, reload persistence and logout', async 
 test('confirmation-required signup never shows a signed-in account', async ({ page }) => {
   await backend(page); await account(page);
   await page.getByRole('button', { name: 'New here? Create an account' }).click();
-  await page.getByLabel('Email', { exact: true }).fill('new@example.invalid');
+  await page.getByLabel('Email', { exact: true }).fill('new@gisma-student.com');
   await page.getByLabel('Password', { exact: true }).fill('signup-password');
   await page.getByRole('button', { name: 'Create account', exact: true }).click();
   await expect(page.getByText('Confirm that you are at least 16 and accept the terms of use to create an account.')).toBeVisible();
@@ -54,7 +54,7 @@ test('confirmation-required signup never shows a signed-in account', async ({ pa
 test('Stuora resend-confirmation is available after signup and rate-limits accidental repeats', async ({ page }) => {
   const api = await backend(page); await account(page);
   await page.getByRole('button', { name: 'New here? Create an account' }).click();
-  await page.getByLabel('Email', { exact: true }).fill('pending@example.invalid');
+  await page.getByLabel('Email', { exact: true }).fill('pending@gisma-student.com');
   await page.getByLabel('Password', { exact: true }).fill('valid-password');
   await page.getByRole('checkbox', { name: 'I am at least 16 years old' }).click();
   await page.getByRole('checkbox', { name: 'I accept the terms of use and have read the privacy notice' }).click();
@@ -72,11 +72,11 @@ test('Stuora confirmation resend is accessible after reload, with non-enumeratin
   await page.getByRole('button', { name: 'Resend confirmation email' }).click();
   await expect(page.getByText('Enter a valid email address.')).toBeVisible();
   expect(api.confirmationsResent()).toBe(0);
-  await page.getByLabel('Email', { exact: true }).fill('unknown@example.invalid');
+  await page.getByLabel('Email', { exact: true }).fill('unknown@gisma-student.com');
   await page.getByRole('button', { name: 'Resend confirmation email' }).click();
   await expect(page.getByText(/If your account is awaiting confirmation, please check your inbox\. You can try again later\./)).toBeVisible();
   expect(api.confirmationsResent()).toBe(1);
-  await expect(page.getByLabel('Email', { exact: true })).toHaveValue('unknown@example.invalid');
+  await expect(page.getByLabel('Email', { exact: true })).toHaveValue('unknown@gisma-student.com');
   await expect(page.getByText('Email rate limit exceeded')).toHaveCount(0);
 });
 

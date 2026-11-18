@@ -2,7 +2,7 @@ name: Stuora CI
 
 on:
   push:
-    branches: [main, feat/mvp-shell]
+    branches: [main, feat/mvp-shell, 'release/android-internal-*']
   pull_request:
     # Also gate stacked PRs that target a feature branch (e.g. remediation PRs).
     branches: [main, 'feat/**']
@@ -151,6 +151,14 @@ jobs:
 
       - name: Test desktop and mobile web account flows
         run: npm run test:web
+
+      - name: Verify external feed browser flows for the internal candidate
+        if: startsWith(github.ref, 'refs/heads/release/android-internal-')
+        env:
+          EXPO_PUBLIC_STUORA_EXTERNAL_FEEDS: enabled
+        run: |
+          npm run export:web
+          npx playwright test tests/web/external-feed.spec.ts
 
       - name: Export native bundles
         run: npx expo export --platform ios --platform android --output-dir native-build

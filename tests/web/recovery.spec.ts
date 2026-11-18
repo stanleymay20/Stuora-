@@ -12,6 +12,10 @@ test('forgot-password request validates email and returns a privacy-safe respons
 
   await page.getByLabel('Email', { exact: true }).fill('alice@example.invalid');
   await page.getByRole('button', { name: 'Send password reset link' }).click();
+  await expect(page.getByText('Use your GISMA student email address.')).toBeVisible();
+  expect(api.recoveries()).toBe(0);
+  await page.getByLabel('Email', { exact: true }).fill('alice@gisma-student.com');
+  await page.getByRole('button', { name: 'Send password reset link' }).click();
   await expect(page.getByText('If an account exists for that email, a password reset link has been sent.')).toBeVisible();
   expect(api.recoveries()).toBe(1);
   await page.getByRole('button', { name: 'Back to sign in' }).click();
@@ -55,6 +59,7 @@ test('web recovery callback exchanges a PKCE code bound to this browser and upda
   await page.getByRole('button', { name: 'Update password' }).click();
   await expect(page.getByText('Password updated successfully. Sign in again with your new password.')).toBeVisible();
   expect(api.passwordUpdates()).toBe(1);
+  await expect(page.getByRole('button', { name: 'Continue to Stuora' })).toBeVisible();
   await expect(page.getByText('Welcome to Stuora', { exact: true })).toBeVisible();
   await expect(page.getByText('Your Stuora Passport', { exact: true })).toHaveCount(0);
 });

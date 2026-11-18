@@ -1,6 +1,6 @@
 {
   "name": "stuora",
-  "version": "0.1.0",
+  "version": "0.1.5",
   "private": true,
   "main": "index.ts",
   "engines": {
@@ -27,15 +27,16 @@
     "@react-native-async-storage/async-storage": "2.2.0",
     "@supabase/supabase-js": "2.117.3",
     "expo": "~57.0.31",
+    "expo-crypto": "57.0.4",
     "expo-image-picker": "~57.0.20",
+    "expo-splash-screen": "~57.0.10",
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "react-native": "0.86.3",
+    "react-native-safe-area-context": "~5.7.0",
     "react-native-svg": "15.15.4",
     "react-native-url-polyfill": "4.0.0",
-    "react-native-web": "~0.21.0",
-    "expo-splash-screen": "~57.0.10",
-    "expo-crypto": "57.0.4"
+    "react-native-web": "~0.21.0"
   },
   "devDependencies": {
     "@electric-sql/pglite": "0.5.8",

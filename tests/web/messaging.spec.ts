@@ -8,7 +8,7 @@ const conversationId = '00000000-0000-0000-0000-000000000201';
 
 function authSession() {
   const now = Math.floor(Date.now() / 1000);
-  const user = { id: alice, email: 'alice@example.invalid', aud: 'authenticated', app_metadata: { provider: 'email' }, user_metadata: {}, created_at: new Date().toISOString(), email_confirmed_at: new Date().toISOString() };
+  const user = { id: alice, email: 'alice@gisma-student.com', aud: 'authenticated', app_metadata: { provider: 'email' }, user_metadata: {}, created_at: new Date().toISOString(), email_confirmed_at: new Date().toISOString() };
   const jwt = [Buffer.from('{"alg":"HS256"}').toString('base64url'), Buffer.from(JSON.stringify({ sub: alice, exp: now + 3600, iat: now, role: 'authenticated' })).toString('base64url'), 'test-signature'].join('.');
   return { access_token: jwt, refresh_token: 'test-refresh-token', token_type: 'bearer', expires_in: 3600, expires_at: now + 3600, user };
 }
@@ -64,7 +64,7 @@ test('signed-in student can start and persist a listing conversation', async ({ 
   await messagingBackend(page);
   await page.goto('/');
   await page.getByText('You', { exact: true }).click();
-  await page.getByLabel('Email', { exact: true }).fill('alice@example.invalid');
+  await page.getByLabel('Email', { exact: true }).fill('alice@gisma-student.com');
   await page.getByLabel('Password', { exact: true }).fill('correct-password');
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
   await expect(page.getByText('Your Stuora Passport', { exact: true })).toBeVisible();
@@ -109,7 +109,7 @@ test('Messages show newest entries first and load older history without losing n
   });
   await page.goto('/');
   await page.getByText('You', { exact: true }).click();
-  await page.getByLabel('Email', { exact: true }).fill('alice@example.invalid');
+  await page.getByLabel('Email', { exact: true }).fill('alice@gisma-student.com');
   await page.getByLabel('Password', { exact: true }).fill('correct-password');
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
   await expect(page.getByText('Your Stuora Passport', { exact: true })).toBeVisible();
@@ -139,7 +139,7 @@ test('private inbox clears an unsent draft on thread switch and does not mislabe
     ? route.fulfill({ status: 403, json: { code: '42501', message: 'Read restricted' } })
     : route.fulfill({ json: [] }));
   await page.goto('/?stuora=profile');
-  await page.getByLabel('Email', { exact: true }).fill('alice@example.invalid');
+  await page.getByLabel('Email', { exact: true }).fill('alice@gisma-student.com');
   await page.getByLabel('Password', { exact: true }).fill('correct-password');
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
   await expect(page.getByText('Your Stuora Passport', { exact: true })).toBeVisible();
@@ -178,7 +178,7 @@ test('a delayed send completion never clears a newly selected conversation draft
     await route.fulfill({ status: 201, json: [] });
   });
   await page.goto('/?stuora=profile');
-  await page.getByLabel('Email', { exact: true }).fill('alice@example.invalid');
+  await page.getByLabel('Email', { exact: true }).fill('alice@gisma-student.com');
   await page.getByLabel('Password', { exact: true }).fill('correct-password');
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
   await expect(page.getByText('Your Stuora Passport', { exact: true })).toBeVisible();

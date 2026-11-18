@@ -1,7 +1,7 @@
 import { Buffer } from 'node:buffer';
 import { expect, test, type Page } from '@playwright/test';
 const userId = '00000000-0000-0000-0000-000000000001';
-export function session(email = 'alice@example.invalid') {
+export function session(email = 'alice@gisma-student.com') {
   const now = Math.floor(Date.now() / 1000);
   const user = { id: userId, email, aud: 'authenticated', app_metadata: { provider: 'email' }, user_metadata: {}, created_at: new Date().toISOString(), email_confirmed_at: new Date().toISOString() };
   const jwt = [Buffer.from('{"alg":"HS256"}').toString('base64url'), Buffer.from(JSON.stringify({ sub: userId, exp: now + 3600, iat: now, role: 'authenticated' })).toString('base64url'), 'test-signature'].join('.');
@@ -89,7 +89,7 @@ export async function account(page: Page) {
   await expect(page.getByText('Welcome to Stuora', { exact: true })).toBeVisible();
 }
 export async function signin(page: Page, password = 'correct-password') {
-  await page.getByLabel('Email', { exact: true }).fill('alice@example.invalid');
+  await page.getByLabel('Email', { exact: true }).fill('alice@gisma-student.com');
   await page.getByLabel('Password', { exact: true }).fill(password);
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
 }

@@ -1,0 +1,15 @@
+{
+  "cli": { "appVersionSource": "local" },
+  "build": {
+    "play-internal": {
+      "distribution": "store",
+      "environment": "preview",
+      "env": {
+        "EXPO_PUBLIC_STUORA_ENV": "staging",
+        "EXPO_PUBLIC_SUPABASE_URL": "https://uptjcspizukpjcoayhtn.supabase.co",
+        "EXPO_PUBLIC_STUORA_EXTERNAL_FEEDS": "enabled"
+      },
+      "android": { "buildType": "app-bundle", "credentialsSource": "remote" }
+    }
+  }
+}

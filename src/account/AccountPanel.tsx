@@ -224,7 +224,7 @@ export default function AccountPanel({ onLegal }: { onLegal?: (doc: LegalDocumen
     </View> : null}
     {!session ? <View style={styles.welcome}><View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: '#252354' }]} /><View pointerEvents="none" style={styles.welcomeAura} /><View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(17,22,47,0.35)' }]} /><View style={{ zIndex: 1 }}><StuoraMark size={58} /></View><Text style={styles.welcomeTitle}>Stuora</Text><Text style={styles.welcomeSubtitle}>Student life, all in one place.</Text></View> : null}
     <Text accessibilityRole="header" style={styles.heading}>{session ? 'Your Stuora Passport' : forgot ? 'Reset your password' : signup ? 'Create your Stuora account' : 'Welcome to Stuora'}</Text>
-    <Text style={styles.description}>{session ? 'Your profile is saved to your account and available across devices.' : forgot ? 'Enter your account email. We will send a secure recovery link if an account exists.' : 'Core student participation is free. No university connection is required.'}</Text>
+    <Text style={styles.description}>{session ? 'Your profile is saved to your account and available across devices.' : forgot ? 'Enter your account email. We will send a secure recovery link if an account exists.' : 'Sign in with your GISMA student email. Core student features are free.'}</Text>
     {(issue || error) ? <Text accessibilityRole="alert" style={styles.error}>{issue || error}</Text> : null}
     {notice ? <Text accessibilityLiveRegion="polite" style={styles.notice}>{notice}</Text> : null}
     {!session ? <>
