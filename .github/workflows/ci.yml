@@ -94,6 +94,9 @@ jobs:
       - name: Test environment isolation
         run: node --test tests/backend-config.test.mjs
 
+      - name: Test external feed response handling
+        run: node --test tests/external-feed-reply.test.mjs
+
       - name: Test isolated Vercel preview origin binding
         run: node --test tests/vercel-preview-origin.test.mjs
 

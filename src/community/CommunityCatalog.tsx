@@ -114,7 +114,7 @@ export default function CommunityCatalog({ category, search: searchInput, prefer
       <Text style={styles.actionText}>{name}</Text>
     </Pressable>
   );
-  const active = entries.find(entry => entry.id === selected);
+  const active = !busy && !error ? entries.find(entry => entry.id === selected) : undefined;
   const fields = (item: Entry) => (
     <View style={styles.meta}>
       {category === 'Jobs' ? <>
@@ -129,12 +129,6 @@ export default function CommunityCatalog({ category, search: searchInput, prefer
       </>}
     </View>
   );
-
-  if (busy) return <ActivityIndicator accessibilityLabel={`Loading ${category.toLowerCase()}`} />;
-  if (error) return <View style={styles.panel}>
-    <Text accessibilityRole="alert">Could not load {category.toLowerCase()}. Check your connection and retry.</Text>
-    {action('Retry listings', () => setRevision(v => v + 1))}
-  </View>;
 
   if (active) return <View style={styles.panel}>
     {action(`Back to ${category}`, () => setSelected(null))}
@@ -155,7 +149,12 @@ export default function CommunityCatalog({ category, search: searchInput, prefer
       {cityInput.trim() ? action('Clear city filter', () => setCity('')) : null}
       {action('Refresh listings', () => setRevision(v => v + 1))}
     </View>
-    {!entries.length ? <View style={styles.empty}>
+    {busy ? <ActivityIndicator accessibilityLabel={`Loading ${category.toLowerCase()}`} />
+      : error ? <View style={styles.panel}>
+        <Text accessibilityRole="alert">Could not load {category.toLowerCase()} from Stuora. Check your connection and retry.</Text>
+        {action('Retry listings', () => setRevision(v => v + 1))}
+      </View>
+      : !entries.length ? <View style={styles.empty}>
       <EditorialImage kind={category} style={styles.emptyPhoto} label={`Promotional ${category.toLowerCase()} image; no actual listings available`} />
       <Text style={styles.sectionTitle}>No {category.toLowerCase()} listings found.</Text>
       <Text style={styles.muted}>When community members publish real listings, they will appear here. Nothing is simulated.</Text>
@@ -169,7 +168,7 @@ export default function CommunityCatalog({ category, search: searchInput, prefer
         <Text numberOfLines={2} style={styles.muted}>{item.description}</Text>
         <Text style={styles.link}>View details →</Text>
       </Pressable>)}</View>}
-    {more ? action('Load more listings', () => setPages(v => v + 1)) : null}
+    {!busy && !error && more ? action('Load more listings', () => setPages(v => v + 1)) : null}
   </View>;
 }
 

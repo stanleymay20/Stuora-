@@ -1,21 +1,17 @@
 // Typed client for the external-data and stuora-assistant Edge Functions.
 // Keys stay server-side; the client only sends the signed-in user's JWT.
 import { supabase } from './supabase';
+import { decodeExternalFeed, type Attribution, type FeedKind, type FeedReply } from './externalFeedReply';
+export type { Attribution, FeedReply, Opportunity } from './externalFeedReply';
 
-export type Attribution = { id: string; label: string; url: string };
 export type CityCandidate = { name: string; region: string; country: string; countryCode: string };
-export type Opportunity = {
-  id: string; source: string; title: string; subtitle: string; location: string;
-  startsAt: string | null; postedAt: string | null; url: string;
-};
-export type FeedReply = { items: Opportunity[]; sources: (Attribution & { status: 'ok' | 'error' })[] };
 
 export class ServiceError extends Error {
   constructor(readonly code: string, message: string) { super(message); }
 }
 
-export async function invokeFunction<T>(fn: string, body: Record<string, unknown>): Promise<T> {
-  const { data, error } = await supabase.functions.invoke(fn, { body });
+export async function invokeFunction<T>(fn: string, body: Record<string, unknown>, signal?: AbortSignal): Promise<T> {
+  const { data, error } = await supabase.functions.invoke(fn, { body, signal, timeout: 14000 });
   if (error) {
     let code = 'UNAVAILABLE', message = 'This service is temporarily unavailable.';
     const ctx = (error as { context?: unknown }).context;
@@ -35,5 +31,9 @@ export async function invokeFunction<T>(fn: string, body: Record<string, unknown
 
 export const lookupCity = (query: string) =>
   invokeFunction<{ candidates: CityCandidate[]; attribution: Attribution }>('external-data', { action: 'city', query });
-export const loadExternalFeed = (kind: 'jobs' | 'events', city: string, query: string) =>
-  invokeFunction<FeedReply>('external-data', { action: 'feed', kind, city, query });
+export async function loadExternalFeed(kind: FeedKind, city: string, query: string, signal?: AbortSignal): Promise<FeedReply> {
+  const data = await invokeFunction<unknown>('external-data', { action: 'feed', kind, city, query }, signal);
+  const feed = decodeExternalFeed(data, kind);
+  if (!feed) throw new ServiceError('INVALID_FEED', 'External sources returned an unexpected response. Try again.');
+  return feed;
+}
