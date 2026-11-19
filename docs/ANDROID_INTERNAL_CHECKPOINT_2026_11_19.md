@@ -22,6 +22,8 @@ Verified exact origin https://stuora-preview-j31ncq0vb-stanleymay20s-projects.ve
 Unrelated HTTPS origin returns 403. Native preflight returns 204. Anonymous POST returns 401.
 Existing origin entries were preserved.
 
-Play app 4972345199985000037 has an Internal testing draft. Browser file chooser upload timed out and reset the browser session. Reopened the draft and verified that no bundle was present. No rollout or tester link exists. Upload remains pending.
+Play app 4972345199985000037 has an Internal testing draft. Recovered the signed AAB into the shared upload directory after workspace maintenance, repeated the file-chooser upload, and Google Play accepted bundle 6 (0.1.5), min API 24 and target SDK 36. Saved release name and accurate staging-test notes. The Preview and confirm step is available. No rollout has occurred.
+
+Two Play warnings were shown: no configured testers and no deobfuscation file. Prepared list “Stuora Internal — owner testing” with stanleymay20@gmail.com, but saving was blocked by automatic approval review requiring explicit authorization for this recipient's Internal testing access. The list is unsaved. User approval is pending. The tester link remains disabled until publication.
 
 Other acceptance remains open: server-enforced student admission and student number mapping, fresh email recovery on Android/web, authenticated real provider navigation, permitted Jobs and Trips source qualification, photo enablement, two-student acceptance, support delivery and accurate final Play declarations.
