@@ -19,6 +19,9 @@ export const supabase = createClient<Database>(url, key, {
     autoRefreshToken: true,
     persistSession: true,
     detectSessionInUrl: Platform.OS === 'web',
+    // PKCE: a callback only works on the device that started the flow, so a
+    // crafted link cannot sign a user into someone else's account.
+    flowType: 'pkce',
     lock: processLock,
   },
 });

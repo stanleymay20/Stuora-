@@ -18,17 +18,44 @@ test('forgot-password request validates email and returns a privacy-safe respons
   await expect(page.getByText('Welcome to Stuora', { exact: true })).toBeVisible();
 });
 
-test('web recovery callback creates a recovery session and updates password', async ({ page }) => {
+test('injected token links never create a session (login CSRF)', async ({ page }) => {
   const api = await backend(page);
-  const recovered = session();
+  const attacker = session('attacker@example.invalid');
   const hash = new URLSearchParams({
-    access_token: recovered.access_token,
-    refresh_token: recovered.refresh_token,
-    expires_in: String(recovered.expires_in),
-    token_type: recovered.token_type,
+    access_token: attacker.access_token,
+    refresh_token: attacker.refresh_token,
+    expires_in: String(attacker.expires_in),
+    token_type: attacker.token_type,
     type: 'recovery',
   });
   await page.goto(`/#${hash.toString()}`);
+  await page.getByText('You', { exact: true }).click();
+  await expect(page.getByText('Welcome to Stuora', { exact: true })).toBeVisible();
+  await expect(page.getByText('Choose a new password', { exact: true })).toHaveCount(0);
+  const stored = await page.evaluate(() => Object.keys(localStorage).filter(key => key.endsWith('-auth-token')));
+  expect(stored).toEqual([]);
+  expect(api.codeExchanges()).toBe(0);
+});
+
+test('a recovery code from another device is rejected', async ({ page }) => {
+  const api = await backend(page);
+  await page.goto('/?code=valid-recovery-code');
+  await page.getByText('You', { exact: true }).click();
+  await expect(page.getByText('Welcome to Stuora', { exact: true })).toBeVisible();
+  await expect(page.getByText('Choose a new password', { exact: true })).toHaveCount(0);
+  expect(api.codeExchanges()).toBe(0);
+});
+
+test('web recovery callback creates a recovery session and updates password', async ({ page }) => {
+  const api = await backend(page);
+  await account(page);
+  await page.getByRole('button', { name: 'Forgot password?' }).click();
+  await page.getByLabel('Email', { exact: true }).fill('alice@example.invalid');
+  await page.getByRole('button', { name: 'Send password reset link' }).click();
+  await expect(page.getByText('If an account exists for that email, a password reset link has been sent.')).toBeVisible();
+  await page.goto('/?code=valid-recovery-code');
+  await expect.poll(() => api.codeExchanges()).toBe(1);
+  await expect.poll(() => page.evaluate(() => location.search)).toBe('');
   await page.getByText('You', { exact: true }).click();
   await expect(page.getByText('Choose a new password', { exact: true })).toBeVisible();
 

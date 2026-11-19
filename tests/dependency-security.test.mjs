@@ -11,15 +11,14 @@ function recount(r) {
   return r;
 }
 test('accepts controlled findings, fewer paths and complete/partial remediation', () => {
-  assert.equal(validateAudit(report(), 1), 22);
+  assert.equal(validateAudit(report(), 1), 3);
   const clean = report(); clean.vulnerabilities = {};
   assert.equal(validateAudit(recount(clean), 0), 0);
-  const reduced = report(); delete reduced.vulnerabilities['@expo/cli'];
-  reduced.vulnerabilities.expo.via = reduced.vulnerabilities.expo.via.filter(v => v !== '@expo/cli');
-  assert.equal(validateAudit(recount(reduced), 1), 21);
-  const lower = report(); lower.vulnerabilities.braces.severity = 'moderate';
-  lower.vulnerabilities.braces.via[0].severity = 'moderate';
-  assert.equal(validateAudit(recount(lower), 1), 22);
+  const reduced = report(); delete reduced.vulnerabilities.expo;
+  assert.equal(validateAudit(recount(reduced), 1), 2);
+  const lower = report(); lower.vulnerabilities.minimatch.severity = 'low';
+  lower.vulnerabilities.minimatch.via[0].severity = 'low';
+  assert.equal(validateAudit(recount(lower), 1), 3);
 });
 const cases = {
   'missing data': r => { delete r.vulnerabilities; },
@@ -28,21 +27,21 @@ const cases = {
   'missing metadata': r => { delete r.metadata; },
   'inconsistent counts': r => { r.metadata.vulnerabilities.total--; },
   'hidden critical count': r => { r.metadata.vulnerabilities.critical = 1; },
-  'critical package': r => { r.vulnerabilities.uuid.severity = 'critical'; recount(r); },
-  'severity escalation': r => { r.vulnerabilities.uuid.severity = 'high'; recount(r); },
-  'new package with unchanged total': r => { r.vulnerabilities.evil = r.vulnerabilities.uuid; delete r.vulnerabilities.uuid; },
-  'new path': r => { r.vulnerabilities.uuid.nodes.push('node_modules/evil/node_modules/uuid'); },
-  'missing paths': r => { r.vulnerabilities.uuid.nodes = []; },
-  'changed direct exposure': r => { r.vulnerabilities.uuid.isDirect = true; },
-  'new advisory': r => { r.vulnerabilities.uuid.via[0].url = 'https://github.com/advisories/NEW'; },
-  'wrong advisory package': r => { r.vulnerabilities.uuid.via = r.vulnerabilities.braces.via; },
-  'new advisory source': r => { r.vulnerabilities.uuid.via[0].source++; },
-  'worsened CVSS': r => { r.vulnerabilities.uuid.via[0].cvss.score = 9; },
-  'missing advisory URL': r => { delete r.vulnerabilities.uuid.via[0].url; },
-  'empty via': r => { r.vulnerabilities.uuid.via = []; },
-  'malformed via': r => { r.vulnerabilities.uuid.via = [null]; },
-  'dangling via': r => { delete r.vulnerabilities.uuid; recount(r); },
-  'rootless cycle': r => { r.vulnerabilities['@expo/metro'].via = ['metro-config']; r.vulnerabilities.metro.via = ['metro-config']; },
+  'critical package': r => { r.vulnerabilities.minimatch.severity = 'critical'; recount(r); },
+  'severity escalation': r => { r.vulnerabilities.minimatch.severity = 'high'; recount(r); },
+  'new package with unchanged total': r => { r.vulnerabilities.evil = r.vulnerabilities.minimatch; delete r.vulnerabilities.minimatch; },
+  'new path': r => { r.vulnerabilities.minimatch.nodes.push('node_modules/evil/node_modules/minimatch'); },
+  'missing paths': r => { r.vulnerabilities.minimatch.nodes = []; },
+  'changed direct exposure': r => { r.vulnerabilities.minimatch.isDirect = true; },
+  'new advisory': r => { r.vulnerabilities.minimatch.via[0].url = 'https://github.com/advisories/NEW'; },
+  'wrong advisory package': r => { r.vulnerabilities.minimatch.via = [{ ...r.vulnerabilities.minimatch.via[0], name: 'braces', dependency: 'braces' }]; },
+  'new advisory source': r => { r.vulnerabilities.minimatch.via[0].source++; },
+  'worsened CVSS': r => { r.vulnerabilities.minimatch.via[0].cvss.score = 9; },
+  'missing advisory URL': r => { delete r.vulnerabilities.minimatch.via[0].url; },
+  'empty via': r => { r.vulnerabilities.minimatch.via = []; },
+  'malformed via': r => { r.vulnerabilities.minimatch.via = [null]; },
+  'dangling via': r => { delete r.vulnerabilities.minimatch; recount(r); },
+  'rootless cycle': r => { r.vulnerabilities['@expo/fingerprint'].via = ['expo']; },
 };
 for (const [name, mutate] of Object.entries(cases)) test(`rejects ${name}`, () => {
   const r = report(); mutate(r); assert.throws(() => validateAudit(r, 1));

@@ -1,24 +1,18 @@
 # Dependency security baseline
 
-Baseline date: 2026-10-12. Base application commit: `ca147bd94da1cb8bc432ddfa687565bcf40a1a1b`.
+Baseline date: 2026-11-19 (Expo 57.0.33, expo-image-picker 57.0.21). Previous baseline: 2026-10-12, 22 package nodes (7 moderate, 15 high) from `braces`, `node-forge` and `uuid`; all of those are resolved by the Expo patch upgrade.
 
 ## Result
 
-`npm audit --omit=dev` reports 22 package nodes (7 moderate, 15 high, 0 critical), but they collapse to three upstream advisory roots in the Expo/Metro/Xcode build-tool graph:
+`npm audit --omit=dev` reports 3 package nodes (3 moderate, 0 high, 0 critical) from one upstream advisory root:
 
-- `GHSA-vfj7-8cjw-p6xm` — `braces` stack-exhaustion denial of service through deeply nested patterns.
-- `GHSA-86w9-cpqp-85rv` — `node-forge` RSA PKCS#1 v1.5 signature-verification parsing issue.
-- `GHSA-w5hq-g745-h8pq` — `uuid` buffer bounds issue in v3/v5/v6 when a buffer is supplied.
+- `GHSA-g3hv-75wg-m249` — `minimatch` (>=7.0.0 <11.0.1) denial of service via glob-pattern amplification, reached only through `expo -> @expo/fingerprint -> minimatch`.
 
-The inherited package nodes are restricted to Expo/Metro/React-Native CLI/config/build dependencies: `@expo/cli`, `@expo/code-signing-certificates`, `@expo/config`, `@expo/config-plugins`, `@expo/inline-modules`, `@expo/local-build-cache-provider`, `@expo/metro`, `@expo/metro-config`, `@expo/prebuild-config`, `@react-native/community-cli-plugin`, `@react-native/virtualized-lists`, `braces`, `expo`, `metro`, `metro-config`, `metro-file-map`, `metro-transform-worker`, `micromatch`, `node-forge`, `react-native`, `uuid`, and `xcode`.
+`@expo/fingerprint` hashes project files at build time. It is not part of the shipped app bundle, and the app never passes user-controlled glob patterns to it.
 
-No Supabase, Auth, Storage, application-domain or payment package appears as an independent advisory root in this audit.
+## Why the finding is not force-fixed
 
-## Why the findings are not force-fixed
-
-A normal `npm audit fix --package-lock-only` makes no dependency change. npm only offers `--force` resolutions that downgrade the supported stack to Expo 44 and React Native 0.72. Those changes are incompatible with the current Expo SDK 57 / React Native 0.86 application and are therefore rejected.
-
-At audit time, the repository resolves `braces` 3.0.3 and `node-forge` 1.4.0; the earlier registry investigation recorded these as the latest stable releases; this is a dated observation, not a continuing guarantee. `uuid` has a patched 11.1.1 line, but the current `xcode` package declares `uuid ^7.0.3`; forcing 11.x would violate the parent's declared dependency contract. No unsupported override is accepted without upstream compatibility evidence plus the full Stuora verification gate.
+npm offers only `--force` resolutions that downgrade the Expo SDK. Overriding `minimatch` beneath `@expo/fingerprint` would break that package's declared dependency range. The finding is accepted until Expo ships a compatible update.
 
 ## Compensating controls
 
@@ -31,7 +25,7 @@ At audit time, the repository resolves `braces` 3.0.3 and `node-forge` 1.4.0; th
 
 ## Release decision
 
-These three upstream build-tool advisories are a documented temporary risk acceptance, not a claim that the packages are vulnerability-free. Commercial GA remains blocked if a new application/runtime vulnerability appears, if a critical advisory is reported, or if upstream publishes a compatible fix that has not yet been evaluated. The baseline should be revisited on every Expo SDK update and whenever npm reports a new advisory root.
+This upstream build-tool advisory is a documented temporary risk acceptance, not a claim that the packages are vulnerability-free. Commercial GA remains blocked if a new application/runtime vulnerability appears, if a critical advisory is reported, or if upstream publishes a compatible fix that has not yet been evaluated. The baseline should be revisited on every Expo SDK update and whenever npm reports a new advisory root.
 
 ## Gate validation
 

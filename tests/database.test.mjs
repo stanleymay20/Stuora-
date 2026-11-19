@@ -49,6 +49,7 @@ async function database(inheritedGrants) {
     grant execute on function auth.uid() to anon, authenticated;
     grant execute on function storage.foldername(text), storage.filename(text) to anon, authenticated;
     grant select, insert, update, delete on storage.objects to authenticated;
+    grant select on storage.objects to anon;
     ${inheritedGrants ? 'alter default privileges in schema public grant all on tables to anon, authenticated;' : ''}
   `);
   const files = readdirSync(new URL('../supabase/migrations/', import.meta.url)).filter(f => f.endsWith('.sql')).sort();
@@ -157,25 +158,32 @@ for (const inheritedGrants of [false, true]) {
       await count('authenticated', a, `insert into public.reports (reporter_id, reported_user_id, reason) values ('${a}', '${c}', 'spam') returning *`, 1);
       await count('authenticated', b, 'select * from public.reports', 0);
 
-      // Media metadata follows listing visibility and ownership.
-      await count('authenticated', a, `insert into public.listing_media (listing_id, object_path, sort_order) values ('${house}', '${a}/${house}/room.jpg', 0) returning *`, 1);
-      await count('anon', null, `select * from public.listing_media where listing_id = '${house}'`, 1);
-      await deny(b, `insert into public.listing_media (listing_id, object_path) values ('${house}', '${b}/${house}/attack.jpg')`);
-      await deny(a, `insert into public.listing_media (listing_id, object_path) values ('${house}', '${a}/${job}/wrong-listing.jpg')`);
-      await count('authenticated', a, `insert into public.listing_media (listing_id, object_path) values ('${draft}', '${a}/${draft}/draft.jpg') returning *`, 1);
-      await count('anon', null, `select * from public.listing_media where listing_id = '${draft}'`, 0);
-      await count('authenticated', a, `select * from public.listing_media where listing_id = '${draft}'`, 1);
-      await count('authenticated', b, `delete from public.listing_media where listing_id = '${house}' returning *`, 0);
-
       // Hosted Supabase owns these tables; the harness grants authenticated CRUD
       // so the same storage.objects policies can be exercised locally.
       await count('authenticated', a, `insert into storage.objects (bucket_id, name) values ('listing-media', '${a}/${house}/room.jpg') returning *`, 1);
       await deny(b, `insert into storage.objects (bucket_id, name) values ('listing-media', '${b}/${house}/attack.jpg')`);
       await deny(a, `insert into storage.objects (bucket_id, name) values ('listing-media', '${a}/${job}/job.jpg')`);
+      await deny(a, `insert into storage.objects (bucket_id, name) values ('listing-media', '${a}/${draft}/draft.jpg')`);
       await count('authenticated', a, `insert into storage.objects (bucket_id, name) values ('avatars', '${a}/avatar') returning *`, 1);
+      await count('authenticated', c, `insert into storage.objects (bucket_id, name) values ('avatars', '${c}/avatar') returning *`, 1);
       await deny(b, `insert into storage.objects (bucket_id, name) values ('avatars', '${a}/avatar-2')`);
-      await count('authenticated', b, `select * from storage.objects where bucket_id = 'avatars'`, 0);
-      await count('authenticated', a, `select * from storage.objects where bucket_id = 'avatars'`, 1);
+      // Avatars are private: visible to the owner and to users who can see a discoverable profile.
+      await count('anon', null, `select * from storage.objects where bucket_id = 'avatars'`, 0);
+      await count('authenticated', b, `select * from storage.objects where bucket_id = 'avatars' and name = '${a}/avatar'`, 1);
+      await count('authenticated', b, `select * from storage.objects where bucket_id = 'avatars' and name = '${c}/avatar'`, 0);
+      await count('authenticated', c, `select * from storage.objects where bucket_id = 'avatars' and name = '${c}/avatar'`, 1);
+      const { rows: buckets } = await db.query("select id, public from storage.buckets order by id");
+      assert.deepEqual(buckets, [{ id: 'avatars', public: false }, { id: 'listing-media', public: true }]); assertions++;
+
+      // Media metadata follows listing visibility and ownership and must reference an uploaded object.
+      await count('authenticated', a, `insert into public.listing_media (listing_id, object_path, sort_order) values ('${house}', '${a}/${house}/room.jpg', 0) returning *`, 1);
+      await count('anon', null, `select * from public.listing_media where listing_id = '${house}'`, 1);
+      await deny(a, `insert into public.listing_media (listing_id, object_path) values ('${house}', '${a}/${house}/never-uploaded.jpg')`);
+      await deny(b, `insert into public.listing_media (listing_id, object_path) values ('${house}', '${b}/${house}/attack.jpg')`);
+      await deny(a, `insert into public.listing_media (listing_id, object_path) values ('${house}', '${a}/${job}/wrong-listing.jpg')`);
+      await deny(a, `insert into public.listing_media (listing_id, object_path) values ('${draft}', '${a}/${draft}/draft.jpg')`);
+      await count('anon', null, `select * from public.listing_media where listing_id = '${draft}'`, 0);
+      await count('authenticated', b, `delete from public.listing_media where listing_id = '${house}' returning *`, 0);
 
       const save = (listingId, kind, title, price = 3500, housingType = 'room', condition = 'good') => `select public.save_student_listing(${listingId ? `'${listingId}'` : 'null'}, '${kind}', '${title}', 'Student listing', 'Berlin', ${price}, '${housingType}', true, true, '${condition}') as id`;
       const { rows: created } = await as('authenticated', a, save(null, 'housing', 'Persistent room', 65000));
@@ -202,6 +210,82 @@ for (const inheritedGrants of [false, true]) {
       await count('anon', null, `select * from public.marketplace_details where listing_id = '${liveMarket}'`, 0);
       await count('authenticated', a, `select * from public.listings where id = '${liveMarket}'`, 1);
       await deny(a, save(liveMarket, 'marketplace', 'Reopen archived'));
+
+      // --- GA safety hardening -------------------------------------------------
+      // Listings: no forged timestamps, no detail-less rows, rent follows price.
+      await deny(b, `insert into public.listings (owner_id, kind, status, title, created_at) values ('${b}', 'marketplace', 'active', 'Pinned forever', '2999-01-01')`);
+      await deny(b, `insert into public.listings (owner_id, kind, status, title, updated_at) values ('${b}', 'marketplace', 'active', 'Forged update', '2999-01-01')`);
+      await deny(b, `insert into public.listings (owner_id, kind, status, title) values ('${b}', 'marketplace', 'active', 'No details')`, '23514');
+      await count('anon', null, "select * from public.listings where title = 'No details'", 0);
+      await count('anon', null, `select * from public.listings where id = '${liveHouse}' and created_at <= now() and created_at > now() - interval '1 hour'`, 1);
+      await count('authenticated', a, `update public.listings set price_cents = 1 where id = '${liveHouse}' returning id`, 1);
+      await count('anon', null, `select * from public.housing_details where listing_id = '${liveHouse}' and rent_cents = 1`, 1);
+      await count('authenticated', a, `update public.housing_details set rent_cents = 99999 where listing_id = '${liveHouse}' returning *`, 1);
+      await count('anon', null, `select * from public.housing_details where listing_id = '${liveHouse}' and rent_cents = 1`, 1);
+      await deny(a, `delete from public.housing_details where listing_id = '${liveHouse}'`);
+
+      // Members can see who they are talking to; outsiders cannot.
+      await count('authenticated', a, `select * from public.conversation_members where conversation_id = '${listingConversation}'`, 2);
+      await count('authenticated', c, `select * from public.conversation_members where conversation_id = '${listingConversation}'`, 0);
+      // An owner who leaves is never forced back in by the other party.
+      await count('authenticated', a, `delete from public.conversation_members where conversation_id = '${listingConversation}' and user_id = '${a}' returning *`, 1);
+      const { rows: again } = await as('authenticated', b, `select public.start_listing_conversation('${house}') as id`);
+      assert.equal(again[0].id, listingConversation); assertions++;
+      await count('authenticated', a, `select * from public.conversation_members where conversation_id = '${listingConversation}'`, 0);
+      await count('authenticated', a, `select * from public.messages where conversation_id = '${listingConversation}'`, 0);
+      // The creator may rejoin a thread they left; only they are re-added.
+      await count('authenticated', b, `delete from public.conversation_members where conversation_id = '${listingConversation}' and user_id = '${b}' returning *`, 1);
+      await as('authenticated', b, `select public.start_listing_conversation('${house}') as id`);
+      await count('authenticated', b, `select * from public.conversation_members where conversation_id = '${listingConversation}'`, 1);
+
+      // Blocks: own rows only, private to the blocker, stop messages both ways.
+      await deny(a, `insert into public.user_blocks (blocker_id, blocked_id) values ('${b}', '${c}')`);
+      await deny(a, `insert into public.user_blocks (blocker_id, blocked_id) values ('${a}', '${a}')`, '23514');
+      await count('authenticated', b, `insert into public.user_blocks (blocker_id, blocked_id) values ('${b}', '${a}') returning *`, 1);
+      await count('authenticated', a, 'select * from public.user_blocks', 0);
+      await count('authenticated', b, 'select * from public.user_blocks', 1);
+      await deny(a, `insert into public.messages (conversation_id, sender_id, body) values ('${ab}', '${a}', 'After block')`);
+      await deny(b, `insert into public.messages (conversation_id, sender_id, body) values ('${ab}', '${b}', 'Blocker also silenced')`);
+      await count('authenticated', b, `delete from public.user_blocks where blocked_id = '${a}' returning *`, 1);
+      await count('authenticated', a, `insert into public.messages (conversation_id, sender_id, body) values ('${ab}', '${a}', 'After unblock') returning *`, 1);
+      // Blocks also stop new listing conversations, in either direction.
+      await count('authenticated', a, `insert into public.user_blocks (blocker_id, blocked_id) values ('${a}', '${c}') returning *`, 1);
+      await deny(c, `select public.start_listing_conversation('${house}')`);
+      await count('authenticated', c, `select * from public.conversations where listing_id = '${house}'`, 0);
+
+      // Conversation reports require membership.
+      await count('authenticated', b, `insert into public.reports (reporter_id, reported_user_id, conversation_id, reason) values ('${b}', '${a}', '${ab}', 'harassment') returning *`, 1);
+      await deny(c, `insert into public.reports (reporter_id, conversation_id, reason) values ('${c}', '${ab}', 'spam')`);
+      await deny(b, `insert into public.reports (reporter_id, reason) values ('${b}', 'spam')`, '23514');
+
+      // Rate limits: 20 messages per minute.
+      await deny(a, `insert into public.messages (conversation_id, sender_id, body) select '${ab}', '${a}', 'Flood ' || g from generate_series(1, 25) g`, 'PT429');
+      await count('authenticated', a, `select * from public.messages where body like 'Flood %'`, 0);
+      // 15 new conversations per hour.
+      const d = id(4);
+      await db.exec(`insert into auth.users values ('${d}'); insert into public.profiles (id, display_name) values ('${d}', 'Dana');`);
+      const extra = Array.from({ length: 16 }, (_, i) => id(500 + i));
+      await db.exec(`begin;
+        insert into public.listings (id, owner_id, kind, status, title) values ${extra.map(x => `('${x}', '${b}', 'marketplace', 'active', 'Desk ${x.slice(-3)}')`).join(', ')};
+        insert into public.marketplace_details (listing_id) values ${extra.map(x => `('${x}')`).join(', ')};
+        commit;`);
+      for (const listing of extra.slice(0, 15)) await as('authenticated', d, `select public.start_listing_conversation('${listing}')`);
+      await deny(d, `select public.start_listing_conversation('${extra[15]}')`, 'PT429');
+      // Re-opening an existing thread is not a new conversation.
+      await count('authenticated', d, `select public.start_listing_conversation('${extra[0]}') as id`, 1);
+
+      // Media: at most six photos, uploads only for active listings.
+      for (let i = 1; i <= 6; i++) await as('authenticated', a, `insert into storage.objects (bucket_id, name) values ('listing-media', '${a}/${house}/extra-${i}.jpg')`);
+      for (let i = 1; i <= 5; i++) await count('authenticated', a, `insert into public.listing_media (listing_id, object_path, sort_order) values ('${house}', '${a}/${house}/extra-${i}.jpg', ${i}) returning *`, 1);
+      await deny(a, `insert into public.listing_media (listing_id, object_path, sort_order) values ('${house}', '${a}/${house}/extra-6.jpg', 6)`, '23514');
+      await count('anon', null, `select * from public.listing_media where listing_id = '${house}'`, 6);
+      await deny(a, `insert into storage.objects (bucket_id, name) values ('listing-media', '${a}/${liveMarket}/after-archive.jpg')`);
+
+      // Trip participation is visible only to the participant and the trip owner.
+      await db.exec(`insert into public.trip_participants (trip_listing_id, user_id) values ('${trip}', '${b}')`);
+      await count('authenticated', a, 'select * from public.trip_participants', 1);
+      await count('authenticated', b, 'select * from public.trip_participants', 1);
+      await count('authenticated', c, 'select * from public.trip_participants', 0);
       const { rows: rls } = await db.query("select relname from pg_class join pg_namespace on pg_namespace.oid = relnamespace where nspname = 'public' and relkind = 'r' and not relrowsecurity");
       assert.deepEqual(rls, []); assertions++;
       t.diagnostic(`${assertions} authorization assertions passed against Postgres`);

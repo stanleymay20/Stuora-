@@ -13,6 +13,7 @@ export async function backend(page: Page, failProfile = false) {
   let reads = 0;
   let recoveries = 0;
   let passwordUpdates = 0;
+  let codeExchanges = 0;
   await page.route('https://stuora-test.invalid/**', async route => {
     const req = route.request();
     const url = new URL(req.url());
@@ -22,6 +23,8 @@ export async function backend(page: Page, failProfile = false) {
     if (url.pathname.endsWith('/recover')) {
       recoveries++;
       expect(req.postDataJSON()?.email).toBeTruthy();
+      // PKCE: every emailed link is bound to a verifier held on this device.
+      expect(req.postDataJSON()?.code_challenge).toBeTruthy();
       expect(url.searchParams.get('redirect_to')).toBeTruthy();
       return route.fulfill({ json: {} });
     }
@@ -31,6 +34,13 @@ export async function backend(page: Page, failProfile = false) {
         expect(req.postDataJSON()?.password).toBeTruthy();
       }
       return route.fulfill({ json: session().user });
+    }
+    if (url.pathname.endsWith('/token') && url.searchParams.get('grant_type') === 'pkce') {
+      codeExchanges++;
+      const body = req.postDataJSON();
+      // The verifier exists only on the device that requested the link.
+      if (body?.auth_code !== 'valid-recovery-code' || !body?.code_verifier) return route.fulfill({ status: 400, json: { error_code: 'bad_code_verifier', msg: 'Invalid code' } });
+      return route.fulfill({ json: session() });
     }
     if (url.pathname.endsWith('/token')) {
       if (req.postDataJSON()?.password === 'bad-password') return route.fulfill({ status: 400, json: { error_code: 'invalid_credentials', msg: 'Invalid login credentials' } });
@@ -54,7 +64,7 @@ export async function backend(page: Page, failProfile = false) {
     }
     return route.fulfill({ status: 404, json: { message: `Unexpected endpoint in test: ${url.pathname}` } });
   });
-  return { writes: () => writes, recoveries: () => recoveries, passwordUpdates: () => passwordUpdates };
+  return { writes: () => writes, recoveries: () => recoveries, passwordUpdates: () => passwordUpdates, codeExchanges: () => codeExchanges };
 }
 export async function account(page: Page) {
   await page.goto('/');

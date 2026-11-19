@@ -56,19 +56,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       try {
         const parsed = new URL(raw);
         const hash = parsed.hash.startsWith('#') ? parsed.hash.slice(1) : '';
-        const query = parsed.search.startsWith('?') ? parsed.search.slice(1) : '';
-        const params = new URLSearchParams(hash || query);
-        const accessToken = params.get('access_token');
-        const refreshToken = params.get('refresh_token');
-        if (!accessToken || !refreshToken) return;
-        const { error: issue } = await supabase.auth.setSession({ access_token: accessToken, refresh_token: refreshToken });
-        if (!active) return;
-        if (issue) {
-          setError('This sign-in link could not be used. Request a new one.');
+        const params = new URLSearchParams(parsed.search);
+        for (const [key, value] of new URLSearchParams(hash)) if (!params.has(key)) params.set(key, value);
+        if (params.get('error') || params.get('error_code')) {
+          setError('This sign-in link is invalid or has expired. Request a new one.');
           return;
         }
-        setError('');
-        if (params.get('type') === 'recovery') setRecoveryMode(true);
+        // PKCE only: tokens embedded in a link are never accepted. The code can
+        // be exchanged only with the verifier stored when this device started
+        // the sign-up or recovery flow. Recovery is signalled by PASSWORD_RECOVERY.
+        const code = params.get('code');
+        if (!code) return;
+        const { error: issue } = await supabase.auth.exchangeCodeForSession(code);
+        if (!active) return;
+        setError(issue ? 'This sign-in link could not be used on this device. Request a new one here.' : '');
       } catch {
         if (active) setError('This sign-in link could not be read. Request a new one.');
       }

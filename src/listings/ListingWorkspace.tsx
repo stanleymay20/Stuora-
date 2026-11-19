@@ -237,8 +237,11 @@ export default function ListingWorkspace({ category, mode = 'browse', search = '
       if (issue) throw issue;
       setNotice('Conversation ready. Opening Messages…');
       onMessage?.();
-    } catch {
-      setActionError('Could not start a secure conversation. Check that the listing is still active, then retry.');
+    } catch (issue) {
+      const code = (issue as { code?: string })?.code;
+      setActionError(code === 'PT429' ? 'You are starting conversations too quickly. Wait a while, then retry.'
+        : code === '42501' ? 'Messaging is not available for this listing.'
+        : 'Could not start a secure conversation. Check that the listing is still active, then retry.');
     } finally { setBusy(false); }
   }
 
