@@ -49,6 +49,12 @@
       "shortName": "Stuora",
       "themeColor": "#17152F"
     },
-    "icon": "./assets/generated-stuora/icon.png"
+    "icon": "./assets/generated-stuora/icon.png",
+    "owner": "stuora",
+    "extra": {
+      "eas": {
+        "projectId": "1ab07441-9b46-45a3-a5f6-2e33ea5bcf30"
+      }
+    }
   }
 }
