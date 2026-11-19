@@ -14,6 +14,10 @@ const env = Deno.env.toObject();
 const url = env.SUPABASE_URL, anonKey = env.SUPABASE_ANON_KEY, serviceKey = env.SUPABASE_SERVICE_ROLE_KEY;
 if (!url || !anonKey || !serviceKey) throw new Error("external-data is missing Supabase configuration");
 const origins = allowedOrigins(env.STUORA_ALLOWED_WEB_ORIGINS);
+// Keep existing origins while qualifying a separately configured staging preview.
+if (url === "https://uptjcspizukpjcoayhtn.supabase.co") {
+  for (const origin of allowedOrigins(env.STUORA_STAGING_WEB_ORIGIN)) origins.add(origin);
+}
 const admin = createClient(url, serviceKey, { auth: { persistSession: false, autoRefreshToken: false } });
 const feeds = [ticketmasterProvider(env), adzunaProvider(env), bundesagenturProvider(env)]
   .filter((p): p is FeedProvider => p !== null);
