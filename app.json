@@ -3,7 +3,7 @@
     "name": "Stuora",
     "slug": "stuora",
     "scheme": "stuora",
-    "version": "0.1.5",
+    "version": "0.1.6",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
     "plugins": [
@@ -36,7 +36,7 @@
     },
     "android": {
       "package": "com.stuora.app",
-      "versionCode": 6,
+      "versionCode": 7,
       "adaptiveIcon": {
         "foregroundImage": "./assets/generated-stuora/adaptive-foreground.png",
         "backgroundColor": "#17152F"

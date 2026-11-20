@@ -442,6 +442,15 @@ for (const inheritedGrants of [false, true]) {
       assert.equal(preservedOptIn[0].is_discoverable, true); assertions++;
       await deny(newId, `insert into public.listings (owner_id, kind, title) values ('${newId}', 'housing', 'No city')`, '23502');
       await deny(newId, `insert into public.listings (owner_id, kind, title, city) values ('${newId}', 'housing', 'Wrong city', null)`, '23502');
+      // Trip participation is visible only to the participant and the trip owner.
+      await db.exec(`insert into public.trip_participants (trip_listing_id, user_id) values ('${trip}', '${b}') on conflict do nothing`);
+      await count('authenticated', a, `select * from public.trip_participants where trip_listing_id = '${trip}'`, 1);
+      await count('authenticated', b, `select * from public.trip_participants where trip_listing_id = '${trip}'`, 1);
+      await count('authenticated', c, `select * from public.trip_participants where trip_listing_id = '${trip}'`, 0);
+      await assert.rejects(as('anon', null, 'select * from public.trip_participants'), e => e.code === '42501'); assertions++;
+      // Avatars are not served publicly from the predictable {user_id}/avatar path.
+      const { rows: avatarBucket } = await db.query("select public from storage.buckets where id = 'avatars'");
+      assert.deepEqual(avatarBucket, [{ public: false }]); assertions++;
       const { rows: rls } = await db.query("select relname from pg_class join pg_namespace on pg_namespace.oid = relnamespace where nspname = 'public' and relkind = 'r' and not relrowsecurity");
       assert.deepEqual(rls, []); assertions++;
       t.diagnostic(`${assertions} authorization assertions passed against Postgres`);

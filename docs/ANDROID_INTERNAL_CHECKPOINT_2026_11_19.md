@@ -22,8 +22,14 @@ Verified exact origin https://stuora-preview-j31ncq0vb-stanleymay20s-projects.ve
 Unrelated HTTPS origin returns 403. Native preflight returns 204. Anonymous POST returns 401.
 Existing origin entries were preserved.
 
-Play app 4972345199985000037 has an Internal testing draft. Recovered the signed AAB into the shared upload directory after workspace maintenance, repeated the file-chooser upload, and Google Play accepted bundle 6 (0.1.5), min API 24 and target SDK 36. Saved release name and accurate staging-test notes. The Preview and confirm step is available. No rollout has occurred.
+Play app 4972345199985000037 has release 0.1.5 (6) active on Internal testing. On 19 November the owner tester list was saved, selected for Stuora, and the release rolled out with user approval. The invitation opened for the approved owner account at https://play.google.com/apps/internaltest/4701573468721508581. The Galaxy A22 subsequently showed confirmed GISMA email and a successfully saved profile. Staging readback confirmed email confirmation, Berlin and enabled discovery. Recovery and multi-student flows remain unqualified.
 
-Two Play warnings were shown: no configured testers and no deobfuscation file. Prepared list “Stuora Internal — owner testing” with stanleymay20@gmail.com, but saving was blocked by automatic approval review requiring explicit authorization for this recipient's Internal testing access. The list is unsaved. User approval is pending. The tester link remains disabled until publication.
+## 20 November remediation candidate
+
+Prepared 0.1.6 (7) from the existing Internal release branch, integrating reviewed commit 42c31c6 from claude/release-ci-hardening. The new source clears Metro on every export, pins CI actions, tightens the dependency baseline to three moderate package nodes, and adds participant/avatar privacy fixes. It preserves the newer Expo patch versions already on the release branch.
+
+Validated npm ci, TypeScript, 113 Node tests, live dependency audit (3 moderate, 0 high/critical), Expo compatibility and web export. Local browser qualification remains pending due to browser launch failure. This source has not yet been built into a signed AAB or uploaded to Play.
+
+Applied participant_privacy_and_private_avatars to staging only. Readback confirms avatars.public=false and trip_participants_read_self_or_owner checks the current user or trip owner. Database authorization tests pass locally.
 
 Other acceptance remains open: server-enforced student admission and student number mapping, fresh email recovery on Android/web, authenticated real provider navigation, permitted Jobs and Trips source qualification, photo enablement, two-student acceptance, support delivery and accurate final Play declarations.

@@ -53,3 +53,10 @@ These three upstream build-tool advisories are a documented temporary risk accep
 - **Remove this entry** as soon as Expo ships a CLI that depends on a patched Zod.
 
 The live audit today reports 5 findings, against an upper bound of 23. The original `braces` and `uuid` chains are no longer present.
+
+## Addendum 2026-11-19: Expo 57.0.33 resolves the high findings
+
+- Upgraded `expo` 57.0.31 → 57.0.33, with `expo-image-picker` 57.0.21 and `expo-splash-screen` 57.0.11 to match it (the Expo compatibility check passes).
+- This removes the `glob` (GHSA-3g3m-2fjr-6pw4), `node-forge` and `zod` (GHSA-mrhx-c7xc-m3w5) chains. The `zod` acceptance above no longer applies.
+- `npm audit --omit=dev` now reports 3 moderate findings, 0 high and 0 critical, all from one advisory root: `minimatch` GHSA-g3hv-75wg-m249 via `expo → @expo/fingerprint`. `@expo/fingerprint` runs at build time only and never receives user-controlled glob patterns.
+- `security/production-audit-baseline.json` was regenerated from that report and is the new upper bound. The failure-path tests in `tests/dependency-security.test.mjs` now mutate the remaining `minimatch` chain.
