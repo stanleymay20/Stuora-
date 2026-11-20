@@ -171,7 +171,7 @@ jobs:
         env:
           EXPO_PUBLIC_STUORA_EXTERNAL_FEEDS: enabled
         run: |
-          npm run export:web -- --clear
+          npm run export:web
           npx playwright test tests/web/external-feed.spec.ts
 
       - name: Export native bundles

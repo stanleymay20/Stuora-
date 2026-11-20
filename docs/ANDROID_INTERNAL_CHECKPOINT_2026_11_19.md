@@ -28,7 +28,7 @@ Play app 4972345199985000037 has release 0.1.5 (6) active on Internal testing. O
 
 Prepared 0.1.6 (7) from the existing Internal release branch, integrating reviewed commit 42c31c6 from claude/release-ci-hardening. The new source clears Metro on every export, pins CI actions, tightens the dependency baseline to three moderate package nodes, and adds participant/avatar privacy fixes. It preserves the newer Expo patch versions already on the release branch.
 
-Validated npm ci, TypeScript, 113 Node tests, live dependency audit (3 moderate, 0 high/critical), Expo compatibility and web export. Local browser qualification remains pending due to browser launch failure. This source has not yet been built into a signed AAB or uploaded to Play.
+Validated npm ci, TypeScript, 113 Node tests, live dependency audit (3 moderate, 0 high/critical), Expo compatibility and web export. Local browser verification passed after installing Chromium: 180 passed, 6 skipped, plus 2 external-feed cases passed with the feature flag enabled. Android and iOS JavaScript exports passed. CI exposed a duplicated --clear argument after integration, corrected in the workflow. This source has not yet been built into a signed AAB or uploaded to Play.
 
 Applied participant_privacy_and_private_avatars to staging only. Readback confirms avatars.public=false and trip_participants_read_self_or_owner checks the current user or trip owner. Database authorization tests pass locally.
 
