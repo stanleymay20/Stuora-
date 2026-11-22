@@ -1,12 +1,14 @@
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
 import { supabase } from '../backend/supabase';
 import { useAuth } from '../account/AuthProvider';
 import type { Database } from '../backend/database.types';
 import ReportButton from '../moderation/ReportButton';
 import { features } from '../backend/features';
 import { saveSharedGroupFile } from './groupFileSave';
-import type { DownloadableGroupFile } from './groupFileTransfer';
+import { selectAndSubmitGroupPdf } from './groupDocumentPick';
+import { groupUploadRequest, MAX_FILE_BYTES, type DownloadableGroupFile } from './groupFileTransfer';
 
 /** A stable per-group pseudonym, so members can tell authors apart without
  * exposing account ids or linking the same student across groups. */
@@ -60,6 +62,10 @@ export default function GroupWorkspace({ onAccount }: { onAccount: () => void })
   const [filesIssue, setFilesIssue] = useState('');
   const [fileNotice, setFileNotice] = useState('');
   const [downloadingFileId, setDownloadingFileId] = useState<string | null>(null);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [uploadingDocument, setUploadingDocument] = useState(false);
+  const [confirmRemoveFileId, setConfirmRemoveFileId] = useState<string | null>(null);
+  const [removingFileId, setRemovingFileId] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [city, setCity] = useState('');
   const [topic, setTopic] = useState('');
@@ -134,7 +140,7 @@ export default function GroupWorkspace({ onAccount }: { onAccount: () => void })
   // Only current members may discover group attachments; no anonymous or
   // cross-account cache. Off by default until trusted intake/download approval.
   useEffect(() => {
-    setSharedFiles([]); setFilesIssue(''); setFileNotice('');
+    setSharedFiles([]); setFilesIssue(''); setFileNotice(''); setConfirmRemoveFileId(null);
     if (!features.groupFiles || !selectedId || !joined || !userId) {
       setLoadingFiles(false); return;
     }
@@ -292,6 +298,25 @@ export default function GroupWorkspace({ onAccount }: { onAccount: () => void })
     finally { setBusy(false); }
   }
 
+  async function deleteSharedFile(file: GroupFile) {
+    if (!features.groupFiles || !userId || !chosen || file.group_id !== chosen.id ||
+      (!owner && file.uploader_id !== userId) || removingFileId ||
+      confirmRemoveFileId !== file.id) return;
+    setRemovingFileId(file.id); setFilesIssue(''); setFileNotice('');
+    try {
+      const {data,error}=await supabase.rpc('delete_student_group_file',{p_file:file.id});
+      if(error || data!==true)throw new Error('Could not delete this file. Check your access and retry.');
+      setSharedFiles(current=>current.filter(entry=>entry.id!==file.id));
+      setConfirmRemoveFileId(null);
+      setFileNotice('File removed from the group. Private storage cleanup is queued.');
+      setFilesRevision(n=>n+1);
+    } catch(err) {
+      setFilesIssue(err instanceof Error ? err.message : 'Could not remove this file.');
+    } finally {
+      setRemovingFileId(null);
+    }
+  }
+
   async function downloadSharedFile(file: GroupFile) {
     if (!features.groupFiles || !joined || !chosen || file.group_id !== chosen.id ||
       file.status !== 'approved' || downloadingFileId) return;
@@ -308,6 +333,70 @@ export default function GroupWorkspace({ onAccount }: { onAccount: () => void })
     } catch (err) {
       setFilesIssue(err instanceof Error ? err.message : 'Download unavailable. Try again.');
     } finally { setDownloadingFileId(null); }
+  }
+
+  async function shareGroupPhoto() {
+    if (!features.groupPhotoUploads || !chosen || !joined || !userId || uploadingPhoto) return;
+    setFilesIssue(''); setFileNotice('');
+    try {
+      const pick = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'], quality: 1, allowsMultipleSelection: false, exif: false,
+      });
+      if (pick.canceled || !pick.assets.length) return;
+      const asset = pick.assets[0];
+      if (asset.fileSize && asset.fileSize > MAX_FILE_BYTES)
+        throw new Error('Photos must be 5 MB or smaller.');
+      const {data:{session: current},error} = await supabase.auth.getSession();
+      if (error || !current || current.user.id !== userId) throw new Error('Sign in again before sharing.');
+      const {url,headers}=groupUploadRequest(chosen.id,current.access_token,
+        process.env.EXPO_PUBLIC_SUPABASE_URL ?? '',
+        process.env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY ?? '');
+      const body = new FormData();
+      body.append('groupId',chosen.id);
+      const filename = asset.fileName || 'student-photo.jpg';
+      if (Platform.OS === 'web') {
+        const imageResponse=await fetch(asset.uri);
+        if (!imageResponse.ok) throw new Error('Could not read selected photo.');
+        body.append('file',await imageResponse.blob(),filename);
+      } else {
+        body.append('file',{
+          uri:asset.uri,name:filename,type:asset.mimeType ?? 'image/jpeg',
+        } as unknown as Blob);
+      }
+      setUploadingPhoto(true);
+      const response=await fetch(url,{method:'POST',headers,body});
+      if(!response.ok)throw new Error('Photo could not be shared. Please try again later.');
+      const json:unknown=await response.json();
+      if (!json || typeof json !== 'object' || !('file' in json) ||
+          typeof json.file !== 'object' || !json.file ||
+          !('status' in json.file) || json.file.status !== 'approved')
+        throw new Error('The photo is awaiting review and is not yet available to the group.');
+      setFileNotice('Photo processed and shared with your group.');
+      setFilesRevision(n=>n+1);
+    } catch (err) {
+      setFilesIssue(err instanceof Error ? err.message : 'Photo sharing unavailable.');
+    } finally { setUploadingPhoto(false); }
+  }
+
+  async function shareGroupPdf() {
+    if (!features.groupDocumentUploads || Platform.OS === 'web' || !chosen ||
+      !joined || !userId || uploadingDocument || uploadingPhoto) return;
+    setFilesIssue(''); setFileNotice('');
+    setUploadingDocument(true);
+    try {
+      const {data:{session:current},error}=await supabase.auth.getSession();
+      if(error || !current || current.user.id!==userId) throw new Error('Sign in again before uploading.');
+      const status=await selectAndSubmitGroupPdf(
+        chosen.id,current.access_token,
+        process.env.EXPO_PUBLIC_SUPABASE_URL ?? '',
+        process.env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY ?? '',
+      );
+      if(status==='cancelled')return;
+      setFileNotice('PDF uploaded into private quarantine. It is not downloadable until a security scan approves it.');
+      setFilesRevision(n=>n+1);
+    } catch(err) {
+      setFilesIssue(err instanceof Error ? err.message : 'PDF upload is unavailable.');
+    } finally { setUploadingDocument(false); }
   }
 
   async function removeMessage(item: GroupMessage) {
@@ -403,7 +492,14 @@ export default function GroupWorkspace({ onAccount }: { onAccount: () => void })
       <Text style={styles.muted}>Open group: any signed-in student can join and read the discussion. Do not share phone numbers, addresses or other private details here.</Text>
       {features.groupFiles && joined && userId ? <View testID="group-shared-files" style={styles.moderationPanel}>
         <Text style={styles.subtitle}>Shared files</Text>
-        <Text style={styles.muted}>Approved group documents only. Uploads remain closed until security review is complete. Maximum 5 MB per file.</Text>
+        <Text style={styles.muted}>Only current group members can access approved files. PDF uploads remain under security review. Maximum 5 MB per file.</Text>
+        {features.groupPhotoUploads ? <Action name={uploadingPhoto ? 'Processing photo…' : 'Share photo with group'}
+          disabled={uploadingPhoto || uploadingDocument || !!downloadingFileId}
+          onPress={() => void shareGroupPhoto()} /> : null}
+        {features.groupDocumentUploads && Platform.OS !== 'web' ?
+          <Action name={uploadingDocument ? 'Submitting PDF…' : 'Upload PDF for security review'}
+            disabled={uploadingDocument || uploadingPhoto || !!downloadingFileId}
+            onPress={() => void shareGroupPdf()} /> : null}
         {loadingFiles ? <ActivityIndicator accessibilityLabel="Loading shared group files" /> : null}
         {filesIssue ? <Text accessibilityRole="alert" style={styles.issue}>{filesIssue}</Text> : null}
         {fileNotice ? <Text style={styles.success}>{fileNotice}</Text> : null}
@@ -417,8 +513,20 @@ export default function GroupWorkspace({ onAccount }: { onAccount: () => void })
             </Text>
           </View>
           {file.status === 'approved' ?
-            <Action name="Download" label={`Download ${file.original_name}`} disabled={!!downloadingFileId}
+            <Action name="Download" label={`Download ${file.original_name}`} disabled={!!downloadingFileId || !!removingFileId}
               onPress={() => void downloadSharedFile(file)} /> : null}
+          {owner || file.uploader_id === userId ?
+            (confirmRemoveFileId === file.id ?
+              <View style={styles.actions}>
+                <Action name="Confirm remove file" label={`Confirm removing ${file.original_name}`}
+                  disabled={!!removingFileId || !!downloadingFileId || uploadingPhoto || uploadingDocument}
+                  onPress={() => void deleteSharedFile(file)} />
+                <Action name="Cancel file removal" secondary
+                  onPress={() => setConfirmRemoveFileId(null)} />
+              </View> :
+              <Action name="Remove file" secondary label={`Remove shared file ${file.original_name}`}
+                disabled={!!removingFileId || !!downloadingFileId || uploadingPhoto || uploadingDocument}
+                onPress={() => setConfirmRemoveFileId(file.id)} />) : null}
         </View>)}
         <Action name="Refresh shared files" secondary onPress={() => setFilesRevision(n => n+1)} />
       </View> : null}

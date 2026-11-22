@@ -2,7 +2,7 @@ name: Stuora CI
 
 on:
   push:
-    branches: [main, feat/mvp-shell, 'release/android-internal-*', 'release/ios-testflight-*', 'feature/professor-three-section-ui-*', 'feature/private-group-files-*']
+    branches: [main, feat/mvp-shell, 'release/android-internal-*', 'release/ios-testflight-*', 'feature/professor-three-section-ui-*', 'feature/private-group-files-*', 'feature/group-file-intake-*']
   pull_request:
     # Also gate stacked PRs that target a feature branch (e.g. remediation PRs).
     branches: [main, 'feat/**']
@@ -47,6 +47,12 @@ jobs:
       - name: Guard private attachment request headers, sizes and safe filenames
         run: node --experimental-strip-types --test tests/group-file-transfer.test.mjs
 
+      - name: Verify server-only group-file upload admission, quarantine and bans
+        run: node --test tests/group-file-intake-security.test.mjs
+
+      - name: Verify private group file cleanup lease, retries and access denial
+        run: node --test tests/group-file-cleanup-security.test.mjs
+
   # Independent Deno runtime gate. Expo's TypeScript settings do not understand
   # Deno's npm:/jsr: module specifiers and cannot prove Edge Function readiness.
   trusted-media-edge:
@@ -72,6 +78,18 @@ jobs:
 
       - name: Test member-scoped download, ban, review and revocation
         run: deno test --config supabase/functions/deno.json supabase/functions/group-file-download/core.test.ts
+
+      - name: Typecheck staging-only group photo/PDF intake
+        run: deno check --config supabase/functions/deno.json supabase/functions/group-file-intake/index.ts
+
+      - name: Test PDF quarantine preflight and trusted WebP filenames
+        run: deno test --config supabase/functions/deno.json supabase/functions/group-file-intake/preflight.test.ts
+
+      - name: Typecheck private group cleanup worker (disabled)
+        run: deno check --config supabase/functions/deno.json supabase/functions/group-file-cleanup/index.ts
+
+      - name: Test private object cleanup worker, retries and signed authentication
+        run: deno test --config supabase/functions/deno.json supabase/functions/group-file-cleanup/core.test.ts
 
       - name: Typecheck account deletion, AI assistant and external data Edge Functions
         shell: bash

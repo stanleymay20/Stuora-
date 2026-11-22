@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
- groupDownloadRequest, safeDownloadName, validateDownloadedFile,
+ groupDownloadRequest, groupUploadRequest, safeDownloadName, validateDownloadedFile,
  MAX_FILE_BYTES
 } from '../src/groups/groupFileTransfer.ts';
 
@@ -39,4 +39,16 @@ test('download validation checks exact expected length and server binary MIME', 
   assert.throws(() => validateDownloadedFile(file,42,'text/html'));
   assert.throws(() => validateDownloadedFile(file,0,'application/octet-stream'));
   assert.throws(() => validateDownloadedFile({...file,size_bytes:MAX_FILE_BYTES},MAX_FILE_BYTES+1,'application/octet-stream'));
+});
+
+test('group photo intake never puts JWTs, filenames or API keys into the URL', () => {
+  const groupId='00000000-0000-0000-0000-000000000031';
+  const request=groupUploadRequest(groupId,'private-jwt','https://uptjcspizukpjcoayhtn.supabase.co','public-key');
+  assert.equal(new URL(request.url).pathname,'/functions/v1/group-file-intake');
+  assert.equal(new URL(request.url).searchParams.get('groupId'),groupId);
+  assert.equal(request.headers.Authorization,'Bearer private-jwt');
+  assert.ok(!request.url.includes('private-jwt'));
+  assert.ok(!request.url.includes('public-key'));
+  assert.throws(()=>groupUploadRequest(groupId,'t','https://untrusted.example','key'));
+  assert.throws(()=>groupUploadRequest('x','t','https://uptjcspizukpjcoayhtn.supabase.co','key'));
 });
