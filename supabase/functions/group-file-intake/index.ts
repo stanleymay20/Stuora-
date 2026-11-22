@@ -4,6 +4,7 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.117.3";
 import { decodeAndEncode } from "../listing-photo-intake/processor.ts";
 import { STAGING_API_URL } from "../listing-photo-intake/releaseGate.ts";
+import { safeOriginalName, downloadableName, plausiblePdfHeader } from "./preflight.ts";
 
 export const GROUP_FILE_UPLOADS_COMPILED_IN = false;
 const MAX_RAW_BYTES = 5_242_880;
@@ -77,19 +78,6 @@ async function readBoundedForm(request: Request): Promise<FormData> {
   }).formData();
 }
 
-export function safeOriginalName(input:string): string {
-  return input.replace(/[\\/\r\n\x00-\x1f\x7f"<>:|?*]/g,"_").trim().slice(0,100);
-}
-export function plausiblePdfHeader(data:Uint8Array): boolean {
-  // A format preflight, NOT a malware scanner. PDFs stay pending_review until
-  // separately inspected. Never mistake this for approval.
-  if(data.length<16 || data.length>MAX_RAW_BYTES) return false;
-  const starts="%PDF-";
-  for(let i=0;i<starts.length;i++)if(data[i]!==starts.charCodeAt(i))return false;
-  const tail=new TextDecoder().decode(data.subarray(Math.max(0,data.length-2048)));
-  return tail.includes("%%EOF");
-}
-
 Deno.serve(async request => {
   const origin=request.headers.get("Origin");
   if (!GROUP_FILE_UPLOADS_COMPILED_IN ||
@@ -124,7 +112,7 @@ Deno.serve(async request => {
     if(!(input instanceof File)||formGroup!==groupId ||
       input.size===0||input.size>MAX_RAW_BYTES)
       throw new Rejection(400,"Invalid file or group");
-    const name=safeOriginalName(input.name);
+    let name=safeOriginalName(input.name);
     if(!name)throw new Rejection(400,"A filename is required");
     const raw=new Uint8Array(await input.arrayBuffer());
     const isPdf=(input.type==="application/pdf"||(!input.type&&name.toLowerCase().endsWith(".pdf")));
@@ -150,6 +138,7 @@ Deno.serve(async request => {
       lease={actor:user.id,requestId};
       const sanitized=decodeAndEncode(raw); // strips metadata, converts to clean WebP
       output=sanitized.data;mime="image/webp";status="approved";
+      name=downloadableName(name,mime); // real stored bytes are WebP, not JPEG/PNG
     }
     if(output.byteLength<1||output.byteLength>MAX_RAW_BYTES)
       throw new Rejection(413,"Processed file exceeds the size limit");
