@@ -32,7 +32,7 @@ async function setup() {
       primary key(group_id,user_id)
     );
     grant usage on schema public to authenticated,service_role,anon;
-    grant select on public.student_group_members to authenticated;
+    grant select on public.student_group_members,public.student_group_bans to authenticated;
     insert into public.profiles(id)values('${A}'),('${B}');
     insert into public.student_groups(id,owner_id)values('${G}','${A}');
     insert into public.student_group_members(group_id,user_id)values('${G}','${A}');
@@ -40,6 +40,7 @@ async function setup() {
   for(const name of [
     '20261122190000_student_group_file_quarantine.sql',
     '20261122203000_student_group_file_intake_rpc.sql',
+    '20261122210000_student_group_file_ban_visibility.sql',
   ]) {
     const sql=readFileSync(new URL('../supabase/migrations/'+name,import.meta.url),'utf8');
     assert.equal(sql.toLowerCase().split('commit;').length-1,1,'one atomic migration');
@@ -47,8 +48,8 @@ async function setup() {
   }
   return db;
 }
-async function as(db, role, sql) {
-  await db.exec(`set role ${role}; select set_config('request.jwt.claim.sub','',false)`);
+async function as(db, role, sql, actor=null) {
+  await db.exec(`set role ${role}; select set_config('request.jwt.claim.sub','${actor??''}',false)`);
   try {return await db.query(sql);}
   finally{await db.exec('reset role');}
 }
@@ -105,5 +106,15 @@ test('membership removal and ban deny commit even after admission',async()=>{
     await assert.rejects(as(db,'service_role',commit()),e=>e.code==='42501');
     assert.equal((await as(db,'service_role',admission())).rows[0].admitted,false);
     assert.equal((await db.query('select count(*) n from public.student_group_files')).rows[0].n,0);
+  }finally{await db.close();}
+});
+
+test('ban removes file metadata visibility even when a stale member row remains',async()=>{
+  const db=await setup();try{
+    await as(db,'service_role',commit());
+    const query=`select id from public.student_group_files where group_id='${G}'`;
+    assert.equal((await as(db,'authenticated',query,A)).rows.length,1);
+    await db.exec(`insert into public.student_group_bans(group_id,user_id) values ('${G}','${A}')`);
+    assert.equal((await as(db,'authenticated',query,A)).rows.length,0);
   }finally{await db.close();}
 });
