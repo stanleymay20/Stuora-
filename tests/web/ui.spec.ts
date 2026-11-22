@@ -420,9 +420,9 @@ test('professor three-section discovery keeps all seven categories in clear spac
   await page.goto('/');
   const sections = page.getByTestId('three-discovery-sections');
   await expect(sections.locator('[data-testid^="section-"]')).toHaveCount(3);
-  const groups = page.getByTestId('section-groups');
-  const campus = page.getByTestId('section-campus');
-  const marketplace = page.getByTestId('section-marketplace');
+  const groups = page.getByTestId('section-uni');
+  const campus = page.getByTestId('section-life');
+  const marketplace = page.getByTestId('section-business');
   await expect(groups.getByRole('button', { name: 'Browse Groups' })).toBeVisible();
   for (const category of ['People', 'Events', 'Trips'])
     await expect(campus.getByRole('button', { name: `Browse ${category}` })).toBeVisible();
@@ -432,9 +432,9 @@ test('professor three-section discovery keeps all seven categories in clear spac
   // Every category retains its existing route and the category-specific content.
   await campus.getByRole('button', { name: 'Browse Events' }).click();
   await expect(page.getByText('STUORA / EVENTS', { exact: true })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Open Campus Life section' })).toBeVisible();
-  await page.getByRole('button', { name: 'Open Marketplace section' }).click();
+  await expect(page.getByRole('button', { name: 'Open Life section' })).toBeVisible();
+  await page.getByRole('button', { name: 'Open Business section' }).click();
   await expect(page.getByText('STUORA / MARKETPLACE', { exact: true })).toBeVisible();
-  await page.getByRole('button', { name: 'Open Groups section' }).click();
+  await page.getByRole('button', { name: 'Open Uni section' }).click();
   await expect(page.getByText('STUORA / GROUPS', { exact: true })).toBeVisible();
 });
