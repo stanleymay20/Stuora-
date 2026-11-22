@@ -8,7 +8,8 @@ export type DownloadableGroupFile = {
 };
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 export function groupDownloadRequest(file: DownloadableGroupFile, token: string, url: string, key: string) {
-  if (!UUID.test(file.id) || !token || !key || !/^https:\/\/[a-z0-9.-]+\.[a-z]{2,}$/i.test(url))
+  if (!UUID.test(file.id) || !token || !key ||
+    url !== 'https://uptjcspizukpjcoayhtn.supabase.co')
     throw new Error('Secure file download is unavailable.');
   if (!Number.isSafeInteger(file.size_bytes) || file.size_bytes < 1 || file.size_bytes > MAX_FILE_BYTES)
     throw new Error('This file exceeds the allowed size.');
