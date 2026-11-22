@@ -50,6 +50,9 @@ jobs:
       - name: Verify server-only group-file upload admission, quarantine and bans
         run: node --test tests/group-file-intake-security.test.mjs
 
+      - name: Verify private group file cleanup lease, retries and access denial
+        run: node --test tests/group-file-cleanup-security.test.mjs
+
   # Independent Deno runtime gate. Expo's TypeScript settings do not understand
   # Deno's npm:/jsr: module specifiers and cannot prove Edge Function readiness.
   trusted-media-edge:
@@ -81,6 +84,12 @@ jobs:
 
       - name: Test PDF quarantine preflight and trusted WebP filenames
         run: deno test --config supabase/functions/deno.json supabase/functions/group-file-intake/preflight.test.ts
+
+      - name: Typecheck private group cleanup worker (disabled)
+        run: deno check --config supabase/functions/deno.json supabase/functions/group-file-cleanup/index.ts
+
+      - name: Test private object cleanup worker, retries and signed authentication
+        run: deno test --config supabase/functions/deno.json supabase/functions/group-file-cleanup/core.test.ts
 
       - name: Typecheck account deletion, AI assistant and external data Edge Functions
         shell: bash
