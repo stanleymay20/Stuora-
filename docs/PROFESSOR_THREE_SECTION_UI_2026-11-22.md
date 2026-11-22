@@ -1,16 +1,16 @@
 # Professor's three-section Stuora navigation proposal — 2026-11-22
 
 ## Source
-Handwritten professor sketch supplied by the founder in the conversation. The drawing identifies three grouped UI areas:
-1. **Groups** (university/class and business groups).
-2. **People, Events, Trips** (we label the umbrella **Campus Life**; this label is a product interpretation, not a verbatim quote).
-3. **Marketplace, Housing, Jobs** (we label the umbrella **Marketplace**).
+Handwritten professor sketch supplied by the founder in the conversation. The drawing appears to identify **Uni**, **Life**, and **Busi** (interpreted as **Business**) as the three top-level areas. The exact lettering of the circled middle heading is not completely clear, but **Life** is a stronger reading than *Utilities*:
+1. **Uni:** Groups (university/class groups and academic communities).
+2. **Life:** People, Events, Trips.
+3. **Business:** Marketplace, Housing, Jobs.
 
 Additional notes reference communication between classmates, networking and possible **GISMA-only** access using student card/number and a QR authentication method. The exact handwriting of some notes is uncertain, so do not invent an institution integration or claim approval.
 
 ## Implemented on this review branch
-- The homepage now shows exactly **three primary discovery panels**, in sketch order. The panels keep the seven existing illustrated category buttons, real routes, backend connections, and feature readiness labels. Nothing was deleted.
-- Explore has three primary section-selector controls above the existing category chips, so a category remains directly reachable for navigation, accessibility, and bookmarked links.
+- The homepage now shows exactly **three primary discovery panels — Uni, Life, Business —**, in sketch order. The panels keep the seven existing illustrated category buttons, real routes, backend connections, and feature readiness labels. Nothing was deleted.
+- Explore has three primary section-selector controls labelled Uni, Life, Business above the existing category chips, so a category remains directly reachable for navigation, accessibility, and bookmarked links.
 - Mobile and desktop layouts reuse existing images and screen implementations. Messages, Create, Account, City and Savings remain available as utilities: the design change is **three discovery spaces**, not a removal of safety or account navigation.
 - New Playwright regression checks assert the membership and category routes of all three sections.
 - The iOS TestFlight release branch was **not changed** by this UI experiment.
@@ -24,4 +24,4 @@ The sketch's number/card/QR idea must not be interpreted as equivalent to proof 
 5. Obtain GDPR and university approval for identity processing; publish a clear privacy notice and retention plan.
 
 ## Release and review rule
-This is a UI proposal, not a qualified release. Review on device, inspect CI, compare screenshots against the professor's sketch, and leave the iOS TestFlight 0.1.6 candidate unchanged until the signed candidate is evaluated. Do not claim university SSO, QR verification, or production feature parity.
+This is a UI proposal, not a qualified release. Review on device, inspect CI, compare screenshots against the professor's Uni/Life/Business sketch, and leave the iOS TestFlight 0.1.6 candidate unchanged until the signed candidate is evaluated. Do not claim university SSO, QR verification, or production feature parity.
