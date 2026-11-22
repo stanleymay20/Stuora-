@@ -621,18 +621,21 @@ export type Database = {
           object_path: string; media_type: "application/pdf" | "image/webp";
           size_bytes: number; status: "pending_review" | "approved" | "blocked";
           inspection_method: string | null; inspected_at: string | null; created_at: string;
+          scan_sha256: string | null; scan_engine: string | null;
         }
         Insert: {
           id?: string; group_id: string; uploader_id: string; original_name: string;
           object_path: string; media_type: "application/pdf" | "image/webp";
           size_bytes: number; status?: "pending_review" | "approved" | "blocked";
           inspection_method?: string | null; inspected_at?: string | null; created_at?: string;
+          scan_sha256?: string | null; scan_engine?: string | null;
         }
         Update: {
           id?: string; group_id?: string; uploader_id?: string; original_name?: string;
           object_path?: string; media_type?: "application/pdf" | "image/webp";
           size_bytes?: number; status?: "pending_review" | "approved" | "blocked";
           inspection_method?: string | null; inspected_at?: string | null; created_at?: string;
+          scan_sha256?: string | null; scan_engine?: string | null;
         }
         Relationships: [
           { foreignKeyName: "student_group_files_group_id_fkey"; columns: ["group_id"]; isOneToOne: false; referencedRelation: "student_groups"; referencedColumns: ["id"] },
