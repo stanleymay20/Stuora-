@@ -79,6 +79,9 @@ jobs:
       - name: Typecheck staging-only group photo/PDF intake
         run: deno check --config supabase/functions/deno.json supabase/functions/group-file-intake/index.ts
 
+      - name: Test PDF quarantine preflight and trusted WebP filenames
+        run: deno test --config supabase/functions/deno.json supabase/functions/group-file-intake/preflight.test.ts
+
       - name: Typecheck account deletion, AI assistant and external data Edge Functions
         shell: bash
         run: |
