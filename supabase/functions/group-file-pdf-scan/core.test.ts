@@ -73,14 +73,14 @@ Deno.test("scanner must return matching SHA256 and exact engine before trust",as
 Deno.test("clean trusted scan is associated with exact bytes on two downloads",async()=>{
   const f=fixture();
   const result=await processPdfScanJobs(f.deps);
-  assert(result.approved===1 && result.failed===0 && f.downloads()===2);
+  assert(result.approved===1 && result.failed===0 && f.downloads()===2, JSON.stringify({result,downloads:f.downloads(),settled:f.settled}));
   assert(f.settled.length===1 && f.settled[0].verdict==="clean");
   assert(f.settled[0].hash===await sha256Hex(pdf));
 });
 Deno.test("malicious verdict blocks the file rather than approving",async()=>{
   const f=fixture("malicious");
   const result=await processPdfScanJobs(f.deps);
-  assert(result.blocked===1 && result.approved===0);
+  assert(result.blocked===1 && result.approved===0,JSON.stringify({result,settled:f.settled,downloads:f.downloads()}));
   assert(f.settled[0].verdict==="malicious");
 });
 Deno.test("scanner failures and changing stored bytes remain quarantined",async()=>{
