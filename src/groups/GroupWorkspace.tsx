@@ -140,10 +140,10 @@ export default function GroupWorkspace({ onAccount }: { onAccount: () => void })
     }
     const ac = new AbortController();
     setLoadingFiles(true);
-    void supabase.from('student_group_files')
+    void Promise.resolve(supabase.from('student_group_files')
       .select('id,group_id,uploader_id,original_name,media_type,size_bytes,status,created_at')
       .eq('group_id',selectedId).order('created_at',{ascending:false})
-      .limit(30).abortSignal(ac.signal)
+      .limit(30).abortSignal(ac.signal))
       .then(({data,error}) => {
         if (ac.signal.aborted) return;
         if (error) { setFilesIssue('Could not load shared files.'); return; }
