@@ -8,8 +8,9 @@ services:
     mem_limit: 4g
     volumes:
       - clamav-signatures:/var/lib/clamav
-    networks: [private-scanner]
-    # Uses the official image's bundled health check and FreshClam updates.
+    networks: [private-scanner, signature-updates]
+    # The second outbound-only bridge allows FreshClam to refresh signatures.
+    # No ports are published to the host.
   pdf-scanner:
     build: .
     restart: unless-stopped
@@ -30,5 +31,9 @@ services:
 networks:
   private-scanner:
     internal: true
+  signature-updates:
+    # ClamAV needs outbound access for signature updates; this bridge has
+    # no published inbound port and is not attached to the scanner service.
+    driver: bridge
 volumes:
   clamav-signatures:
