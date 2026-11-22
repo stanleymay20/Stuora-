@@ -89,6 +89,18 @@ const categories: { name: Category; emoji: string; tint: string }[] = [
   { name: 'Groups', emoji: '🫂', tint: '#F1EEFF' },
 ];
 
+// Three primary discovery spaces, following the professor's handwritten sketch.
+// Every existing category remains accessible through its original URL and backend.
+type DiscoverySection = { id: 'uni' | 'life' | 'business'; title: string; summary: string; emoji: string; categories: Category[] };
+const discoverySections: DiscoverySection[] = [
+  { id: 'uni', title: 'Uni', summary: 'University groups, classmates and study circles', emoji: '🎓', categories: ['Groups'] },
+  { id: 'life', title: 'Life', summary: 'People, events and trips beyond the classroom', emoji: '🧭', categories: ['People', 'Events', 'Trips'] },
+  { id: 'business', title: 'Business', summary: 'Marketplace, housing and student jobs', emoji: '💼', categories: ['Marketplace', 'Housing', 'Jobs'] },
+];
+function discoverySectionFor(category: Category): DiscoverySection {
+  return discoverySections.find(section => section.categories.includes(category)) ?? discoverySections[0];
+}
+
 function BrandMark({ compact = false }: { compact?: boolean }) {
   return (
     <View style={styles.brandRow}>
@@ -106,7 +118,7 @@ function Pill({ children, active = false }: { children: React.ReactNode; active?
   );
 }
 
-function CategoryTile({ item, onPress }: { item: (typeof categories)[number]; onPress: () => void }) {
+function CategoryTile({ item, onPress, grouped = false }: { item: (typeof categories)[number]; onPress: () => void; grouped?: boolean }) {
   const { width } = useWindowDimensions();
   const upcoming = item.name === 'Trips' || item.name === 'Jobs' || item.name === 'Events';
   return (
@@ -115,7 +127,7 @@ function CategoryTile({ item, onPress }: { item: (typeof categories)[number]; on
       accessibilityLabel={`Browse ${item.name}`}
       accessibilityHint={upcoming ? 'Browsing available; posting and participation are coming soon' : undefined}
       onPress={onPress}
-      style={({ pressed }) => [styles.categoryTile, width < 360 && styles.categoryTileNarrow, width >= 960 && styles.categoryTileDesktop, pressed && styles.pressed]}
+      style={({ pressed }) => [styles.categoryTile, width < 360 && styles.categoryTileNarrow, width >= 960 && styles.categoryTileDesktop, grouped && styles.categoryTileGrouped, pressed && styles.pressed]}
     >
       <View style={styles.categoryArtWrap}>
         <EditorialImage kind={item.name === 'Groups' ? 'Community' : item.name} style={styles.categoryPhoto} label={`Stuora editorial image for ${item.name}`} />
@@ -123,6 +135,26 @@ function CategoryTile({ item, onPress }: { item: (typeof categories)[number]; on
       </View>
       <Text style={styles.categoryName}>{item.name}</Text>
     </Pressable>
+  );
+}
+
+function DiscoverySectionPanel({ section, onOpen, desktop }: { section: DiscoverySection; onOpen: (category: Category) => void; desktop: boolean }) {
+  return (
+    <View testID={`section-${section.id}`} style={[styles.discoverySectionPanel, desktop && styles.discoverySectionPanelDesktop]}>
+      <View style={styles.discoverySectionHeader}>
+        <Text style={styles.discoverySectionIcon}>{section.emoji}</Text>
+        <View style={styles.discoverySectionHeading}>
+          <Text style={styles.discoverySectionTitle}>{section.title}</Text>
+          <Text style={styles.discoverySectionSummary}>{section.summary}</Text>
+        </View>
+      </View>
+      <View style={styles.discoverySectionCategories}>
+        {section.categories.map(categoryName => {
+          const item = categories.find(candidate => candidate.name === categoryName);
+          return item ? <CategoryTile key={categoryName} item={item} grouped onPress={() => onOpen(categoryName)} /> : null;
+        })}
+      </View>
+    </View>
   );
 }
 
@@ -318,10 +350,10 @@ export default function App({ onOpenSavings }: { onOpenSavings: () => void }) {
 
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Browse by category</Text>
-            <Text style={styles.sectionHint}>Everything outside the classroom</Text>
+            <Text style={styles.sectionHint}>Three student spaces: Uni, Life and Business</Text>
           </View>
-          <View style={styles.categoryGrid}>
-            {categories.map((item) => <CategoryTile key={item.name} item={item} onPress={() => goToCategory(item.name)} />)}
+          <View testID="three-discovery-sections" style={styles.discoverySections}>
+            {discoverySections.map(section => <DiscoverySectionPanel key={section.id} section={section} desktop={isDesktop} onOpen={goToCategory} />)}
           </View>
 
           <View style={styles.sectionHeaderInline}><Text style={styles.sectionTitle}>Community housing</Text><Pressable accessibilityRole="button" accessibilityLabel="See all housing" onPress={() => goToCategory('Housing')} style={styles.seeAllHitArea}><Text style={styles.linkText}>See all</Text></Pressable></View>
@@ -345,6 +377,16 @@ export default function App({ onOpenSavings }: { onOpenSavings: () => void }) {
               ) : null}
             </View>
             <EditorialImage kind={category === 'Groups' ? 'Community' : category} style={[styles.categorySpotlightPhoto, !isDesktop && styles.categorySpotlightPhotoMobile]} label={`Stuora ${category} editorial image; actual posts come from the database`} />
+          </View>
+          <View testID="discovery-section-switcher" style={styles.discoverySectionSwitcher}>
+            {discoverySections.map(section => (
+              <Pressable key={section.id} accessibilityRole="button" accessibilityLabel={`Open ${section.title} section`}
+                accessibilityState={{ selected: discoverySectionFor(category).id === section.id }}
+                onPress={() => goToCategory(section.categories[0])}
+                style={[styles.discoverySectionSwitch, discoverySectionFor(category).id === section.id && styles.discoverySectionSwitchActive]}>
+                <Text style={[styles.discoverySectionSwitchLabel, discoverySectionFor(category).id === section.id && styles.discoverySectionSwitchLabelActive]}>{section.title}</Text>
+              </Pressable>
+            ))}
           </View>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipsRow}>
             {categories.map((item) => (
@@ -633,6 +675,21 @@ const styles = StyleSheet.create({
   sectionTitle: { color: BRAND.ink, fontSize: 19, fontWeight: '900', letterSpacing: -0.35 },
   sectionHint: { color: BRAND.subtle, fontSize: 11, marginTop: 2 },
   categoryGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+  discoverySections: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
+  discoverySectionPanel: { width: '100%', backgroundColor: BRAND.white, borderWidth: 1, borderColor: BRAND.line, borderRadius: 20, padding: 12, gap: 12 },
+  discoverySectionPanelDesktop: { width: '31.5%', flexGrow: 1, minWidth: 290 },
+  discoverySectionHeader: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  discoverySectionIcon: { width: 40, textAlign: 'center', fontSize: 26 },
+  discoverySectionHeading: { flex: 1 },
+  discoverySectionTitle: { color: BRAND.ink, fontSize: 17, fontWeight: '900' },
+  discoverySectionSummary: { color: BRAND.muted, fontSize: 11, lineHeight: 16, marginTop: 2 },
+  discoverySectionCategories: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  discoverySectionSwitcher: { flexDirection: 'row', gap: 7 },
+  discoverySectionSwitch: { flex: 1, borderRadius: 12, borderWidth: 1, borderColor: BRAND.line, paddingVertical: 12, paddingHorizontal: 5, alignItems: 'center', justifyContent: 'center', minHeight: 45 },
+  discoverySectionSwitchActive: { backgroundColor: BRAND.purpleSoft, borderColor: '#DDD4FF' },
+  discoverySectionSwitchLabel: { color: BRAND.muted, fontSize: 11, fontWeight: '800', textAlign: 'center' },
+  discoverySectionSwitchLabelActive: { color: BRAND.purple },
+  categoryTileGrouped: { flexBasis: '30%', flexGrow: 1 },
   categoryTile: { flexGrow: 0, flexBasis: '22%', backgroundColor: BRAND.white, borderWidth: 1, borderColor: BRAND.line, borderRadius: 17, paddingBottom: 12, alignItems: 'center', gap: 8, overflow: 'hidden', shadowColor: '#10162F', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.04, shadowRadius: 8, elevation: 1 },
   categoryTileNarrow: { flexBasis: '30%', flexGrow: 1 },
   categoryTileDesktop: { flexBasis: '13%', minHeight: 121, justifyContent: 'flex-start' },
