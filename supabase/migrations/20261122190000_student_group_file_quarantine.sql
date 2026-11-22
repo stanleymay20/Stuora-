@@ -24,7 +24,7 @@ create table public.student_group_files (
       and position('/' in original_name) = 0
       and position(chr(92) in original_name) = 0),
   object_path text not null unique
-    check (object_path ~ '^[0-9a-f-]{36}/[0-9a-f-]{36}[.](pdf|webp)
+    check (object_path ~ '^[0-9a-f-]{36}/[0-9a-f-]{36}[.](pdf|webp)$'
       and split_part(object_path, '/', 1) = group_id::text),
   media_type text not null check (media_type in ('application/pdf','image/webp')),
   size_bytes integer not null check (size_bytes between 1 and 5242880),
