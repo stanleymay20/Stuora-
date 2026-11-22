@@ -45,3 +45,26 @@
 Mainline or earlier draft PRs include unmerged or gated features. Do not merge unrelated feature PRs or change production Supabase, payment flows, RLS policy, or external integrations as part of this TestFlight build. Follow `docs/GA_RELEASE_GATE.md` for release requirements.
 
 **Classification:** iOS 0.1.6 source is simulator/CI verified; signed TestFlight and physical-device acceptance remain **UNVERIFIED**.
+
+## Continuation audit — 2026-11-22 (from checkpoint `3e49d38`)
+
+Verified:
+- Stuora CI #45044865230 at `3e49d38`: **success**. iPhone Simulator #45044865282 at `3e49d38` was still **in progress** when checked, so it is not yet confirmed.
+- All 116 local Node tests pass. The secret scan is clean, the test-mode environment check passes, and `tsc --noEmit` passes.
+- The workflow was checked against the current Expo docs (Workflows syntax and pre-packaged jobs). These are all valid: `workflow_dispatch`, the build job params `platform`/`profile`, the build hook `after_install_node_modules`, the build output `build_id`, `needs`, and the `testflight` job params `build_id`/`profile`/`changelog`/`submit_beta_review`. With no `internal_groups`/`external_groups`, the build goes only to internal groups that have auto-distribute turned on. It is not sent to Beta App Review.
+- **Fix:** Expo gives every job except `build`/`submit` the `production` environment unless told otherwise, and that includes `testflight`. The upload job is now pinned to `environment: preview` (staging), and a guard test was added for it.
+- Staging Supabase `stuora-staging` (`uptjcspizukpjcoayhtn`) is `ACTIVE_HEALTHY` and has an enabled `sb_publishable_` key. Production Supabase was not touched.
+
+Still blocked or unverified (needs an authorized Expo/Apple operator):
+- This session has no `EXPO_TOKEN` or Expo login, and no Apple/App Store Connect credentials. Because of that, the following could not be checked: the remote iOS distribution certificate and provisioning profile for `com.stuora.app`, the App Store Connect API key for app `6838005817`, and the `EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY` / `EXPO_PUBLIC_STUORA_WEB_ORIGIN` values in the Expo `preview` environment.
+- It also could not be checked that the staging Supabase Auth redirect allowlist contains `stuora://auth-callback`.
+- **No EAS build was started, nothing was submitted, and there is no build ID. TestFlight: NOT VERIFIED.**
+
+Operator commands (run from a trusted, authenticated machine on the reviewed release commit):
+```
+eas whoami
+eas credentials:configure-build -p ios -e testflight   # confirm cert + App Store profile for com.stuora.app
+eas env:list --environment preview                     # confirm staging publishable key + web origin are present
+eas workflow:run .eas/workflows/ios-testflight.yml
+eas workflow:runs                                      # capture build ID and TestFlight job result
+```

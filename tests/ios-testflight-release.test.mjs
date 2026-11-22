@@ -40,5 +40,9 @@ test('TestFlight workflow is manual-only and never submits for external beta rev
   assert.equal((workflow.match(/profile:\s*testflight/g) ?? []).length, 2);
   assert.match(workflow, /build_id:\s*\$\{\{ needs\.build_ios\.outputs\.build_id \}\}/);
   assert.match(workflow, /submit_beta_review:\s*false/);
+  // Expo defaults the testflight job to the production environment unless set.
+  const submitJob = workflow.slice(workflow.indexOf('submit_ios:'));
+  assert.match(submitJob, /^\s+environment:\s*preview\s*$/m);
+  assert.doesNotMatch(workflow, /environment:\s*production/);
   assert.doesNotMatch(workflow, /^\s*(?:external_groups|internal_groups):/m);
 });
