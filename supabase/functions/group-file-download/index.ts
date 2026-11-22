@@ -59,7 +59,7 @@ function deps(): DownloadDeps {
     },
     async readBytes(path) {
       const {data,error} = await client.storage.from("stuora-group-files").download(path);
-      if (error || !data) fail();
+      if (error || !data) throw new DownloadDenied(503, "File temporarily unavailable");
       return data;
     },
   };
