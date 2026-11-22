@@ -47,6 +47,8 @@ async function setup() {
     insert into public.student_group_members values ('${G}', '${A}'), ('${G}', '${B}'), ('${OTHER}', '${C}');
   `);
   const migration = readFileSync(new URL('../supabase/migrations/20261122190000_student_group_file_quarantine.sql', import.meta.url), 'utf8');
+  assert.equal((migration.match(/\\bcommit;/g) ?? []).length, 1, 'Single atomic migration');
+  assert.ok(migration.trimEnd().endsWith('commit;'), 'No trailing SQL outside transaction');
   await db.exec(migration);
   return db;
 }
