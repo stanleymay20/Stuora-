@@ -91,11 +91,11 @@ const categories: { name: Category; emoji: string; tint: string }[] = [
 
 // Three primary discovery spaces, following the professor's handwritten sketch.
 // Every existing category remains accessible through its original URL and backend.
-type DiscoverySection = { id: 'groups' | 'campus' | 'marketplace'; title: string; summary: string; emoji: string; categories: Category[] };
+type DiscoverySection = { id: 'uni' | 'life' | 'business'; title: string; summary: string; emoji: string; categories: Category[] };
 const discoverySections: DiscoverySection[] = [
-  { id: 'groups', title: 'Groups', summary: 'Classmates, study circles and communities', emoji: '👥', categories: ['Groups'] },
-  { id: 'campus', title: 'Campus Life', summary: 'Meet people, explore events and trips', emoji: '🎓', categories: ['People', 'Events', 'Trips'] },
-  { id: 'marketplace', title: 'Marketplace', summary: 'Everyday student needs, housing and jobs', emoji: '🛍️', categories: ['Marketplace', 'Housing', 'Jobs'] },
+  { id: 'uni', title: 'Uni', summary: 'University groups, classmates and study circles', emoji: '🎓', categories: ['Groups'] },
+  { id: 'life', title: 'Life', summary: 'People, events and trips beyond the classroom', emoji: '🧭', categories: ['People', 'Events', 'Trips'] },
+  { id: 'business', title: 'Business', summary: 'Marketplace, housing and student jobs', emoji: '💼', categories: ['Marketplace', 'Housing', 'Jobs'] },
 ];
 function discoverySectionFor(category: Category): DiscoverySection {
   return discoverySections.find(section => section.categories.includes(category)) ?? discoverySections[0];
@@ -350,7 +350,7 @@ export default function App({ onOpenSavings }: { onOpenSavings: () => void }) {
 
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Browse by category</Text>
-            <Text style={styles.sectionHint}>Three student spaces: Groups, Campus Life and Marketplace</Text>
+            <Text style={styles.sectionHint}>Three student spaces: Uni, Life and Business</Text>
           </View>
           <View testID="three-discovery-sections" style={styles.discoverySections}>
             {discoverySections.map(section => <DiscoverySectionPanel key={section.id} section={section} desktop={isDesktop} onOpen={goToCategory} />)}
