@@ -21,11 +21,7 @@
           "backgroundColor": "#17152F",
           "image": "./assets/generated-stuora/splash-icon.png",
           "imageWidth": 220,
-          "resizeMode": "contain",
-          "dark": {
-            "image": "./assets/generated-stuora/splash-icon.png",
-            "backgroundColor": "#17152F"
-          }
+          "resizeMode": "contain"
         }
       ]
     ],
