@@ -7,6 +7,7 @@ import type { Database } from '../backend/database.types';
 import ReportButton from '../moderation/ReportButton';
 import { features } from '../backend/features';
 import { saveSharedGroupFile } from './groupFileSave';
+import { selectAndSubmitGroupPdf } from './groupDocumentPick';
 import { groupUploadRequest, MAX_FILE_BYTES, type DownloadableGroupFile } from './groupFileTransfer';
 
 /** A stable per-group pseudonym, so members can tell authors apart without
@@ -62,6 +63,7 @@ export default function GroupWorkspace({ onAccount }: { onAccount: () => void })
   const [fileNotice, setFileNotice] = useState('');
   const [downloadingFileId, setDownloadingFileId] = useState<string | null>(null);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [uploadingDocument, setUploadingDocument] = useState(false);
   const [search, setSearch] = useState('');
   const [city, setCity] = useState('');
   const [topic, setTopic] = useState('');
@@ -355,6 +357,27 @@ export default function GroupWorkspace({ onAccount }: { onAccount: () => void })
     } finally { setUploadingPhoto(false); }
   }
 
+  async function shareGroupPdf() {
+    if (!features.groupDocumentUploads || Platform.OS === 'web' || !chosen ||
+      !joined || !userId || uploadingDocument || uploadingPhoto) return;
+    setFilesIssue(''); setFileNotice('');
+    setUploadingDocument(true);
+    try {
+      const {data:{session:current},error}=await supabase.auth.getSession();
+      if(error || !current || current.user.id!==userId) throw new Error('Sign in again before uploading.');
+      const status=await selectAndSubmitGroupPdf(
+        chosen.id,current.access_token,
+        process.env.EXPO_PUBLIC_SUPABASE_URL ?? '',
+        process.env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY ?? '',
+      );
+      if(status==='cancelled')return;
+      setFileNotice('PDF uploaded into private quarantine. It is not downloadable until a security scan approves it.');
+      setFilesRevision(n=>n+1);
+    } catch(err) {
+      setFilesIssue(err instanceof Error ? err.message : 'PDF upload is unavailable.');
+    } finally { setUploadingDocument(false); }
+  }
+
   async function removeMessage(item: GroupMessage) {
     if (!userId || !(owner || item.author_id === userId) || busy) return;
     setBusy(true); setActionIssue('');
@@ -450,8 +473,12 @@ export default function GroupWorkspace({ onAccount }: { onAccount: () => void })
         <Text style={styles.subtitle}>Shared files</Text>
         <Text style={styles.muted}>Only current group members can access approved files. PDF uploads remain under security review. Maximum 5 MB per file.</Text>
         {features.groupPhotoUploads ? <Action name={uploadingPhoto ? 'Processing photo…' : 'Share photo with group'}
-          disabled={uploadingPhoto || !!downloadingFileId}
+          disabled={uploadingPhoto || uploadingDocument || !!downloadingFileId}
           onPress={() => void shareGroupPhoto()} /> : null}
+        {features.groupDocumentUploads && Platform.OS !== 'web' ?
+          <Action name={uploadingDocument ? 'Submitting PDF…' : 'Upload PDF for security review'}
+            disabled={uploadingDocument || uploadingPhoto || !!downloadingFileId}
+            onPress={() => void shareGroupPdf()} /> : null}
         {loadingFiles ? <ActivityIndicator accessibilityLabel="Loading shared group files" /> : null}
         {filesIssue ? <Text accessibilityRole="alert" style={styles.issue}>{filesIssue}</Text> : null}
         {fileNotice ? <Text style={styles.success}>{fileNotice}</Text> : null}
