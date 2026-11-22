@@ -40,7 +40,7 @@ function deps(): DownloadDeps {
   return {
     async lookupFile(fileId) {
       const {data,error} = await client.from("student_group_files")
-        .select("id,group_id,uploader_id,object_path,original_name,media_type,size_bytes,status,inspection_method,inspected_at")
+        .select("id,group_id,uploader_id,object_path,original_name,media_type,size_bytes,status,inspection_method,inspected_at,scan_sha256,scan_engine")
         .eq("id",fileId).maybeSingle();
       if (error) fail();
       return data as FileRecord|null;
