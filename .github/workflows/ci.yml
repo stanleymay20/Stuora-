@@ -64,6 +64,12 @@ jobs:
       - name: Test real WASM JPEG PNG WebP media codecs (local Deno runtime)
         run: deno test --allow-read --config supabase/functions/listing-photo-intake/deno.json supabase/functions/listing-photo-intake/processor.test.ts
 
+      - name: Typecheck fail-closed private group download gateway
+        run: deno check --config supabase/functions/deno.json supabase/functions/group-file-download/index.ts
+
+      - name: Test member-scoped download, ban, review and revocation
+        run: deno test --config supabase/functions/deno.json supabase/functions/group-file-download/core.test.ts
+
       - name: Typecheck account deletion, AI assistant and external data Edge Functions
         shell: bash
         run: |
