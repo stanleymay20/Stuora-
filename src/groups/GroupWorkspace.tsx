@@ -64,6 +64,8 @@ export default function GroupWorkspace({ onAccount }: { onAccount: () => void })
   const [downloadingFileId, setDownloadingFileId] = useState<string | null>(null);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [uploadingDocument, setUploadingDocument] = useState(false);
+  const [confirmRemoveFileId, setConfirmRemoveFileId] = useState<string | null>(null);
+  const [removingFileId, setRemovingFileId] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [city, setCity] = useState('');
   const [topic, setTopic] = useState('');
@@ -138,7 +140,7 @@ export default function GroupWorkspace({ onAccount }: { onAccount: () => void })
   // Only current members may discover group attachments; no anonymous or
   // cross-account cache. Off by default until trusted intake/download approval.
   useEffect(() => {
-    setSharedFiles([]); setFilesIssue(''); setFileNotice('');
+    setSharedFiles([]); setFilesIssue(''); setFileNotice(''); setConfirmRemoveFileId(null);
     if (!features.groupFiles || !selectedId || !joined || !userId) {
       setLoadingFiles(false); return;
     }
@@ -294,6 +296,25 @@ export default function GroupWorkspace({ onAccount }: { onAccount: () => void })
       setDraft(''); setMessagesRevision(v => v + 1);
     } catch { setActionIssue('Message could not be sent. Verify membership and retry.'); }
     finally { setBusy(false); }
+  }
+
+  async function deleteSharedFile(file: GroupFile) {
+    if (!features.groupFiles || !userId || !chosen || file.group_id !== chosen.id ||
+      (!owner && file.uploader_id !== userId) || removingFileId ||
+      confirmRemoveFileId !== file.id) return;
+    setRemovingFileId(file.id); setFilesIssue(''); setFileNotice('');
+    try {
+      const {data,error}=await supabase.rpc('delete_student_group_file',{p_file:file.id});
+      if(error || data!==true)throw new Error('Could not delete this file. Check your access and retry.');
+      setSharedFiles(current=>current.filter(entry=>entry.id!==file.id));
+      setConfirmRemoveFileId(null);
+      setFileNotice('File removed from the group. Private storage cleanup is queued.');
+      setFilesRevision(n=>n+1);
+    } catch(err) {
+      setFilesIssue(err instanceof Error ? err.message : 'Could not remove this file.');
+    } finally {
+      setRemovingFileId(null);
+    }
   }
 
   async function downloadSharedFile(file: GroupFile) {
@@ -492,8 +513,20 @@ export default function GroupWorkspace({ onAccount }: { onAccount: () => void })
             </Text>
           </View>
           {file.status === 'approved' ?
-            <Action name="Download" label={`Download ${file.original_name}`} disabled={!!downloadingFileId}
+            <Action name="Download" label={`Download ${file.original_name}`} disabled={!!downloadingFileId || !!removingFileId}
               onPress={() => void downloadSharedFile(file)} /> : null}
+          {owner || file.uploader_id === userId ?
+            (confirmRemoveFileId === file.id ?
+              <View style={styles.actions}>
+                <Action name="Confirm remove file" label={`Confirm removing ${file.original_name}`}
+                  disabled={!!removingFileId || !!downloadingFileId || uploadingPhoto || uploadingDocument}
+                  onPress={() => void deleteSharedFile(file)} />
+                <Action name="Cancel file removal" secondary
+                  onPress={() => setConfirmRemoveFileId(null)} />
+              </View> :
+              <Action name="Remove file" secondary label={`Remove shared file ${file.original_name}`}
+                disabled={!!removingFileId || !!downloadingFileId || uploadingPhoto || uploadingDocument}
+                onPress={() => setConfirmRemoveFileId(file.id)} />) : null}
         </View>)}
         <Action name="Refresh shared files" secondary onPress={() => setFilesRevision(n => n+1)} />
       </View> : null}
