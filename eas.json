@@ -21,6 +21,13 @@
       "ios": {
         "credentialsSource": "remote"
       }
+    },
+    "ios-simulator": {
+      "extends": "play-internal",
+      "distribution": "internal",
+      "ios": {
+        "simulator": true
+      }
     }
   }
 }
