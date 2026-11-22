@@ -50,6 +50,7 @@ async function setup() {
     '20261122210000_student_group_file_ban_visibility.sql',
     '20261122220000_student_group_file_cleanup_leases.sql',
     '20261122221500_student_group_file_delete_rpc.sql',
+    '20261122230000_student_group_pdf_scan_jobs.sql',
   ]) {
     const sql=readFileSync(new URL('../supabase/migrations/'+name,import.meta.url),'utf8');
     assert.equal(sql.toLowerCase().split('commit;').length-1,1,'one atomic migration');
@@ -162,5 +163,68 @@ test('uploader may erase their own file after leaving; group owner may moderate 
     await db.exec(`insert into public.student_group_files (id,group_id,uploader_id,original_name,object_path,media_type,size_bytes)
       values ('${P}','${G}','${B}','meeting.pdf','${G}/${P}.pdf','application/pdf',50)`);
     assert.equal((await as(db,'authenticated',del,A)).rows[0].removed,true);
+  }finally{await db.close();}
+});
+
+test('PDF approval requires a live service scan lease, matching engine and SHA256 evidence',async()=>{
+  const db=await setup();
+  try{
+    await as(db,'service_role',commit(A,G,P,'application/pdf','pending_review','pdf'));
+    const claim=`select * from public.claim_student_group_pdf_scan_jobs(2)`;
+    await assert.rejects(as(db,'authenticated',claim,A),e=>e.code==='42501');
+    await assert.rejects(as(db,'anon',claim),e=>e.code==='42501');
+    const first=(await as(db,'service_role',claim)).rows;
+    assert.equal(first.length,1);
+    assert.equal(first[0].file_id,P);
+    assert.equal((await as(db,'service_role',claim)).rows.length,0,'live lease prevents repeated claim');
+    const done=(lease,verdict,sha='a'.repeat(64),engine='clamav-http-v1')=>
+      `select public.finish_student_group_pdf_scan('${P}','${lease}','${verdict}','${sha}','${engine}') result`;
+    await assert.rejects(as(db,'authenticated',done(first[0].lease_id,'clean'),A),e=>e.code==='42501');
+    assert.equal((await as(db,'service_role',done(F,'clean'))).rows[0].result,false,'wrong lease denied');
+    assert.equal((await as(db,'service_role',done(first[0].lease_id,'clean','wrong'))).rows[0].result,false,'invalid SHA denied');
+    assert.equal((await as(db,'service_role',done(first[0].lease_id,'clean','a'.repeat(64),'pdf-header-only'))).rows[0].result,false);
+    assert.equal((await as(db,'service_role',done(first[0].lease_id,'clean'))).rows[0].result,true);
+    const {rows}=await db.query(`select status,inspection_method,scan_sha256,scan_engine,inspected_at
+       from public.student_group_files where id='${P}'`);
+    assert.equal(rows[0].status,'approved');
+    assert.equal(rows[0].inspection_method,'antivirus');
+    assert.equal(rows[0].scan_sha256,'a'.repeat(64));
+    assert.equal(rows[0].scan_engine,'clamav-http-v1');
+    assert.ok(rows[0].inspected_at);
+    assert.equal((await as(db,'service_role',done(first[0].lease_id,'clean'))).rows[0].result,false,'cannot replay scan approval');
+  }finally{await db.close();}
+});
+
+test('pending PDFs cannot be approved directly without scan evidence',async()=>{
+  const db=await setup();
+  try{
+    await as(db,'service_role',commit(A,G,P,'application/pdf','pending_review','pdf'));
+    await assert.rejects(db.exec(`update public.student_group_files
+      set status='approved',inspection_method='antivirus',inspected_at=now()
+      where id='${P}'`),e=>e.code==='23514');
+    assert.equal((await db.query(`select status from public.student_group_files where id='${P}'`)).rows[0].status,'pending_review');
+  }finally{await db.close();}
+});
+
+test('malicious scan blocks PDF and scanner failure keeps quarantine with backoff',async()=>{
+  const db=await setup();
+  try{
+    await as(db,'service_role',commit(A,G,P,'application/pdf','pending_review','pdf'));
+    const scan=()=>as(db,'service_role','select * from public.claim_student_group_pdf_scan_jobs(2)');
+    const first=(await scan()).rows[0];
+    const done=(lease,verdict)=>
+      `select public.finish_student_group_pdf_scan('${P}','${lease}','${verdict}',
+        'b'.repeat(64),'clamav-http-v1') result`;
+    const scannerError=`select public.finish_student_group_pdf_scan('${P}','${first.lease_id}','error') result`;
+    assert.equal((await as(db,'service_role',scannerError)).rows[0].result,true);
+    assert.equal((await scan()).rows.length,0,'failed scan waits for retry window');
+    await db.exec(`update private.student_group_pdf_scan_jobs set next_attempt_at=now()-interval '1 minute'`);
+    const next=(await scan()).rows[0];
+    const block=`select public.finish_student_group_pdf_scan('${P}','${next.lease_id}',
+      'malicious','${'b'.repeat(64)}','clamav-http-v1') result`;
+    assert.equal((await as(db,'service_role',block)).rows[0].result,true);
+    assert.equal((await db.query(`select status from public.student_group_files where id='${P}'`)).rows[0].status,'blocked');
+    assert.equal((await scan()).rows.length,0);
+    assert.equal((await as(db,'authenticated',`select id from public.student_group_files where id='${P}'`,A)).rows.length,0);
   }finally{await db.close();}
 });
