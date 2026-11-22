@@ -143,10 +143,12 @@ Deno.serve(async request => {
     if(output.byteLength<1||output.byteLength>MAX_RAW_BYTES)
       throw new Rejection(413,"Processed file exceeds the size limit");
     const objectPath=`${groupId}/${fileId}.${mime==="image/webp"?"webp":"pdf"}`;
+    // Storage upload can succeed server-side yet return a network error.
+    // Always attempt cleanup or durable queueing for that uncertain outcome.
+    uploadedPath=objectPath;
     const {error:storeError}=await admin.storage.from("stuora-group-files")
       .upload(objectPath,output,{contentType:mime,upsert:false,cacheControl:"0"});
     if(storeError)throw new Rejection(503,"Private file storage unavailable");
-    uploadedPath=objectPath;
     // Revalidate active membership and owner ban state in ONE database commit.
     const {data:committed,error:commitError}=await admin.rpc("commit_student_group_file_upload",{
       p_actor:user.id,p_group:groupId,p_file:fileId,p_original_name:name,
@@ -162,8 +164,26 @@ Deno.serve(async request => {
     return reply(503,{error:"Private file service unavailable"},origin);
   } finally {
     if(uploadedPath && admin) {
-      const {error:cleanupError}=await admin.storage.from("stuora-group-files").remove([uploadedPath]);
-      if(cleanupError)console.error("group-file-intake orphan cleanup requires review");
+      try {
+        const {error:cleanupError}=await admin.storage.from("stuora-group-files").remove([uploadedPath]);
+        if(cleanupError) {
+          const {data:queued,error:queueError}=await admin.rpc("enqueue_student_group_file_orphan",{
+            p_object_path:uploadedPath,
+          });
+          if(queueError || queued!==true)
+            console.error("group-file-intake: failed to enqueue orphan cleanup");
+        }
+      } catch {
+        try {
+          const {data:queued,error:queueError}=await admin.rpc("enqueue_student_group_file_orphan",{
+            p_object_path:uploadedPath,
+          });
+          if(queueError || queued!==true)
+            console.error("group-file-intake: orphan cleanup requires operator attention");
+        } catch {
+          console.error("group-file-intake: orphan cleanup service unavailable");
+        }
+      }
     }
     if(lease && admin){
       const {error:releaseError,data:released}=await admin.rpc("release_listing_photo_processing_lease",{
