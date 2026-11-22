@@ -1,5 +1,7 @@
 {
-  "cli": { "appVersionSource": "local" },
+  "cli": {
+    "appVersionSource": "local"
+  },
   "build": {
     "play-internal": {
       "distribution": "store",
@@ -9,7 +11,16 @@
         "EXPO_PUBLIC_SUPABASE_URL": "https://uptjcspizukpjcoayhtn.supabase.co",
         "EXPO_PUBLIC_STUORA_EXTERNAL_FEEDS": "enabled"
       },
-      "android": { "buildType": "app-bundle", "credentialsSource": "remote" }
+      "android": {
+        "buildType": "app-bundle",
+        "credentialsSource": "remote"
+      }
+    },
+    "testflight": {
+      "extends": "play-internal",
+      "ios": {
+        "credentialsSource": "remote"
+      }
     }
   }
 }

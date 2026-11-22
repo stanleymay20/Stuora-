@@ -2,7 +2,7 @@ name: Stuora CI
 
 on:
   push:
-    branches: [main, feat/mvp-shell, 'release/android-internal-*']
+    branches: [main, feat/mvp-shell, 'release/android-internal-*', 'release/ios-testflight-*']
   pull_request:
     # Also gate stacked PRs that target a feature branch (e.g. remediation PRs).
     branches: [main, 'feat/**']

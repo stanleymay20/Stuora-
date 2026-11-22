@@ -32,7 +32,8 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.stuora.app",
-      "icon": "./assets/generated-stuora/icon.png"
+      "icon": "./assets/generated-stuora/icon.png",
+      "buildNumber": "1"
     },
     "android": {
       "package": "com.stuora.app",
