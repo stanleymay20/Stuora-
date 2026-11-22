@@ -27,6 +27,9 @@ test('profile creation, editing, privacy, reload persistence and logout', async 
   // Existing students can choose to return to private status explicitly.
   await page.getByRole('switch', { name: 'Profile discoverable' }).click();
   await page.getByRole('button', { name: 'Save profile', exact: true }).click();
+  // Wait for BOTH the profile PATCH and the consent RPC to be handled.
+  // Reloading before these asynchronous writes finish flakes on slower CI.
+  await expect.poll(api.writes).toBe(5);
   await page.reload();
   await page.getByText('You', { exact: true }).click();
   await expect(page.getByRole('switch', { name: 'Profile discoverable' })).toHaveAttribute('aria-checked', 'false');
