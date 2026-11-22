@@ -10,6 +10,7 @@ select
   gen_random_uuid() as group_id,
   gen_random_uuid() as image_id,
   gen_random_uuid() as pdf_id;
+grant select on _stuora_file_qa to authenticated;
 
 do $$
 begin
