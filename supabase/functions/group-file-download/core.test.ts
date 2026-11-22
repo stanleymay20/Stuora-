@@ -67,7 +67,6 @@ Deno.test("unscanned, blocked, oversized and foreign object paths are refused",a
     {status:"blocked"},
     {inspection_method:null},
     {scan_sha256:null},
-    {scan_sha256:"00".repeat(32)},
     {scan_engine:"untrusted-service"},
     {inspection_method:"trusted-image-transcode"},
     {inspected_at:null},
@@ -101,6 +100,11 @@ Deno.test("unsafe names cannot inject response headers",async()=>{
   const f=fixture({original_name:"../../evil\r\nX-Header: 1.pdf"});
   const file=await authorizedGroupDownload(f.deps,A,F);
   assert(!/[\\/\r\n]/.test(file.name));
+});
+
+Deno.test("metadata with forged but well-formed PDF scan hash is denied",async()=>{
+  const f=fixture({scan_sha256:"00".repeat(32)});
+  await rejects(()=>authorizedGroupDownload(f.deps,A,F),503);
 });
 
 Deno.test("changed PDF bytes are rejected even when metadata claims a clean scan",async()=>{
