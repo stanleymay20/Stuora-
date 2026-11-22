@@ -32,7 +32,8 @@ The migrations below are now installed in the dedicated **staging** database and
 - Isolated GitHub Actions test **45065309434** passed against a *genuine ClamAV daemon*: clean benign PDF and the standard harmless EICAR test pattern.
 - Draft PR #36 (hash-bound scan jobs/approval) and #37 (self-hosted ClamAV bridge) passed full app CI as of this checkpoint.
 - The branch `feature/clamav-staging-readiness-20261122` adds a non-root Node scanner Dockerfile, a private Compose template (no published ports), and a separate real-ClamAV CI workflow; the actual ClamAV **service is not deployed anywhere**.
-- Supabase staging has **no** `group-file-intake`, `group-file-download`, `group-file-cleanup` or `group-file-pdf-scan` Edge Functions deployed. No cron worker was scheduled.
+- **Staging-only disabled canary deployed:** `group-file-download` Edge Function version 1 exists in staging, with `verify_jwt=true`; its deployed source was independently fetched and confirms `GROUP_FILE_DOWNLOADS_COMPILED_IN = false`. This creates an authenticated endpoint but cannot return file bytes while the compile-time lock is off.
+- `group-file-intake`, `group-file-cleanup`, and `group-file-pdf-scan` Edge Functions are **not deployed**. No cron worker or live scanner was scheduled or hosted. No public activation of file-sharing features took place.
 - Source code retains `GROUP_FILE_UPLOADS_COMPILED_IN=false`, `GROUP_FILE_DOWNLOADS_COMPILED_IN=false` and `GROUP_PDF_SCANNER_COMPILED_IN=false`. No student can use the new group-file feature yet.
 
 ## Advisors and explicitly accepted/unfinished review
@@ -47,7 +48,8 @@ Current staging security advisors reported:
 
 - [ ] Review actual Docker image versions/digests, confidential scanner tokens, network/TLS setup and FreshClam update monitoring; host real scanner only in an approved region.
 - [ ] Verify scanner is ready and returns true clean/malicious/outage verdicts with EICAR and a benign PDF through its authenticated HTTPS bridge, not merely a mocked response.
-- [ ] Deploy/verify **disabled** group-file Edge Functions in staging, with verified Auth/secret-key configuration. Never enable staging/public clients without full security signoff.
+- [x] Deploy and inspect **disabled** `group-file-download` gateway in staging, with JWT verification and hard source lock OFF. (An actual HTTP request with a real student JWT has **not** yet been verified.)
+- [ ] Deploy/verify the **remaining disabled** group-file intake, cleanup and PDF scanner Edge Functions in staging after independent Auth/secret-key checks. Never enable staging/public clients without full security signoff.
 - [ ] Prepare **two legitimate staging student accounts** and a staging test group. Test nonmember, member, banned, removed and rejoined cases with real JWTs, not only SQL simulations.
 - [ ] Exercise image intake, quarantined PDF, scan approval/denial, owner removal, orphan cleanup and expiry; ensure no stale links and no unreviewed bytes.
 - [ ] Test iPhone Files and Android folder export on actual devices; refresh app UX/accessibility.
