@@ -144,6 +144,9 @@ jobs:
       - name: Generate and verify Stuora native branding assets
         run: node --test tests/native-branding.test.mjs
 
+      - name: Guard signed iOS TestFlight configuration and distribution boundaries
+        run: node --test tests/ios-testflight-release.test.mjs
+
       - name: Validate build environment
         run: npm run check:environment
 
