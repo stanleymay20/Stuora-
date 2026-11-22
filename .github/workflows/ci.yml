@@ -2,7 +2,7 @@ name: Stuora CI
 
 on:
   push:
-    branches: [main, feat/mvp-shell, 'release/android-internal-*', 'release/ios-testflight-*', 'feature/professor-three-section-ui-*', 'feature/private-group-files-*', 'feature/group-file-intake-*', 'feature/group-file-pdf-scan-*']
+    branches: [main, feat/mvp-shell, 'release/android-internal-*', 'release/ios-testflight-*', 'feature/professor-three-section-ui-*', 'feature/private-group-files-*', 'feature/group-file-intake-*', 'feature/group-file-pdf-scan-*', 'feature/self-hosted-clamav-scanner-*']
   pull_request:
     # Also gate stacked PRs that target a feature branch (e.g. remediation PRs).
     branches: [main, 'feat/**']
@@ -167,6 +167,9 @@ jobs:
 
       - name: Refuse production builds with placeholder legal pages
         run: node --test tests/legal-config.test.mjs
+
+      - name: Test authenticated self-hosted PDF scanner and ClamAV wire protocol
+        run: node --test services/stuora-pdf-scanner/scanner.test.mjs
 
       - name: Test secret scanner
         run: node --test tests/secret-scan.test.mjs
