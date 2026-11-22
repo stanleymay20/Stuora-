@@ -12,7 +12,6 @@ export interface PdfWorkerDeps {
   scan(bytes: Uint8Array, sha256: string): Promise<PdfVerdict>;
   finish(job: PdfJob, verdict: 'clean'|'malicious'|'error', sha256?: string, engine?: string): Promise<boolean>;
 }
-export const PDF_PATH = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.pdf$/;
 export const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 export const MAX_PDF_BYTES = 5_242_880;
 
@@ -21,9 +20,10 @@ export async function sha256Hex(bytes: Uint8Array): Promise<string> {
   return Array.from(new Uint8Array(digest),n=>n.toString(16).padStart(2,'0')).join('');
 }
 export function isValidPdfJob(job: PdfJob): boolean {
+  const parts = job.object_path.split('/');
   return UUID.test(job.file_id) && UUID.test(job.lease_id) &&
-    PDF_PATH.test(job.object_path) &&
-    job.object_path.split('/')[1] === job.file_id+'.pdf' &&
+    parts.length === 2 && UUID.test(parts[0]) &&
+    parts[1] === job.file_id + '.pdf' &&
     Number.isSafeInteger(job.size_bytes) && job.size_bytes >= 16 &&
     job.size_bytes <= MAX_PDF_BYTES;
 }
