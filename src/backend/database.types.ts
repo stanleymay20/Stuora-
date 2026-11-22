@@ -803,6 +803,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      delete_student_group_file: { Args: { p_file: string }; Returns: boolean }
       am_i_moderator: { Args: Record<string, never>; Returns: boolean }
       conversation_safety_state: {
         Args: { p_conversation: string }
