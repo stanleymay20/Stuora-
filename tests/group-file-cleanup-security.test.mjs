@@ -21,11 +21,11 @@ async function setup() {
     create table public.student_groups (id uuid primary key,
       owner_id uuid not null references public.profiles(id));
     create table public.student_group_members (
-      group_id uuid references public.student_groups(id),
+      group_id uuid references public.student_groups(id) on delete cascade,
       user_id uuid references public.profiles(id),
       primary key(group_id,user_id));
     create table public.student_group_bans (
-      group_id uuid references public.student_groups(id),
+      group_id uuid references public.student_groups(id) on delete cascade,
       user_id uuid references public.profiles(id),
       primary key(group_id,user_id));
     grant usage on schema public to anon,authenticated,service_role;
