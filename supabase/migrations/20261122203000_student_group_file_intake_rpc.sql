@@ -80,6 +80,8 @@ begin
 
   perform 1 from public.student_groups g where g.id = p_group for share;
   if not found then raise exception 'Group unavailable' using errcode = '42501'; end if;
+  perform 1 from public.profiles p where p.id = p_actor and p.account_kind = 'student' for share;
+  if not found then raise exception 'Student profile unavailable' using errcode = '42501'; end if;
   if not exists (
     select 1 from public.student_group_members m
     where m.group_id = p_group and m.user_id = p_actor
