@@ -1,5 +1,5 @@
 import {
-  sha256Hex, scannerUrl, scanWithService, processPdfScanJobs,
+  sha256Hex, scannerUrl, scanWithService, processPdfScanJobs, isValidPdfJob, PDF_PATH, UUID,
   type PdfJob, type PdfVerdict, type PdfWorkerDeps,
 } from "./core.ts";
 
@@ -43,6 +43,16 @@ function fixture(
   };
   return {deps,settled,downloads:()=>downloads};
 }
+Deno.test("UUID paths and PDF scan leases pass canonical validation",()=>{
+  const entry={...job,size_bytes:pdf.length};
+  assert(isValidPdfJob(entry), JSON.stringify({
+    file:UUID.test(entry.file_id),lease:UUID.test(entry.lease_id),
+    path:PDF_PATH.test(entry.object_path),
+    identity:entry.object_path.split('/')[1]===entry.file_id+'.pdf',
+    bytes:entry.size_bytes,
+  }));
+});
+
 Deno.test("PDF scanner accepts only an approved HTTPS operator endpoint",()=>{
   assert(scannerUrl(SCANNER,HOST)===SCANNER);
   for(const invalid of ["http://scanner.stuora.example/v1/scan-pdf",
