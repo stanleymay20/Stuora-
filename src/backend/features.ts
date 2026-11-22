@@ -18,6 +18,10 @@ export const features = {
   groupPhotoUploads: process.env.EXPO_PUBLIC_STUORA_ENV === 'staging'
     && process.env.EXPO_PUBLIC_STUORA_GROUP_FILES === 'enabled'
     && process.env.EXPO_PUBLIC_STUORA_GROUP_UPLOADS === 'enabled',
+  /** PDFs can be submitted only in reviewed staging builds; scanner remains mandatory. */
+  groupDocumentUploads: process.env.EXPO_PUBLIC_STUORA_ENV === 'staging'
+    && process.env.EXPO_PUBLIC_STUORA_GROUP_FILES === 'enabled'
+    && process.env.EXPO_PUBLIC_STUORA_GROUP_DOCUMENT_UPLOADS === 'enabled',
 };
 
 export const operator = readOperatorConfig({
