@@ -30,3 +30,14 @@ export function validateDownloadedFile(file: DownloadableGroupFile, count: numbe
     throw new Error('The download could not be verified. No file was saved.');
   }
 }
+
+/** Photo uploads are accepted by a trusted Edge endpoint, never direct Storage. */
+export function groupUploadRequest(groupId: string, token: string, apiUrl: string, key: string) {
+  if (!UUID.test(groupId) || !token || !key ||
+      apiUrl !== 'https://uptjcspizukpjcoayhtn.supabase.co') {
+    throw new Error('Private group uploads are unavailable.');
+  }
+  const endpoint = new URL('/functions/v1/group-file-intake', apiUrl);
+  endpoint.searchParams.set('groupId', groupId);
+  return { url: endpoint.toString(), headers: { Authorization: `Bearer ${token}`, apikey: key } };
+}
