@@ -1,5 +1,5 @@
 import {
-  sha256Hex, scannerUrl, scanWithService, processPdfScanJobs, isValidPdfJob, PDF_PATH, UUID,
+  sha256Hex, scannerUrl, scanWithService, processPdfScanJobs, isValidPdfJob, UUID,
   type PdfJob, type PdfVerdict, type PdfWorkerDeps,
 } from "./core.ts";
 
@@ -47,7 +47,7 @@ Deno.test("UUID paths and PDF scan leases pass canonical validation",()=>{
   const entry={...job,size_bytes:pdf.length};
   assert(isValidPdfJob(entry), JSON.stringify({
     file:UUID.test(entry.file_id),lease:UUID.test(entry.lease_id),
-    path:PDF_PATH.test(entry.object_path),
+    group:UUID.test(entry.object_path.split('/')[0]),
     identity:entry.object_path.split('/')[1]===entry.file_id+'.pdf',
     bytes:entry.size_bytes,
   }));
