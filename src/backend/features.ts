@@ -11,6 +11,9 @@ export const features = {
   externalFeeds: process.env.EXPO_PUBLIC_STUORA_EXTERNAL_FEEDS === 'enabled',
   /** Lets the city picker check a name against OpenStreetMap Nominatim. */
   cityLookup: process.env.EXPO_PUBLIC_STUORA_CITY_LOOKUP === 'enabled',
+  /** Group file listing/save is staging-only and remains OFF without explicit build configuration. */
+  groupFiles: process.env.EXPO_PUBLIC_STUORA_ENV === 'staging'
+    && process.env.EXPO_PUBLIC_STUORA_GROUP_FILES === 'enabled',
 };
 
 export const operator = readOperatorConfig({
