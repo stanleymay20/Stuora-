@@ -615,6 +615,30 @@ export type Database = {
           { foreignKeyName: "student_group_bans_banned_by_fkey"; columns: ["banned_by"]; isOneToOne: false; referencedRelation: "profiles"; referencedColumns: ["id"] },
         ]
       }
+      student_group_files: {
+        Row: {
+          id: string; group_id: string; uploader_id: string; original_name: string;
+          object_path: string; media_type: "application/pdf" | "image/webp";
+          size_bytes: number; status: "pending_review" | "approved" | "blocked";
+          inspection_method: string | null; inspected_at: string | null; created_at: string;
+        }
+        Insert: {
+          id?: string; group_id: string; uploader_id: string; original_name: string;
+          object_path: string; media_type: "application/pdf" | "image/webp";
+          size_bytes: number; status?: "pending_review" | "approved" | "blocked";
+          inspection_method?: string | null; inspected_at?: string | null; created_at?: string;
+        }
+        Update: {
+          id?: string; group_id?: string; uploader_id?: string; original_name?: string;
+          object_path?: string; media_type?: "application/pdf" | "image/webp";
+          size_bytes?: number; status?: "pending_review" | "approved" | "blocked";
+          inspection_method?: string | null; inspected_at?: string | null; created_at?: string;
+        }
+        Relationships: [
+          { foreignKeyName: "student_group_files_group_id_fkey"; columns: ["group_id"]; isOneToOne: false; referencedRelation: "student_groups"; referencedColumns: ["id"] },
+          { foreignKeyName: "student_group_files_uploader_id_fkey"; columns: ["uploader_id"]; isOneToOne: false; referencedRelation: "profiles"; referencedColumns: ["id"] },
+        ]
+      }
       student_group_members: {
         Row: { group_id: string; user_id: string; joined_at: string }
         Insert: { group_id: string; user_id: string; joined_at?: string }

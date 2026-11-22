@@ -36,7 +36,8 @@
     "react-native-safe-area-context": "~5.7.0",
     "react-native-svg": "15.15.4",
     "react-native-url-polyfill": "4.0.0",
-    "react-native-web": "~0.21.0"
+    "react-native-web": "~0.21.0",
+    "expo-file-system": "57.0.7"
   },
   "devDependencies": {
     "@electric-sql/pglite": "0.5.8",
