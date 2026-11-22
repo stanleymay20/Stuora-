@@ -15,7 +15,7 @@
 ## Still required
 
 - A trusted PDF antivirus/inspection service and audit workflow; metadata approval only after scan result. Do not send private student documents to a third-party scanner without a legal/processor assessment.
-- PDF/document picker UI and download-to-Files acceptance on physical iPhone; Android export/share-sheet support.
+- PDF/document picker UI and a real malware scanner. Authenticated iOS Files saving, browser downloading, and Android user-selected-folder export have source implementations but still require physical iPhone/Android device acceptance and access-revocation tests.
 - Media moderation/reporting, successful object cleanup worker with bounded retries, GDPR/copyright notice, retention and data subject deletion.
 - Staging-only migrations/Edge deployment and real two-student JWT tests (member, outsider, banned, removed and file status changes) before enabling either feature.
 - Full exact-head CI, screenshot accessibility review, security-advisor review and explicit release authorisation.
