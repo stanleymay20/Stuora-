@@ -40,11 +40,14 @@ export async function authorizedGroupDownload(
   if (!bytes.size || bytes.size > MAX_APPROVED_BYTES || bytes.size !== file.size_bytes)
     throw new DownloadDenied(503, "File temporarily unavailable");
   // A removal concurrent with Storage reads must not allow post-removal bytes.
-  const [stillMember, nowBanned] = await Promise.all([
+  const [stillMember, nowBanned, latest] = await Promise.all([
     deps.activeMembership(file.group_id, actor),
     deps.isBanned(file.group_id, actor),
+    deps.lookupFile(fileId),
   ]);
-  if (!stillMember || nowBanned) throw new DownloadDenied(404, "File unavailable");
+  if (!stillMember || nowBanned || !latest || latest.status !== "approved" ||
+      latest.object_path !== file.object_path || latest.inspected_at !== file.inspected_at)
+    throw new DownloadDenied(404, "File unavailable");
   const safeName = file.original_name
     .replace(/[\\/\r\n\x00-\x1f\x7f"<>:|?*]/g, "_")
     .trim().slice(0, 120) || "stuora-file";
