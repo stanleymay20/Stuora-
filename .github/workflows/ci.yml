@@ -2,7 +2,7 @@ name: Stuora CI
 
 on:
   push:
-    branches: [main, feat/mvp-shell, 'release/android-internal-*', 'release/ios-testflight-*', 'feature/professor-three-section-ui-*', 'feature/private-group-files-*', 'feature/group-file-intake-*']
+    branches: [main, feat/mvp-shell, 'release/android-internal-*', 'release/ios-testflight-*', 'feature/professor-three-section-ui-*', 'feature/private-group-files-*', 'feature/group-file-intake-*', 'feature/group-file-pdf-scan-*']
   pull_request:
     # Also gate stacked PRs that target a feature branch (e.g. remediation PRs).
     branches: [main, 'feat/**']
@@ -90,6 +90,12 @@ jobs:
 
       - name: Test private object cleanup worker, retries and signed authentication
         run: deno test --config supabase/functions/deno.json supabase/functions/group-file-cleanup/core.test.ts
+
+      - name: Typecheck staged PDF scanner worker (disabled)
+        run: deno check --config supabase/functions/deno.json supabase/functions/group-file-pdf-scan/index.ts
+
+      - name: Test real antivirus scan contract with forged results and quarantine failure paths
+        run: deno test --config supabase/functions/deno.json supabase/functions/group-file-pdf-scan/core.test.ts
 
       - name: Typecheck account deletion, AI assistant and external data Edge Functions
         shell: bash
