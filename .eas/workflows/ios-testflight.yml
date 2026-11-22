@@ -1,6 +1,6 @@
 name: Stuora iOS TestFlight staging candidate
 
-# Deliberately manual: no push-triggered signed builds or automatic App Store release.
+# Manual only. No push triggers, no public App Store release, no external groups.
 on:
   workflow_dispatch: {}
 
@@ -13,8 +13,11 @@ jobs:
       profile: testflight
 
   submit_ios:
-    name: Upload build to Apple TestFlight
+    name: Upload candidate for internal TestFlight testing
     needs: [build_ios]
     type: testflight
     params:
       build_id: ${{ needs.build_ios.outputs.build_id }}
+      profile: testflight
+      submit_beta_review: false
+      changelog: "Stuora 0.1.6 internal staging candidate: validate student sign-in, recovery deep links, privacy, profiles, listings and messaging."
