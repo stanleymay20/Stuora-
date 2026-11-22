@@ -44,6 +44,9 @@ jobs:
       - name: Reject private group-file access by nonmembers and revoked members
         run: node --test tests/group-file-security.test.mjs
 
+      - name: Guard private attachment request headers, sizes and safe filenames
+        run: node --experimental-strip-types --test tests/group-file-transfer.test.mjs
+
   # Independent Deno runtime gate. Expo's TypeScript settings do not understand
   # Deno's npm:/jsr: module specifiers and cannot prove Edge Function readiness.
   trusted-media-edge:
