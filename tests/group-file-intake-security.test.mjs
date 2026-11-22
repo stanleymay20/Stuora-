@@ -48,6 +48,8 @@ async function setup() {
     '20261122190000_student_group_file_quarantine.sql',
     '20261122203000_student_group_file_intake_rpc.sql',
     '20261122210000_student_group_file_ban_visibility.sql',
+    '20261122220000_student_group_file_cleanup_leases.sql',
+    '20261122221500_student_group_file_delete_rpc.sql',
   ]) {
     const sql=readFileSync(new URL('../supabase/migrations/'+name,import.meta.url),'utf8');
     assert.equal(sql.toLowerCase().split('commit;').length-1,1,'one atomic migration');
@@ -127,5 +129,38 @@ test('ban removes file metadata visibility even when a stale member row remains'
       as(db,'anon',`select public.can_read_student_group_files('${G}')`),
       err => err.code === '42501',
     );
+  }finally{await db.close();}
+});
+
+test('only uploader or group owner can erase private group files and queue Storage deletion',async()=>{
+  const db=await setup();
+  try {
+    const first=await as(db,'service_role',commit(A,G,F,'application/pdf','pending_review','pdf'));
+    assert.equal(first.rows[0].file_id,F);
+    const del=file=>`select public.delete_student_group_file('${file}') removed`;
+    await assert.rejects(as(db,'anon',del(F)),e=>e.code==='42501');
+    assert.equal((await as(db,'authenticated',del(F),B)).rows[0].removed,false);
+    assert.equal((await as(db,'authenticated',del(F),A)).rows[0].removed,true);
+    assert.equal((await as(db,'authenticated',del(F),A)).rows[0].removed,false);
+    const queued=await db.query(`select object_path from private.student_group_file_cleanup where object_path='${G}/${F}.pdf'`);
+    assert.equal(queued.rows.length,1,'authenticated deletion queues private object removal');
+  }finally{await db.close();}
+});
+
+test('uploader may erase their own file after leaving; group owner may moderate other uploads',async()=>{
+  const db=await setup();
+  try {
+    await db.exec(`insert into public.student_group_members (group_id,user_id) values ('${G}','${B}')`);
+    await db.exec(`insert into public.student_group_files (id,group_id,uploader_id,original_name,object_path,media_type,size_bytes)
+      values ('${P}','${G}','${B}','meeting.pdf','${G}/${P}.pdf','application/pdf',50)`);
+    const del=`select public.delete_student_group_file('${P}') removed`;
+    await db.exec(`delete from public.student_group_members where group_id='${G}' and user_id='${B}'`);
+    assert.equal((await as(db,'authenticated',del,B)).rows[0].removed,true,
+      'privacy deletion remains available to former group members');
+    assert.equal((await db.query('select count(*)::int n from private.student_group_file_cleanup')).rows[0].n,1);
+    // Group owner is permitted to remove a member's new file as moderation.
+    await db.exec(`insert into public.student_group_files (id,group_id,uploader_id,original_name,object_path,media_type,size_bytes)
+      values ('${P}','${G}','${B}','meeting.pdf','${G}/${P}.pdf','application/pdf',50)`);
+    assert.equal((await as(db,'authenticated',del,A)).rows[0].removed,true);
   }finally{await db.close();}
 });
