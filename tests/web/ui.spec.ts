@@ -413,3 +413,28 @@ test('wide desktop homepage uses the available canvas without hiding controls be
   await expect(page.getByText('Connected search beta · Read-only')).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 });
+
+
+test('professor three-section discovery keeps all seven categories in clear spaces', async ({ page }) => {
+  await backend(page);
+  await page.goto('/');
+  const sections = page.getByTestId('three-discovery-sections');
+  await expect(sections.locator('[data-testid^="section-"]')).toHaveCount(3);
+  const groups = page.getByTestId('section-groups');
+  const campus = page.getByTestId('section-campus');
+  const marketplace = page.getByTestId('section-marketplace');
+  await expect(groups.getByRole('button', { name: 'Browse Groups' })).toBeVisible();
+  for (const category of ['People', 'Events', 'Trips'])
+    await expect(campus.getByRole('button', { name: `Browse ${category}` })).toBeVisible();
+  for (const category of ['Marketplace', 'Housing', 'Jobs'])
+    await expect(marketplace.getByRole('button', { name: `Browse ${category}` })).toBeVisible();
+
+  // Every category retains its existing route and the category-specific content.
+  await campus.getByRole('button', { name: 'Browse Events' }).click();
+  await expect(page.getByText('STUORA / EVENTS', { exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Open Campus Life section' })).toBeVisible();
+  await page.getByRole('button', { name: 'Open Marketplace section' }).click();
+  await expect(page.getByText('STUORA / MARKETPLACE', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Open Groups section' }).click();
+  await expect(page.getByText('STUORA / GROUPS', { exact: true })).toBeVisible();
+});
