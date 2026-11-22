@@ -29,5 +29,12 @@
         "simulator": true
       }
     }
+  },
+  "submit": {
+    "testflight": {
+      "ios": {
+        "ascAppId": "6838005817"
+      }
+    }
   }
 }
