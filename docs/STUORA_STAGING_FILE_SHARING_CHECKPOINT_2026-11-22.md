@@ -33,7 +33,8 @@ The migrations below are now installed in the dedicated **staging** database and
 - Draft PR #36 (hash-bound scan jobs/approval) and #37 (self-hosted ClamAV bridge) passed full app CI as of this checkpoint.
 - The branch `feature/clamav-staging-readiness-20261122` adds a non-root Node scanner Dockerfile, a private Compose template (no published ports), and a separate real-ClamAV CI workflow; the actual ClamAV **service is not deployed anywhere**.
 - **Staging-only disabled canary deployed:** `group-file-download` Edge Function version 1 exists in staging, with `verify_jwt=true`; its deployed source was independently fetched and confirms `GROUP_FILE_DOWNLOADS_COMPILED_IN = false`. This creates an authenticated endpoint but cannot return file bytes while the compile-time lock is off.
-- `group-file-intake`, `group-file-cleanup`, and `group-file-pdf-scan` Edge Functions are **not deployed**. No cron worker or live scanner was scheduled or hosted. No public activation of file-sharing features took place.
+- **Follow-up staging deployment:** `group-file-intake` (version 1, `verify_jwt=true`), `group-file-cleanup` (version 1, `verify_jwt=false`, dual operator-secret design), and `group-file-pdf-scan` (version 1, `verify_jwt=false`, dual operator-secret design) are now also deployed to staging. Each deployed source was fetched and independently checked for its hardcoded `COMPILED_IN=false` gate. The JWT-off worker endpoints remain nonfunctional until the hard gate and service secrets are explicitly enabled; they are not student endpoints.
+- **No** cron worker or live scanner was scheduled or hosted. No public activation of file-sharing features took place.
 - Source code retains `GROUP_FILE_UPLOADS_COMPILED_IN=false`, `GROUP_FILE_DOWNLOADS_COMPILED_IN=false` and `GROUP_PDF_SCANNER_COMPILED_IN=false`. No student can use the new group-file feature yet.
 
 ## Advisors and explicitly accepted/unfinished review
@@ -49,7 +50,8 @@ Current staging security advisors reported:
 - [ ] Review actual Docker image versions/digests, confidential scanner tokens, network/TLS setup and FreshClam update monitoring; host real scanner only in an approved region.
 - [ ] Verify scanner is ready and returns true clean/malicious/outage verdicts with EICAR and a benign PDF through its authenticated HTTPS bridge, not merely a mocked response.
 - [x] Deploy and inspect **disabled** `group-file-download` gateway in staging, with JWT verification and hard source lock OFF. (An actual HTTP request with a real student JWT has **not** yet been verified.)
-- [ ] Deploy/verify the **remaining disabled** group-file intake, cleanup and PDF scanner Edge Functions in staging after independent Auth/secret-key checks. Never enable staging/public clients without full security signoff.
+- [x] Deploy and verify all **four disabled** group-file Edge Functions in staging, checking `verify_jwt` and deployed source gates. No direct authenticated HTTP probe or user JWT acceptance has been completed because the runtime HTTP endpoint was not reachable from the verification environment.
+- [ ] Enable a real private ClamAV host and operator token, configure its protected HTTPS route, then prove a clean test PDF and EICAR fixture through the full staging worker. Never turn on the worker until hosting and data processing have been approved.
 - [ ] Prepare **two legitimate staging student accounts** and a staging test group. Test nonmember, member, banned, removed and rejoined cases with real JWTs, not only SQL simulations.
 - [ ] Exercise image intake, quarantined PDF, scan approval/denial, owner removal, orphan cleanup and expiry; ensure no stale links and no unreviewed bytes.
 - [ ] Test iPhone Files and Android folder export on actual devices; refresh app UX/accessibility.
@@ -66,3 +68,31 @@ Current staging security advisors reported:
 - PR #37 self-hosted scanner: https://github.com/stanleymay20/Stuora-/pull/37
 
 This checkpoint is an operations **evidence record**, not permission to release student uploads.
+
+## Follow-up: transactional live-Postgres security smoke
+
+A rollback-only SQL smoke test was added at `tests/hosted/stuora-group-files-staging-rollback.sql`, then executed against the dedicated staging project. The first attempt hit only a temporary-table privilege problem in the test harness; a restricted `GRANT SELECT` on its **transaction-local** test table corrected it. The rerun completed.
+
+The successful transaction verified, using the two already-existing staging student profiles as ephemeral referents:
+- A current member sees an approved WebP record but not another user's pending PDF
+- A user with both membership and a ban sees no private file metadata
+- The uploader sees their own pending PDF record
+- A PDF cannot transition to approved without genuine scan metadata
+- An uploader's authenticated deletion enqueues private Storage cleanup
+- **All changes were rolled back**. An independent follow-up query reported **0 groups, 0 group files, 0 bans, 0 scan jobs, 0 cleanup jobs**.
+
+This test simulates the two users by setting `auth.uid()`'s Postgres claim in a transaction. **It does not verify a real mobile/web JWT session, a Storage transfer, or physical device save.** All feature gates remain OFF.
+
+## Runtime deployment verification
+
+The four deployed staging Edge Functions were fetched from Supabase and had their hardcoded OFF constants checked:
+- `group-file-download` / `GROUP_FILE_DOWNLOADS_COMPILED_IN = false` / `verify_jwt=true`
+- `group-file-intake` / `GROUP_FILE_UPLOADS_COMPILED_IN = false` / `verify_jwt=true`
+- `group-file-cleanup` / `GROUP_FILE_CLEANUP_COMPILED_IN = false` / `verify_jwt=false` (operator-secret worker)
+- `group-file-pdf-scan` / `GROUP_PDF_SCANNER_COMPILED_IN=false` / `verify_jwt=false` (operator-secret worker)
+
+An external HTTP endpoint probe from the verification environment was network-inaccessible, so successful anonymous-HTTP or signed-JWT response codes **must not be claimed**.
+
+Current security-advisor warnings include two intentionally authenticated `SECURITY DEFINER` RPCs (`can_read_student_group_files`, `delete_student_group_file`). The rollback security tests validated their current-user logic, but independent review remains necessary before release.
+
+No changes were made to the iOS TestFlight release branch or production Supabase project. No real student documents were uploaded.
