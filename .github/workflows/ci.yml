@@ -2,7 +2,7 @@ name: Stuora CI
 
 on:
   push:
-    branches: [main, feat/mvp-shell, 'release/android-internal-*', 'release/ios-testflight-*', 'feature/professor-three-section-ui-*']
+    branches: [main, feat/mvp-shell, 'release/android-internal-*', 'release/ios-testflight-*', 'feature/professor-three-section-ui-*', 'feature/private-group-files-*']
   pull_request:
     # Also gate stacked PRs that target a feature branch (e.g. remediation PRs).
     branches: [main, 'feat/**']
@@ -40,6 +40,9 @@ jobs:
         run: npm ci
       - name: Test database authorization
         run: npm run test:database
+
+      - name: Reject private group-file access by nonmembers and revoked members
+        run: node --test tests/group-file-security.test.mjs
 
   # Independent Deno runtime gate. Expo's TypeScript settings do not understand
   # Deno's npm:/jsr: module specifiers and cannot prove Edge Function readiness.
