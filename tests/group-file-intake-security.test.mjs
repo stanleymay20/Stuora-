@@ -31,6 +31,13 @@ async function setup() {
       user_id uuid not null references public.profiles(id),
       primary key(group_id,user_id)
     );
+    alter table public.student_group_bans enable row level security;
+    create policy student_group_bans_owner_read on public.student_group_bans
+      for select to authenticated using (
+        exists (select 1 from public.student_groups g
+          where g.id = student_group_bans.group_id
+            and g.owner_id = (select auth.uid()))
+      );
     grant usage on schema public to authenticated,service_role,anon;
     grant select on public.student_group_members,public.student_group_bans to authenticated;
     insert into public.profiles(id)values('${A}'),('${B}');
@@ -116,5 +123,9 @@ test('ban removes file metadata visibility even when a stale member row remains'
     assert.equal((await as(db,'authenticated',query,A)).rows.length,1);
     await db.exec(`insert into public.student_group_bans(group_id,user_id) values ('${G}','${A}')`);
     assert.equal((await as(db,'authenticated',query,A)).rows.length,0);
+    await assert.rejects(
+      as(db,'anon',`select public.can_read_student_group_files('${G}')`),
+      err => err.code === '42501',
+    );
   }finally{await db.close();}
 });
