@@ -11,6 +11,10 @@ jobs:
     params:
       platform: ios
       profile: testflight
+    hooks:
+      after_install_node_modules:
+        - name: Validate staging backend, origin and publishable key without printing values
+          run: npm run check:environment
 
   submit_ios:
     name: Upload candidate for internal TestFlight testing
