@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Linking, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { supabase } from '../backend/supabase';
 import { EditorialImage } from '../ui/EditorialImage';
+import { ActivityComposer, ActivityResponse } from './ActivityActions';
 import ExternalFeed from './ExternalFeed';
 import { features } from '../backend/features';
 import { useDebouncedValue } from '../hooks/useDebouncedValue';
@@ -20,6 +21,7 @@ type Detail = {
 };
 type Entry = {
   id: string;
+  owner: string;
   title: string;
   description: string;
   city: string;
@@ -49,6 +51,7 @@ function normalize(row: Record<string, unknown>, table: 'trip_details' | 'job_de
   const details = (Array.isArray(candidate) ? candidate[0] : candidate) as Detail | undefined | null;
   return {
     id: row.id,
+    owner: typeof row.owner_id === 'string' ? row.owner_id : '',
     title: row.title,
     city: row.city,
     description: typeof row.description === 'string' ? row.description : '',
@@ -58,11 +61,12 @@ function normalize(row: Record<string, unknown>, table: 'trip_details' | 'job_de
   };
 }
 
-export default function CommunityCatalog({ category, search: searchInput, preferredCity = '', onHousing }: {
+export default function CommunityCatalog({ category, search: searchInput, preferredCity = '', onSignIn, onHousing }: {
   category: CommunityCategory;
   search: string;
   preferredCity?: string;
   onHousing: () => void;
+  onSignIn: () => void;
 }) {
   const [plannerError, setPlannerError] = useState(false);
   const [entries, setEntries] = useState<Entry[]>([]);
@@ -84,7 +88,7 @@ export default function CommunityCatalog({ category, search: searchInput, prefer
     setEntries([]);
     const timeout = setTimeout(() => { if (!ac.signal.aborted) { setBusy(false); setError(true); ac.abort(); } }, 15000);
     const detail = DETAIL[category];
-    const select = 'id,title,description,city,price_cents,created_at,' +
+    const select = 'id,owner_id,title,description,city,price_cents,created_at,' +
       detail + '(' + (category === 'Trips' ? 'destination,starts_at,ends_at,capacity' :
         category === 'Events' ? 'venue_name,starts_at,ends_at,capacity' :
           'company_name,compensation_text,workplace_mode') + ')';
@@ -137,7 +141,8 @@ export default function CommunityCatalog({ category, search: searchInput, prefer
     <Text style={styles.detailMeta}>{active.city}</Text>
     {fields(active)}
     <Text style={styles.description}>{active.description || 'No description provided.'}</Text>
-    <Text style={styles.disclosure}>Publishing, joining, and applying are not enabled until the reviewed safety migration is qualified.</Text>
+    <ActivityResponse key={active.id} id={active.id} owner={active.owner} category={category} onSignIn={onSignIn}
+      onClosed={() => { setSelected(null); setRevision(v => v + 1); }} />
   </View>;
 
   return <View style={styles.list}>
@@ -156,7 +161,7 @@ export default function CommunityCatalog({ category, search: searchInput, prefer
       ? <ExternalFeed kind={category === 'Jobs' ? 'jobs' : 'events'} city={city.trim() || preferredCity} search={search} /> : null}
     <View style={styles.info}>
       <Text style={styles.sectionTitle}>Live community {category.toLowerCase()}</Text>
-      <Text style={styles.muted}>Only real active records from Stuora are shown. Posting and participation are being qualified separately.</Text>
+      <ActivityComposer category={category} city={cityInput || preferredCity} onSignIn={onSignIn} onPublished={() => setRevision(v => v + 1)} />
       <TextInput value={cityInput} onChangeText={setCity} accessibilityLabel="Filter listings by city" placeholder="Filter by city" placeholderTextColor="#646B80" style={styles.cityInput} />
       {cityInput.trim() ? action('Clear city filter', () => setCity('')) : null}
       {action('Refresh listings', () => setRevision(v => v + 1))}

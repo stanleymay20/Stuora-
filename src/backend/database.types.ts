@@ -806,6 +806,15 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      publish_student_activity: {
+        Args: { p_kind: 'trip' | 'job' | 'event'; p_title: string; p_city: string; p_description: string; p_details: Json }
+        Returns: string
+      }
+      student_activity_response: {
+        Args: { p_id: string; p_action: string; p_note?: string }
+        Returns: Json
+      }
+      close_student_activity: { Args: { p_id: string }; Returns: undefined }
       delete_student_group_file: { Args: { p_file: string }; Returns: boolean }
       am_i_moderator: { Args: Record<string, never>; Returns: boolean }
       conversation_safety_state: {

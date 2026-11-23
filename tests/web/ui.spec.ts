@@ -176,7 +176,7 @@ test('community categories open browsing and Trips offers the train planner', as
   await expect(page.getByRole('button', { name: 'Refresh listings' })).toBeVisible();
 });
 
-test('real Trips/Jobs/Events catalog queries active persisted rows and keeps participation disabled', async ({ page }) => {
+test('real Trips/Jobs/Events catalog queries active persisted rows and offers sign-in for participation', async ({ page }) => {
   await backend(page);
   let observed: string[] = [];
   const cityFilters: string[] = [];
@@ -217,7 +217,7 @@ test('real Trips/Jobs/Events catalog queries active persisted rows and keeps par
       await expect.poll(() => cityFilters.some(value => value.includes('Berlin'))).toBe(true);
     }
     await page.getByRole('button', {name: `View ${expected}`}).click();
-    await expect(page.getByText('Publishing, joining, and applying are not enabled until the reviewed safety migration is qualified.')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Sign in to participate' })).toBeVisible();
     await expect(page.getByRole('button', {name:back})).toBeVisible();
     await page.goto('/');
   }
