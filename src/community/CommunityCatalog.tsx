@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Linking, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { supabase } from '../backend/supabase';
 import { EditorialImage } from '../ui/EditorialImage';
 import ExternalFeed from './ExternalFeed';
@@ -64,6 +64,7 @@ export default function CommunityCatalog({ category, search: searchInput, prefer
   preferredCity?: string;
   onHousing: () => void;
 }) {
+  const [plannerError, setPlannerError] = useState(false);
   const [entries, setEntries] = useState<Entry[]>([]);
   const [busy, setBusy] = useState(true);
   const [error, setError] = useState(false);
@@ -140,6 +141,17 @@ export default function CommunityCatalog({ category, search: searchInput, prefer
   </View>;
 
   return <View style={styles.list}>
+    {category === 'Trips' ? <View style={styles.info}>
+      <Text style={styles.sectionTitle}>Train journeys</Text>
+      <Pressable accessibilityRole="link" onPress={async () => {
+        setPlannerError(false);
+        try { await Linking.openURL('https://int.bahn.de/en'); }
+        catch { setPlannerError(true); }
+      }} style={styles.action}>
+        <Text style={styles.actionText}>Plan a journey with Deutsche Bahn ↗</Text>
+      </Pressable>
+      {plannerError ? <Text accessibilityRole="alert">The journey planner could not open. Try again.</Text> : null}
+    </View> : null}
     {features.externalFeeds && category !== 'Trips'
       ? <ExternalFeed kind={category === 'Jobs' ? 'jobs' : 'events'} city={city.trim() || preferredCity} search={search} /> : null}
     <View style={styles.info}>

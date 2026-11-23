@@ -120,18 +120,15 @@ function Pill({ children, active = false }: { children: React.ReactNode; active?
 
 function CategoryTile({ item, onPress, grouped = false }: { item: (typeof categories)[number]; onPress: () => void; grouped?: boolean }) {
   const { width } = useWindowDimensions();
-  const upcoming = item.name === 'Trips' || item.name === 'Jobs' || item.name === 'Events';
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={`Browse ${item.name}`}
-      accessibilityHint={upcoming ? 'Browsing available; posting and participation are coming soon' : undefined}
       onPress={onPress}
       style={({ pressed }) => [styles.categoryTile, width < 360 && styles.categoryTileNarrow, width >= 960 && styles.categoryTileDesktop, grouped && styles.categoryTileGrouped, pressed && styles.pressed]}
     >
       <View style={styles.categoryArtWrap}>
         <EditorialImage kind={item.name === 'Groups' ? 'Community' : item.name} style={styles.categoryPhoto} label={`Stuora editorial image for ${item.name}`} />
-        {upcoming ? <View style={styles.categorySoonTag}><Text style={styles.categorySoonText}>Posting soon</Text></View> : null}
       </View>
       <Text style={styles.categoryName}>{item.name}</Text>
     </Pressable>
@@ -294,9 +291,9 @@ export default function App({ onOpenSavings }: { onOpenSavings: () => void }) {
   const categoryCopy: Record<Category, string> = {
     Housing: 'Find shared spaces and student rooms posted by real members.',
     Marketplace: 'Make more of student life with local, secondhand essentials.',
-    Trips: 'Explore real student trips. Posting and joining are being qualified separately.',
-    Jobs: 'Browse real student opportunities. Posting and applications are being qualified separately.',
-    Events: 'Explore real community gatherings. Posting and RSVP are being qualified separately.',
+    Trips: 'Browse student trips or plan a train journey.',
+    Jobs: 'Browse student jobs and open opportunities on the provider’s site.',
+    Events: 'Find local events and open ticket details on the provider’s site.',
     People: 'Meet students beyond your classroom through real public profiles.',
     Groups: 'Start a study circle or local community, join groups and share member-only discussions.',
   };
@@ -698,8 +695,6 @@ const styles = StyleSheet.create({
   categorySpotlightPhoto: { width: 225, height: 125, borderRadius: 16, backgroundColor: '#F4F1FF' },
   categorySpotlightPhotoMobile: { width: 115, height: 105, borderRadius: 13 },
   heroCommunityPhoto: { position: 'absolute', right: 20, top: 28, width: 248, height: 230, borderRadius: 18, borderWidth: 2, borderColor: '#FFFFFF', opacity: 0.96 },
-  categorySoonTag: { position: 'absolute', top: 5, right: 5, borderRadius: 8, backgroundColor: 'rgba(255,255,255,0.96)', paddingHorizontal: 5, paddingVertical: 3, borderWidth: 1, borderColor: '#E8DFFF' },
-  categorySoonText: { color: BRAND.purple, fontWeight: '800', fontSize: 8 },
   categoryIcon: { width: 43, height: 43, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
   categoryEmoji: { fontSize: 21 },
   categoryName: { color: BRAND.ink, fontWeight: '800', fontSize: 11 },

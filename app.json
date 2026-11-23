@@ -33,6 +33,9 @@
       ]
     ],
     "ios": {
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      },
       "supportsTablet": true,
       "bundleIdentifier": "com.stuora.app",
       "icon": "./assets/generated-stuora/icon.png",

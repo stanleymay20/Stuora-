@@ -162,10 +162,12 @@ test('compact homepage listing previews keep their real first-post actions disco
   await expect(page.getByText('Sign in and complete your profile to publish a listing.')).toBeVisible();
 });
 
-test('community category tiles disclose that posting remains gated', async ({ page }) => {
+test('community categories open browsing and Trips offers the train planner', async ({ page }) => {
   await backend(page);
   await page.goto('/');
-  await expect(page.getByText('Posting soon', { exact: true })).toHaveCount(3);
+  await page.getByRole('button', { name: 'Browse Trips', exact: true }).click();
+  await expect(page.getByRole('link', { name: /Plan a journey with Deutsche Bahn/ })).toBeVisible();
+  await page.getByRole('button', { name: 'Home', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Browse Housing', exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Browse Marketplace', exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Browse Jobs', exact: true }).click();
