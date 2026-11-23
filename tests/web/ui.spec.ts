@@ -167,7 +167,7 @@ test('community categories open browsing and Trips offers the train planner', as
   await page.goto('/');
   await page.getByRole('button', { name: 'Browse Trips', exact: true }).click();
   await expect(page.getByRole('link', { name: /Plan a journey with Deutsche Bahn/ })).toBeVisible();
-  await page.getByRole('button', { name: 'Home', exact: true }).click();
+  await page.getByRole('button', { name: /^(Open )?Home$/ }).click();
   await expect(page.getByRole('button', { name: 'Browse Housing', exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Browse Marketplace', exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Browse Jobs', exact: true }).click();
