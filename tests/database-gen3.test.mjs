@@ -14,7 +14,7 @@ const migrationFiles = readdirSync(migrationsDir).filter(f => f.endsWith('.sql')
 async function harness({ stopBefore } = {}) {
   const db = new PGlite();
   await db.exec(`
-    create role anon; create role authenticated; create role service_role bypassrls;
+    create role anon; create role authenticated; create role service_role bypassrls; create role supabase_auth_admin;
     create schema auth;
     create table auth.users (id uuid primary key, email text, email_confirmed_at timestamptz default now());
     create function auth.uid() returns uuid language sql stable as
@@ -46,8 +46,10 @@ async function harness({ stopBefore } = {}) {
 async function seed(db) {
   await db.exec(`
     insert into auth.users (id, email) values
-      ('${A}','a@example.test'),('${B}','b@example.test'),('${C}','c@example.test'),
-      ('${D}','d@example.test'),('${E}','e@example.test'),('${M}','m@example.test');
+      ('${A}','a@gisma-student.com'),('${B}','b@gisma-student.com'),('${C}','c@gisma-student.com'),
+      ('${D}','d@gisma-student.com'),('${E}','e@gisma-student.com'),
+      -- Staff moderator deliberately outside GISMA: moderation must not need a student address.
+      ('${M}','m@example.test');
     insert into public.profiles (id, display_name, city) values
       ('${A}','Alice','Köln'),('${B}','Bob','Köln'),('${C}','Chloé','Łódź'),
       ('${D}','Dan','Köln'),('${E}','Eve','Köln'),('${M}','Mod','Köln');
@@ -108,7 +110,7 @@ test('D-07: archiving a listing closes its conversation; L2: 20 messages/minute'
 
 test('R-04: directory needs recorded consent; legacy flags preserved but hidden', async () => {
   const { db, rest } = await harness({ stopBefore: '20261023013000' });
-  await db.exec(`insert into auth.users (id) values ('${LEGACY}'), ('${A}');
+  await db.exec(`insert into auth.users (id, email) values ('${LEGACY}', 'legacy@gisma-student.com'), ('${A}', 'a@gisma-student.com');
     insert into public.profiles (id, display_name, city, is_discoverable) values
       ('${LEGACY}', 'Pre-ticked legacy', 'Köln', true), ('${A}', 'Alice', 'Köln', false);`);
   await rest();
@@ -133,7 +135,7 @@ test('R-04: directory needs recorded consent; legacy flags preserved but hidden'
   assert.equal((await as(A, `select id from public.profiles where id='${LEGACY}'`)).rows.length, 0);
   await assert.rejects(as(null, `select public.set_profile_discovery(true)`), e => e.code === '42501');
   // A new profile created with the explicit toggle ON is stamped at insert.
-  await db.exec(`insert into auth.users (id) values ('${B}')`);
+  await db.exec(`insert into auth.users (id, email) values ('${B}', 'b@gisma-student.com')`);
   await as(B, `insert into public.profiles (id, display_name, city, is_discoverable) values ('${B}','Bob','Köln', true)`);
   assert.equal((await as(A, `select id from public.profiles where id='${B}'`)).rows.length, 1);
   await db.close();
@@ -194,7 +196,7 @@ test('D-11: reporting, moderator decisions, notices and suspension', async () =>
   const B2 = '00000000-0000-4000-8000-0000000000b2';
   await db.exec(`insert into public.account_suspensions(user_id, reason) values ('${E}', 'Suspended before deleting account.')`);
   await db.exec(`delete from public.profiles where id='${E}'; delete from auth.users where id='${E}';
-                 insert into auth.users(id, email) values ('${B2}', ' E@Example.test ')`);
+                 insert into auth.users(id, email) values ('${B2}', ' E@GISMA-Student.com ')`);
   await assert.rejects(db.query(`insert into public.profiles(id, display_name, city) values ('${B2}','Eve again','Köln')`), e => e.code === '42501');
   await as(M, `select public.lift_suspension('${B}', 'Appeal accepted after identity check.')`);
   assert.ok((await as(B, `select public.save_student_listing(null,'housing','Legit room','', 'Köln', 40000,'room',false,false,'good') id`)).rows[0].id);
@@ -219,6 +221,8 @@ test('Erasure: a reported student can still delete their account; the report sur
   assert.equal(rows.length, 2, 'reports kept for abuse handling');
   assert.ok(rows.every(r => r.listing_id === null && r.reported_user_id === null && r.content_snapshot), 'targets detached, snapshot kept');
   // A target is still required when filing.
+  // Privileged insert: clear the session claim the actor helper leaves behind.
+  await db.exec(`select set_config('request.jwt.claim.sub', '', false)`);
   await assert.rejects(db.query(`insert into public.reports(reporter_id, reason) values ('${B}', 'spam')`), e => e.code === '23514');
   await db.close();
 });
@@ -247,7 +251,7 @@ test('D-10: export returns only the caller\'s own data and is rate-limited', asy
   await as(A, `insert into public.messages(conversation_id,sender_id,body) values ('${conv}','${A}','from Alice')`);
   const { rows } = await as(A, `select public.export_my_data() d`);
   const d = rows[0].d;
-  assert.equal(d.account.email, 'a@example.test');
+  assert.equal(d.account.email, 'a@gisma-student.com');
   assert.equal(d.listings.length, 1);
   assert.deepEqual(d.messages_sent.map(m => m.body), ['from Alice'], 'only messages the caller sent');
   assert.equal(JSON.stringify(d).includes('from Bob'), false);
@@ -315,5 +319,237 @@ test('D-07 UI: conversation safety state and blocking by conversation', async ()
   await as(A, `update public.listings set status='closed' where id='${l}'`);
   assert.equal((await state(B)).closed, true);
   await deny(null, `select public.conversation_safety_state('${conv}')`);
+  await db.close();
+});
+
+test('GISMA-only: non-GISMA accounts cannot use core student features; protective paths remain', async () => {
+  // Start just before the access migration so an existing outsider profile is in the directory.
+  const { db, rest } = await harness({ stopBefore: '20261124100000' });
+  await seed(db);
+  const O = id(11), O2 = id(12), U = id(13);
+  await db.exec(`insert into auth.users (id, email) values ('${O}', 'outsider@example.com');
+    insert into public.profiles (id, display_name, city) values ('${O}', 'Outsider', 'Köln');`);
+  const before = actors(db);
+  await before.as(O, `select public.set_profile_discovery(true)`);
+  await before.as(A, `select public.set_profile_discovery(true)`);
+  // Before the migration the outsider joined a group and messaged a student.
+  const l = await before.listing(A, 'housing', 'Room near campus');
+  const g = (await before.as(A, "select public.create_student_group('Study circle','', 'Köln','Study') id")).rows[0].id;
+  await before.as(O, `insert into public.student_group_members(group_id,user_id) values ('${g}','${O}')`);
+  await before.as(B, `insert into public.student_group_members(group_id,user_id) values ('${g}','${B}')`);
+  await before.as(O, `select public.send_student_group_message('${g}','outsider hello')`);
+  await before.as(A, `select public.send_student_group_message('${g}','members only')`);
+  const conv = (await before.as(O, `select public.start_listing_conversation('${l}') id`)).rows[0].id;
+  await before.as(O, `insert into public.messages(conversation_id,sender_id,body) values ('${conv}','${O}','is it free?')`);
+  await before.as(A, `insert into public.messages(conversation_id,sender_id,body) values ('${conv}','${A}','private reply')`);
+  await db.exec(`select set_config('request.jwt.claim.sub', '', false)`);
+  await rest();
+  const { as, svc, deny, listing } = actors(db);
+
+  // Existing outsider is removed from the directory; students are unaffected.
+  assert.equal((await as(B, `select id from public.profiles where id='${O}'`)).rows.length, 0, 'outsider hidden');
+  assert.equal((await as(B, `select id from public.profiles where id='${A}'`)).rows.length, 1, 'student still listed');
+
+  // Reads: the outsider keeps only its own rows from earlier memberships.
+  const rows = async sql => (await as(O, sql)).rows;
+  assert.deepEqual((await rows(`select id from public.profiles`)).map(r => r.id), [O], 'directory closed, own profile kept');
+  assert.deepEqual((await rows(`select body from public.messages where conversation_id='${conv}'`)).map(r => r.body), ['is it free?']);
+  assert.deepEqual((await rows(`select body from public.student_group_messages where group_id='${g}'`)).map(r => r.body), ['outsider hello']);
+  assert.deepEqual((await rows(`select user_id from public.student_group_members where group_id='${g}'`)).map(r => r.user_id), [O]);
+  assert.equal((await rows(`select public.can_read_student_group_files('${g}') ok`))[0].ok, false, 'private group files closed');
+  assert.equal((await as(B, `select public.can_read_student_group_files('${g}') ok`)).rows[0].ok, true, 'members unaffected');
+  assert.equal((await as(B, `select body from public.student_group_messages where group_id='${g}'`)).rows.length, 2);
+  assert.equal((await as(A, `select body from public.messages where conversation_id='${conv}'`)).rows.length, 2,
+    'the student still sees the whole thread');
+  // The catalogue is student-only: neither the outsider nor a signed-out visitor sees it.
+  assert.equal((await rows(`select id from public.listings where id='${l}'`)).length, 0);
+  assert.equal((await rows(`select id from public.student_groups where id='${g}'`)).length, 0);
+  assert.equal((await as(null, `select id from public.listings where id='${l}'`)).rows.length, 0);
+  assert.equal((await as(C, `select id from public.listings where id='${l}'`)).rows.length, 1, 'students still browse');
+
+  // Every student write path refuses the outsider.
+  await deny(O, `select public.save_student_listing(null,'housing','Room','', 'Köln', 40000,'room',false,false,'good')`);
+  await deny(O, `insert into public.listings(owner_id,kind,status,title,city,price_cents) values ('${O}','marketplace','draft','Lamp','Köln',100)`);
+  const fresh = await listing(B, 'marketplace', 'Desk lamp', 1500);
+  await deny(O, `select public.start_listing_conversation('${fresh}')`);
+  await deny(O, `insert into public.messages(conversation_id,sender_id,body) values ('${conv}','${O}','still there?')`);
+  await deny(O, `select public.create_student_group('Outsider group','', 'Köln','Study')`);
+  await deny(O, `insert into public.student_group_members(group_id,user_id) values ('${g}','${O}')`);
+  await deny(O, `select public.report_content('listing', '${l}', 'spam', 'Outsider report')`);
+  await deny(O, `select public.set_profile_discovery(true)`);
+  await deny(O, `select public.require_external_student()`);
+  await deny(O, `select public.publish_student_activity('event','Party','Köln','x','{"venue_name":"Hall","starts_at":"2099-01-01T12:00Z","capacity":5}')`);
+  assert.equal((await svc(`select public.consume_ai_request('${O}') ok`)).rows[0].ok, false);
+  assert.equal((await svc(`select public.consume_external_data_request('${O}') ok`)).rows[0].ok, false);
+  // A new outsider cannot even create a profile.
+  await db.exec(`insert into auth.users (id, email) values ('${O2}', 'new@gmail.com')`);
+  await deny(O2, `insert into public.profiles (id, display_name, city) values ('${O2}', 'New', 'Köln')`);
+
+  // Protective, self-only paths still work for the outsider.
+  await as(O, `select public.set_profile_discovery(false)`);
+  await as(O, `update public.profiles set bio='leaving soon' where id='${O}'`);
+  assert.ok((await as(O, `select public.export_my_data() d`)).rows[0].d.account);
+  await as(O, `insert into public.user_blocks(blocker_id, blocked_id) values ('${O}', '${A}')`);
+  await as(O, `delete from public.student_group_members where group_id='${g}' and user_id='${O}'`);
+
+  // Unconfirmed GISMA address is not enough.
+  await db.exec(`insert into auth.users (id, email, email_confirmed_at) values ('${U}', 'u@gisma-student.com', null)`);
+  await deny(U, `insert into public.profiles (id, display_name, city) values ('${U}', 'Unconfirmed', 'Köln')`);
+  // Mixed case and surrounding spaces are normalised; the student keeps working.
+  await db.exec(`update auth.users set email=' Bob@GISMA-Student.com ' where id='${B}'`);
+  assert.ok((await as(B, `select public.start_listing_conversation('${l}') id`)).rows[0].id);
+
+  // An owner who leaves GISMA can archive but not edit or publish.
+  await db.exec(`update auth.users set email='alice@example.com' where id='${A}'`);
+  await deny(A, `select public.save_student_listing('${l}','housing','Edited','', 'Köln', 1,'room',false,false,'good')`);
+  // Archiving may change the status only, and only from a published state.
+  await deny(A, `update public.listings set status='closed', title='Changed while closing' where id='${l}'`);
+  await deny(A, `update public.listings set status='closed', price_cents=1 where id='${l}'`);
+  await deny(A, `update public.listings set status='reserved' where id='${l}'`);
+  await db.exec(`select set_config('request.jwt.claim.sub', '', false);
+    insert into public.listings(id, owner_id, kind, status, title, city, price_cents)
+    values ('00000000-0000-4000-8000-0000000000d1', '${A}', 'marketplace', 'draft', 'Old draft', 'Köln', 100)`);
+  await deny(A, `update public.listings set status='closed' where id='00000000-0000-4000-8000-0000000000d1'`);
+  await as(A, `update public.listings set status='closed' where id='${l}' and owner_id='${A}'`);
+  const { rows: archived } = await db.query(`select title, price_cents from public.listings where id='${l}'`);
+  assert.deepEqual(archived[0], { title: 'Room near campus', price_cents: 50000 }, 'nothing else changed');
+  assert.equal((await db.query(`select status from public.listings where id='${l}'`)).rows[0].status, 'closed');
+
+  // Suspension keeps its own error and the harassment-reporting path (checked by the suspension guard).
+  await db.exec(`insert into public.account_suspensions(user_id, reason) values ('${D}', 'Suspended for testing purposes.')`);
+  await assert.rejects(as(D, `select public.create_student_group('D group','', 'Köln','Study')`), e => /suspended/i.test(e.message));
+  assert.ok((await as(D, `select public.report_content('user', '${C}', 'harassment', 'Keeps messaging me') id`)).rows[0].id);
+  await db.close();
+});
+
+test('GISMA-only signup hook accepts only exact @gisma-student.com addresses and is Auth-only', async () => {
+  const { db } = await harness();
+  const verdict = async email => (await db.query(
+    `select public.hook_require_gisma_signup($1::jsonb) r`, [JSON.stringify({ user: { email } })])).rows[0].r;
+  for (const ok of ['s1@gisma-student.com', ' Name.Surname@GISMA-Student.com '])
+    assert.deepEqual(await verdict(ok), {}, ok);
+  for (const bad of ['s@gmail.com', 's@gisma-student.com.evil.io', 's@sub.gisma-student.com', 's@gisma-student.co',
+                     's@gisma-studentxcom', 'gisma-student.com', '', null])
+    assert.equal((await verdict(bad)).error?.http_code, 403, String(bad));
+  const priv = role => db.query(`select has_function_privilege('${role}', 'public.hook_require_gisma_signup(jsonb)', 'execute') ok`)
+    .then(r => r.rows[0].ok);
+  assert.equal(await priv('supabase_auth_admin'), true);
+  for (const role of ['anon', 'authenticated']) assert.equal(await priv(role), false, role);
+  await db.close();
+});
+
+test('Activity review: Jobs, Trips and Events publish only after a Stuora moderator approves them', async () => {
+  const { db } = await harness(); await seed(db);
+  const { as, deny } = actors(db);
+  await db.exec(`insert into public.moderators(user_id) values ('${M}')`);
+  const publish = (user, kind, detail) => as(user,
+    `select public.publish_student_activity('${kind}','Student ${kind}','Köln','Details','${JSON.stringify(detail)}') id`);
+  const ev = (await publish(A, 'event', { venue_name: 'Campus Hall', starts_at: '2099-01-01T12:00Z', capacity: 5 })).rows[0].id;
+  const job = (await publish(A, 'job', { company_name: 'Café Uni', compensation_text: '€14/hour', workplace_mode: 'onsite' })).rows[0].id;
+  const visible = async (user, sql) => (await as(user, sql)).rows.length;
+
+  // Pending: the author sees it with its status; other students and visitors do not.
+  assert.equal((await as(A, `select review_status from public.listings where id='${ev}'`)).rows[0].review_status, 'pending');
+  assert.equal(await visible(B, `select id from public.listings where id='${ev}'`), 0);
+  assert.equal(await visible(null, `select id from public.listings where id='${ev}'`), 0);
+  assert.equal(await visible(B, `select listing_id from public.event_details where listing_id='${ev}'`), 0, 'details follow the post');
+  // Nobody can act on it yet, through the RPCs or directly.
+  await assert.rejects(as(B, `select public.student_activity_response('${ev}','join')`), e => /awaiting Stuora review|unavailable/i.test(e.message));
+  await deny(B, `select public.student_activity_response('${job}','apply','Hello')`);
+  await assert.rejects(as(B, `select public.listing_participation('${ev}','join')`));
+  await assert.rejects(db.query(`insert into public.event_participants(event_listing_id, user_id) values ('${ev}', '${B}')`),
+    e => /awaiting Stuora review/.test(e.message), 'even trusted inserts need approval');
+  await assert.rejects(as(B, `select public.start_listing_conversation('${job}')`));
+
+  // Students cannot approve anything, including by writing the column.
+  await deny(A, `update public.listings set review_status='approved' where id='${ev}'`);
+  await deny(A, `select public.review_student_activity('${ev}','approve','I promise it is real.')`);
+  await deny(B, `select public.list_pending_student_activities()`);
+  // Moderators review: the queue includes details; reasons are required; own posts are excluded.
+  const queue = (await as(M, `select id, kind, details from public.list_pending_student_activities()`)).rows;
+  assert.deepEqual(queue.map(r => r.id).sort(), [ev, job].sort());
+  assert.equal(queue.find(r => r.id === job).details.company_name, 'Café Uni');
+  await deny(M, `select public.review_student_activity('${ev}','approve','ok')`, '22023');
+  await as(M, `select public.review_student_activity('${ev}','approve','Venue and date checked.')`);
+  await as(M, `select public.review_student_activity('${job}','reject','Cannot confirm the employer.')`);
+  await deny(M, `select public.review_student_activity('${ev}','approve','Approving a second time.')`, '22023');
+  const notices = (await as(A, `select kind, message from public.moderation_notices where kind='activity_review'`)).rows;
+  assert.equal(notices.length, 2);
+  assert.ok(notices.some(n => /not approved. Reason: Cannot confirm the employer./.test(n.message)));
+
+  // Approved: discoverable and actionable. Rejected: still hidden and closed to applications.
+  assert.equal(await visible(B, `select id from public.listings where id='${ev}'`), 1);
+  assert.equal(await visible(C, `select listing_id from public.event_details where listing_id='${ev}'`), 1);
+  assert.equal(await visible(null, `select listing_id from public.event_details where listing_id='${ev}'`), 0, 'students only');
+  assert.equal((await as(B, `select public.student_activity_response('${ev}','join') r`)).rows[0].r.joined, true);
+  assert.equal(await visible(B, `select id from public.listings where id='${job}'`), 0);
+  await deny(B, `select public.student_activity_response('${job}','apply','Hello')`);
+  assert.equal((await as(A, `select review_status from public.listings where id='${job}'`)).rows[0].review_status, 'rejected');
+  // Listings are readable table-wide, so the reviewer and note live only in the private audit table.
+  await deny(null, `select reviewed_by from public.listings`, '42703');
+  await deny(null, `select * from private.activity_reviews`);
+  const audit = (await db.query(`select decision, reviewed_by from private.activity_reviews where listing_id='${job}'`)).rows;
+  assert.deepEqual(audit, [{ decision: 'rejected', reviewed_by: M }]);
+
+  // Editing an approved post (inside a server function, as the author) sends it back for review.
+  await db.exec(`select set_config('request.jwt.claim.sub', '${A}', false)`);
+  await db.query(`update public.event_details set venue_name='Different hall' where listing_id='${ev}'`);
+  await db.exec(`select set_config('request.jwt.claim.sub', '', false)`);
+  assert.equal((await as(A, `select review_status from public.listings where id='${ev}'`)).rows[0].review_status, 'pending');
+  assert.equal(await visible(C, `select id from public.listings where id='${ev}'`), 0);
+  await assert.rejects(as(C, `select public.student_activity_response('${ev}','join')`));
+
+  // Housing and Marketplace need no review and stay published immediately.
+  const room = (await as(A, `select public.save_student_listing(null,'housing','Room','', 'Köln', 40000,'room',false,false,'good') id`)).rows[0].id;
+  assert.equal((await as(B, `select review_status from public.listings where id='${room}'`)).rows[0].review_status, 'not_required');
+  // A staff moderator without a GISMA address can still remove a student's listing.
+  const r = (await as(B, `select public.report_content('listing', '${room}', 'fraud', 'Asks for a deposit first') id`)).rows[0].id;
+  await as(M, `select public.moderate_report('${r}', 'remove_content', 'Deposit scams are not allowed.')`);
+  assert.equal((await db.query(`select status from public.listings where id='${room}'`)).rows[0].status, 'closed');
+  await db.close();
+});
+
+test('Student-only catalogue: listings, photos and group names need a signed-in GISMA student', async () => {
+  const { db } = await harness(); await seed(db);
+  const { as, listing } = actors(db);
+  const O = id(11);
+  await db.exec(`insert into auth.users (id, email) values ('${O}', 'legacy@example.com');
+    insert into public.profiles (id, display_name, city) values ('${O}', 'Legacy outsider', 'Köln');`);
+  const room = await listing(A, 'housing', 'Room near campus');
+  const g = (await as(A, "select public.create_student_group('Study circle','', 'Köln','Study') id")).rows[0].id;
+  const photo = `${A}/${room}/cover.webp`;
+  await db.exec(`select set_config('request.jwt.claim.sub', '', false);
+    insert into public.listing_media (listing_id, object_path, sort_order) values ('${room}', '${photo}', 0);
+    insert into storage.objects (bucket_id, name) values ('listing-media', '${photo}');
+    -- A legacy listing and group owned by the outsider, created before the rule.
+    insert into public.listings (id, owner_id, kind, status, title, city, price_cents)
+      values ('00000000-0000-4000-8000-0000000000e1', '${O}', 'marketplace', 'draft', 'Legacy draft', 'Köln', 100);
+    insert into public.student_groups (id, owner_id, name, city, topic)
+      values ('00000000-0000-4000-8000-0000000000e2', '${O}', 'Legacy group', 'Köln', 'Study');`);
+  const n = async (user, sql) => (await as(user, sql)).rows.length;
+  const catalogue = {
+    listing: `select id from public.listings where id='${room}'`,
+    details: `select listing_id from public.housing_details where listing_id='${room}'`,
+    media: `select id from public.listing_media where listing_id='${room}'`,
+    group: `select id from public.student_groups where id='${g}'`,
+  };
+  for (const [what, sql] of Object.entries(catalogue)) {
+    assert.equal(await n(null, sql), 0, `signed-out visitor cannot read ${what}`);
+    assert.equal(await n(O, sql), 0, `legacy non-GISMA account cannot read ${what}`);
+    assert.equal(await n(B, sql), 1, `GISMA student reads ${what}`);
+  }
+  // Photo files: the bucket no longer serves public URLs, and object reads follow the listing.
+  assert.equal((await db.query(`select public from storage.buckets where id='listing-media'`)).rows[0].public, false);
+  const file = `select name from storage.objects where bucket_id='listing-media' and name='${photo}'`;
+  assert.equal(await n(O, file), 0, 'legacy account cannot sign or download the photo');
+  assert.equal(await n(B, file), 1, 'GISMA student can sign and load the photo');
+  assert.equal(await n(A, file), 1, 'owner keeps access');
+  await as(A, `update public.listings set status='closed' where id='${room}'`);
+  assert.equal(await n(B, file), 0, 'an archived listing photo is no longer retrievable by others');
+  assert.equal(await n(A, file), 1);
+  // Owners keep their own rows; student browsing is otherwise unaffected.
+  assert.equal(await n(O, `select id from public.listings where owner_id='${O}'`), 1);
+  assert.equal(await n(O, `select id from public.student_groups where owner_id='${O}'`), 1);
+  assert.equal(await n(B, `select id from public.student_groups`), 2, 'students see every group name');
   await db.close();
 });

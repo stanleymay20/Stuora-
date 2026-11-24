@@ -4,6 +4,7 @@ import { supabase } from '../backend/supabase';
 import type { Database } from '../backend/database.types';
 
 type Item = Database['public']['Functions']['moderation_queue']['Returns'][number];
+type Activity = Database['public']['Functions']['list_pending_student_activities']['Returns'][number];
 type Notice = Database['public']['Tables']['moderation_notices']['Row'];
 type Action = 'dismiss' | 'remove_content' | 'suspend_user';
 const actionLabels: Record<Action, string> = { dismiss: 'Dismiss', remove_content: 'Remove content', suspend_user: 'Suspend account' };
@@ -56,6 +57,73 @@ export function ModerationQueue() {
         </View>
       ))}
       <Pressable accessibilityRole="button" onPress={() => void load()} style={styles.button}><Text style={styles.buttonText}>Refresh</Text></Pressable>
+    </View>
+  );
+}
+
+const KIND_LABEL: Record<string, string> = { job: 'Job', trip: 'Trip', event: 'Event' };
+// Shown for review only; the student never sees moderator identities.
+function detailLines(details: Activity['details']): string[] {
+  if (!details || typeof details !== 'object' || Array.isArray(details)) return [];
+  const d = details as Record<string, unknown>;
+  const fields: [string, string][] = [['company_name', 'Company'], ['compensation_text', 'Pay'], ['workplace_mode', 'Workplace'],
+    ['destination', 'Destination'], ['venue_name', 'Venue'], ['starts_at', 'Starts'], ['ends_at', 'Ends'], ['capacity', 'Capacity']];
+  return fields.filter(([key]) => d[key] !== null && d[key] !== undefined && d[key] !== '')
+    .map(([key, label]) => `${label}: ${key.endsWith('_at') ? new Date(String(d[key])).toLocaleString() : String(d[key])}`);
+}
+
+/**
+ * Moderator-only review of student Jobs, Trips and Events. Nothing a student
+ * submits is published until a moderator approves it here; the server refuses
+ * every call from non-moderators and from a moderator reviewing their own post.
+ */
+export function ActivityReviewQueue() {
+  const [items, setItems] = useState<Activity[]>([]);
+  const [state, setState] = useState<'loading' | 'ready' | 'error'>('loading');
+  const [reasons, setReasons] = useState<Record<string, string>>({});
+  const [message, setMessage] = useState('');
+  const load = useCallback(async () => {
+    setState('loading');
+    const { data, error } = await supabase.rpc('list_pending_student_activities');
+    if (error) { setState('error'); return; }
+    setItems(data ?? []); setState('ready');
+  }, []);
+  useEffect(() => { void load(); }, [load]);
+  const decide = async (item: Activity, decision: 'approve' | 'reject') => {
+    const reason = (reasons[item.id] ?? '').trim();
+    if (reason.length < 10) { setMessage('Write a reason of at least 10 characters. The student will see it.'); return; }
+    const { error } = await supabase.rpc('review_student_activity', { p_listing: item.id, p_decision: decision, p_reason: reason });
+    if (error) { setMessage(error.message.length < 160 ? error.message : 'The decision could not be saved.'); return; }
+    setMessage(decision === 'approve' ? 'Approved. It is now visible to students.' : 'Rejected. The student has been told why.');
+    setItems(current => current.filter(i => i.id !== item.id));
+  };
+  return (
+    <View style={styles.card} testID="activity-review-queue">
+      <Text accessibilityRole="header" style={styles.title}>Jobs, Trips and Events awaiting review</Text>
+      <Text style={styles.hint}>A GISMA email does not show that a student represents an employer or may organise a trip. Check the details before approving.</Text>
+      {message ? <Text accessibilityRole="alert" style={styles.status}>{message}</Text> : null}
+      {state === 'loading' ? <Text style={styles.hint}>Loading submissions…</Text> : null}
+      {state === 'error' ? <Text style={styles.error}>Submissions could not be loaded.</Text> : null}
+      {state === 'ready' && !items.length ? <Text style={styles.hint}>Nothing is awaiting review.</Text> : null}
+      {items.map(item => (
+        <View key={item.id} style={styles.item}>
+          <Text style={styles.meta}>{KIND_LABEL[item.kind] ?? item.kind} · {item.city} · submitted {new Date(item.created_at).toLocaleString()}</Text>
+          <Text style={styles.snapshot} selectable>{item.title}{item.description ? `\n\n${item.description}` : ''}</Text>
+          {detailLines(item.details).map(line => <Text key={line} style={styles.details}>{line}</Text>)}
+          <TextInput accessibilityLabel={`Reason for decision on ${item.title}`} value={reasons[item.id] ?? ''} maxLength={1000}
+            onChangeText={text => setReasons(r => ({ ...r, [item.id]: text }))}
+            placeholder="Reason shown to the student" placeholderTextColor="#6B7287" style={styles.input} />
+          <View style={styles.actions}>
+            <Pressable accessibilityRole="button" accessibilityLabel={`Approve ${item.title}`} onPress={() => void decide(item, 'approve')} style={styles.button}>
+              <Text style={styles.buttonText}>Approve</Text>
+            </Pressable>
+            <Pressable accessibilityRole="button" accessibilityLabel={`Reject ${item.title}`} onPress={() => void decide(item, 'reject')} style={[styles.button, styles.danger]}>
+              <Text style={[styles.buttonText, styles.dangerText]}>Reject</Text>
+            </Pressable>
+          </View>
+        </View>
+      ))}
+      <Pressable accessibilityRole="button" accessibilityLabel="Refresh submissions" onPress={() => void load()} style={styles.button}><Text style={styles.buttonText}>Refresh</Text></Pressable>
     </View>
   );
 }

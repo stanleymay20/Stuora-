@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test';
-import { backend } from './account-fixtures';
+import { backend, asStudent } from './account-fixtures';
 test('responsive branding and real empty Housing without invented offers', async ({ page }) => {
+  await asStudent(page);
   await backend(page); await page.goto('/');
   await expect(page.getByText('Community housing', { exact: true })).toBeVisible();
   await expect(page.getByText('No housing listings found.', { exact: true })).toBeVisible();
@@ -42,7 +43,9 @@ test('desktop reference navigation preserves real browse, messaging and account 
   await expect(page.getByRole('button', { name: 'Open Home' })).toBeVisible();
   await expect(page.getByText('Browse by category', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Open Explore' }).click();
-  await expect(page.getByRole('button', { name: 'Refresh listings' })).toBeVisible();
+  // Signed out: student listings are replaced by the student-only gate.
+  await expect(page.getByTestId('student-catalogue-gate')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Refresh listings' })).toHaveCount(0);
   await page.getByRole('button', { name: 'Open Messages' }).click();
   await expect(page.getByText('Sign in to use secure messaging', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Open your profile' }).click();
@@ -50,18 +53,19 @@ test('desktop reference navigation preserves real browse, messaging and account 
   await page.getByRole('button', { name: 'Create listing' }).click();
   await expect(page.getByText('Sign in and complete your profile to publish a listing.')).toBeVisible();
   await page.getByRole('button', { name: 'Open Home' }).click();
-  await expect(page.getByText('Community housing', { exact: true })).toBeVisible();
+  await expect(page.getByText('Browse by category', { exact: true })).toBeVisible();
+  await expect(page.getByTestId('student-catalogue-gate')).toBeVisible();
+  await expect(page.getByText('Community housing', { exact: true })).toHaveCount(0);
 });
 
 test('first listing CTA uses existing protected publishing path on desktop and mobile', async ({ page }) => {
+  await asStudent(page);
   await backend(page);
   await page.goto('/');
   await expect(page.getByRole('button', { name: 'Post housing listing' })).toBeVisible();
   await page.getByRole('button', { name: 'Post housing listing' }).click();
   await expect(page.getByText('Sign in and complete your profile to publish a listing.')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Post Housing' })).toBeVisible();
-  await page.getByRole('button', { name: 'Open account' }).click();
-  await expect(page.getByText('Welcome to Stuora', { exact: true })).toBeVisible();
   await page.goto('/');
   await page.getByRole('button', { name: 'Post marketplace listing' }).click();
   await expect(page.getByText('Sign in and complete your profile to publish a listing.')).toBeVisible();
@@ -69,6 +73,7 @@ test('first listing CTA uses existing protected publishing path on desktop and m
 });
 
 test('listing search with zero results offers clear-search instead of misleading post suggestion', async ({ page }) => {
+  await asStudent(page);
   await backend(page);
   await page.goto('/');
   await page.getByRole('button', { name: 'Browse Housing', exact: true }).click();
@@ -107,6 +112,7 @@ test('homepage scroll container is viewport-bounded and responds to wheel on des
 });
 
 test('illustrated discovery tiles remain real category actions and hero search works by click', async ({ page }) => {
+  await asStudent(page);
   await backend(page);
   await page.goto('/');
   await expect(page.getByRole('button', { name: 'Search housing listings' })).toBeVisible();
@@ -123,6 +129,7 @@ test('illustrated discovery tiles remain real category actions and hero search w
 });
 
 test('community catalogs do not imply fake posts and offer a safe path', async ({ page }) => {
+  await asStudent(page);
   await backend(page);
   await page.goto('/');
   await page.getByRole('button', { name: 'Browse Trips', exact: true }).click();
@@ -133,6 +140,7 @@ test('community catalogs do not imply fake posts and offer a safe path', async (
 });
 
 test('Student Savings is accessible from navigation without blocking the homepage', async ({ page }) => {
+  await asStudent(page);
   await backend(page);
   await page.goto('/');
   const savings = page.getByRole('button', { name: 'Open Student Savings' });
@@ -147,6 +155,7 @@ test('Student Savings is accessible from navigation without blocking the homepag
 });
 
 test('compact homepage listing previews keep their real first-post actions discoverable', async ({ page }) => {
+  await asStudent(page);
   await backend(page);
   await page.goto('/');
   const post = page.getByRole('button', { name: 'Post housing listing' });
@@ -163,6 +172,7 @@ test('compact homepage listing previews keep their real first-post actions disco
 });
 
 test('community categories open browsing and Trips offers the train planner', async ({ page }) => {
+  await asStudent(page);
   await backend(page);
   await page.goto('/');
   await page.getByRole('button', { name: 'Browse Trips', exact: true }).click();
@@ -176,8 +186,11 @@ test('community categories open browsing and Trips offers the train planner', as
   await expect(page.getByRole('button', { name: 'Refresh listings' })).toBeVisible();
 });
 
-test('real Trips/Jobs/Events catalog queries active persisted rows and offers sign-in for participation', async ({ page }) => {
+test('real Trips/Jobs/Events catalog queries active persisted rows and offers students participation', async ({ page }) => {
+  await asStudent(page);
   await backend(page);
+  await page.route('**/rest/v1/rpc/student_activity_response', route =>
+    route.fulfill({ json: { count: 0, joined: false, capacity: 4, applied: false, withdrawn: false } }));
   let observed: string[] = [];
   const cityFilters: string[] = [];
   await page.route('**/rest/v1/listings?*', async route => {
@@ -217,7 +230,8 @@ test('real Trips/Jobs/Events catalog queries active persisted rows and offers si
       await expect.poll(() => cityFilters.some(value => value.includes('Berlin'))).toBe(true);
     }
     await page.getByRole('button', {name: `View ${expected}`}).click();
-    await expect(page.getByRole('button', { name: 'Sign in to participate' })).toBeVisible();
+    await expect(page.getByRole('button', { name: label === 'Jobs' ? 'Apply for job' : label === 'Trips' ? 'Join trip' : 'RSVP to event' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Sign in to participate' })).toHaveCount(0);
     await expect(page.getByRole('button', {name:back})).toBeVisible();
     await page.goto('/');
   }
@@ -228,6 +242,7 @@ test('real Trips/Jobs/Events catalog queries active persisted rows and offers si
 });
 
 test('generated editorial images are bundled and displayed without replacing real listing data', async ({ page }) => {
+  await asStudent(page);
   await backend(page);
   await page.goto('/');
   const photos = page.locator('img[src*="editorial"]');
@@ -242,6 +257,7 @@ test('generated editorial images are bundled and displayed without replacing rea
 });
 
 test('Housing and Marketplace use one clear discovery toolbar and avoid duplicate posting CTAs', async ({ page }) => {
+  await asStudent(page);
   await backend(page);
   await page.goto('/');
   await page.getByRole('button', { name: 'Browse Housing', exact: true }).click();
@@ -267,6 +283,7 @@ test('Housing and Marketplace use one clear discovery toolbar and avoid duplicat
 });
 
 test('user-selected photos replace original category thumbnails and remain bundled on web', async ({ page }) => {
+  await asStudent(page);
   await backend(page);
   await page.goto('/');
   const mappedPhotos = {
@@ -360,6 +377,7 @@ test('desktop and mobile navigation buttons each reach the correct functional de
 });
 
 test('switching Explore categories restores the top of the new category rather than an old scroll position', async ({ page }) => {
+  await asStudent(page);
   await backend(page);
   await page.goto('/?stuora=housing');
   const scroll = page.getByTestId('explore-scroll');

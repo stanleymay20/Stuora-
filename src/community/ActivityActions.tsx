@@ -47,7 +47,7 @@ export function ActivityComposer({ category, city, onSignIn, onPublished }: {
         p_city: draft.city || '', p_description: draft.description || '', p_details: details });
       if (error) throw new Error(error.code === '42501' ? 'Publishing requires an eligible confirmed GISMA student account.' :
         error.code === '22023' ? 'Check the title, city and activity details.' : 'Could not confirm publication. Refresh listings before retrying.');
-      setOpen(false); setDraft({}); setMessage('Published to Stuora.'); onPublished();
+      setOpen(false); setDraft({}); setMessage('Submitted for review. Stuora moderators check every job, trip and event before other students can see it.'); onPublished();
     } catch (err) { setMessage(err instanceof Error ? err.message : 'Could not publish.'); }
     finally { lock.current = false; setBusy(false); }
   }

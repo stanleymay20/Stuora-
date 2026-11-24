@@ -1,9 +1,11 @@
 import { expect, test } from '@playwright/test';
-import { account, backend, signin } from './account-fixtures';
+import { account, backend, signin, asStudent } from './account-fixtures';
 test('People requires login and reads opted-in profile fields with retry and reload', async ({ page }) => {
   await backend(page); await page.goto('/');
   await page.getByRole('button', { name: 'Browse People', exact: true }).click();
-  await expect(page.getByText('Sign in to discover students who have opted to share their profile.')).toBeVisible();
+  // Signed out: the student-only gate replaces the directory.
+  await expect(page.getByTestId('student-catalogue-gate')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Sign in to browse' })).toBeVisible();
   await account(page); await signin(page);
   let fail = true;
   await page.route('**/rest/v1/profiles?*', async route => {

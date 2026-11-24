@@ -60,3 +60,12 @@ The live audit today reports 5 findings, against an upper bound of 23. The origi
 - This removes the `glob` (GHSA-3g3m-2fjr-6pw4), `node-forge` and `zod` (GHSA-mrhx-c7xc-m3w5) chains. The `zod` acceptance above no longer applies.
 - `npm audit --omit=dev` now reports 3 moderate findings, 0 high and 0 critical, all from one advisory root: `minimatch` GHSA-g3hv-75wg-m249 via `expo → @expo/fingerprint`. `@expo/fingerprint` runs at build time only and never receives user-controlled glob patterns.
 - `security/production-audit-baseline.json` was regenerated from that report and is the new upper bound. The failure-path tests in `tests/dependency-security.test.mjs` now mutate the remaining `minimatch` chain.
+
+## Addendum 2026-11-24: Expo 57.0.34 patch alignment
+
+- **Why:** Expo published patch releases on 23 Nov 2026. CI's mandatory `npx expo install --check` then failed on PRs #39 and #40, while every test passed.
+- **Upgrade:** `expo` 57.0.33 → 57.0.34, `@expo/metro-runtime` 57.0.18 → 57.0.19, `expo-image-picker` 57.0.21 → 57.0.22 and `expo-splash-screen` 57.0.11 → 57.0.12. These are the versions the check names.
+- **Lockfile:** 17 packages changed; all of them are Expo packages or their dependencies.
+  - **One new package:** `2g@1.0.1` (MIT; published 2019 by the maintainer of `fetch-nodeshim` and `multitars`). It comes in via `@expo/cli → @expo/ws-tunnel@2.1.0`, which is build and dev tooling and is not bundled into the app.
+  - **Patch bumps only, all under `@expo/cli`:** `agent-cli-detector` 0.1.7 → 0.1.8, `multitars` 1.0.2 → 1.0.3, `fetch-nodeshim` 0.4.10 → 0.4.11, `node-forge` 1.4.3 → 1.4.4 and `source-map-js` 1.2.3 → 1.2.4.
+- **Audit:** `node scripts/audit-production.mjs` still reports 3 known findings against an upper bound of 3, with no new advisories. The baseline file is unchanged.

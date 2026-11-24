@@ -1,7 +1,8 @@
 import { expect, test } from '@playwright/test';
-import { backend } from './account-fixtures';
+import { backend, asStudent } from './account-fixtures';
 
 test('Stuora Bot finds real affordable rooms with backend filters and opens Housing', async ({ page }) => {
+  await asStudent(page);
   await backend(page);
   const calls: { kind: string | null; city: string | null; price: string | null; select: string | null }[] = [];
   await page.route('**/rest/v1/listings?*', async route => {
@@ -36,6 +37,7 @@ test('Stuora Bot finds real affordable rooms with backend filters and opens Hous
 });
 
 test('Stuora Bot never fabricates jobs or implies a real generative model is active', async ({ page }) => {
+  await asStudent(page);
   await backend(page);
   await page.route('**/rest/v1/listings?*', async route => route.fulfill({ json: [] }));
   await page.goto('/');
@@ -49,6 +51,7 @@ test('Stuora Bot never fabricates jobs or implies a real generative model is act
 });
 
 test('Stuora Bot searches only public group metadata, not member messages', async ({ page }) => {
+  await asStudent(page);
   await backend(page);
   const searched: string[] = [];
   await page.route('**/rest/v1/student_groups?*', async route => {
@@ -72,6 +75,7 @@ test('Stuora Bot searches only public group metadata, not member messages', asyn
 });
 
 test('Stuora Bot interprets German and international thousands separators as euros, not cents', async ({ page }) => {
+  await asStudent(page);
   await backend(page);
   const filtered: string[] = [];
   await page.route('**/rest/v1/listings?*', async route => {
@@ -105,6 +109,7 @@ test('Stuora Bot interprets German and international thousands separators as eur
 });
 
 test('Stuora Bot blocks duplicate requests while an async search is pending and restores input when finished', async ({ page }) => {
+  await asStudent(page);
   await backend(page);
   let begin!: () => void;
   const started = new Promise<void>(resolve => { begin = resolve; });
@@ -256,6 +261,7 @@ test('desktop assistant is a bounded side panel; mobile remains a full-screen mo
 });
 
 test('selected student city drives grounded Bot results and no Berlin fallback', async ({ page }) => {
+  await asStudent(page);
   await backend(page);
   const botCities: string[] = [];
   await page.route('**/rest/v1/student_groups?*', async route => {

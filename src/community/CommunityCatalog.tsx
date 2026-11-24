@@ -27,6 +27,9 @@ type Entry = {
   city: string;
   price_cents: number;
   created_at: string;
+  // Jobs, Trips and Events are published only after Stuora moderators approve them.
+  // Other students never receive pending or rejected posts; only their author does.
+  review: 'pending' | 'approved' | 'rejected';
   details: Detail;
 };
 
@@ -45,6 +48,14 @@ function formatDate(value: string | null | undefined) {
     ? new Intl.DateTimeFormat('en-GB', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Europe/Berlin' }).format(date)
     : 'Date unavailable';
 }
+function ReviewNotice({ review }: { review: Entry['review'] }) {
+  if (review === 'approved') return null;
+  return <Text accessibilityRole="text" style={styles.reviewNotice}>
+    {review === 'pending'
+      ? 'Awaiting Stuora review. Only you can see this until a moderator approves it.'
+      : 'Not approved. Only you can see this. Check your Stuora notices for the reason.'}
+  </Text>;
+}
 function normalize(row: Record<string, unknown>, table: 'trip_details' | 'job_details' | 'event_details'): Entry | null {
   if (typeof row.id !== 'string' || typeof row.title !== 'string' || typeof row.city !== 'string') return null;
   const candidate = row[table];
@@ -57,6 +68,7 @@ function normalize(row: Record<string, unknown>, table: 'trip_details' | 'job_de
     description: typeof row.description === 'string' ? row.description : '',
     price_cents: typeof row.price_cents === 'number' ? row.price_cents : 0,
     created_at: typeof row.created_at === 'string' ? row.created_at : '',
+    review: row.review_status === 'pending' || row.review_status === 'rejected' ? row.review_status : 'approved',
     details: details || {},
   };
 }
@@ -88,7 +100,7 @@ export default function CommunityCatalog({ category, search: searchInput, prefer
     setEntries([]);
     const timeout = setTimeout(() => { if (!ac.signal.aborted) { setBusy(false); setError(true); ac.abort(); } }, 15000);
     const detail = DETAIL[category];
-    const select = 'id,owner_id,title,description,city,price_cents,created_at,' +
+    const select = 'id,owner_id,title,description,city,price_cents,created_at,review_status,' +
       detail + '(' + (category === 'Trips' ? 'destination,starts_at,ends_at,capacity' :
         category === 'Events' ? 'venue_name,starts_at,ends_at,capacity' :
           'company_name,compensation_text,workplace_mode') + ')';
@@ -138,6 +150,7 @@ export default function CommunityCatalog({ category, search: searchInput, prefer
   if (active) return <View style={styles.panel}>
     {action(`Back to ${category}`, () => setSelected(null))}
     <Text style={styles.title}>{active.title}</Text>
+    <ReviewNotice review={active.review} />
     <Text style={styles.detailMeta}>{active.city}</Text>
     {fields(active)}
     <Text style={styles.description}>{active.description || 'No description provided.'}</Text>
@@ -180,6 +193,7 @@ export default function CommunityCatalog({ category, search: searchInput, prefer
       <Pressable accessibilityRole="button" accessibilityLabel={`View ${item.title}`} key={item.id}
         onPress={() => setSelected(item.id)} style={styles.card}>
         <Text style={styles.title}>{item.title}</Text>
+        <ReviewNotice review={item.review} />
         <Text style={styles.detailMeta}>{item.city}</Text>
         {fields(item)}
         <Text numberOfLines={2} style={styles.muted}>{item.description}</Text>
@@ -191,6 +205,7 @@ export default function CommunityCatalog({ category, search: searchInput, prefer
 
 const styles = StyleSheet.create({
   list: { gap: 14 },
+  reviewNotice: { alignSelf: 'flex-start', color: '#5B3A00', backgroundColor: '#FFF4D6', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4, fontSize: 12, fontWeight: '700' },
   panel: { backgroundColor: '#FFFFFF', padding: 22, borderRadius: 18, borderWidth: 1, borderColor: '#E9EAF1', gap: 12 },
   info: { backgroundColor: '#FFFFFF', padding: 17, borderRadius: 18, borderWidth: 1, borderColor: '#E9EAF1', gap: 10, alignItems: 'flex-start' },
   cityInput: { width: '100%', maxWidth: 320, borderRadius: 12, borderWidth: 1, borderColor: '#DDDDEA', paddingHorizontal: 13, paddingVertical: 11, backgroundColor: '#FFFFFF', color: '#11162F' },

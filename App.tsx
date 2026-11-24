@@ -10,6 +10,9 @@ import GroupWorkspace from './src/groups/GroupWorkspace';
 import StuoraBotOverlay from './src/ai/StuoraBotOverlay';
 import FloatingStuoraBot from './src/ai/FloatingStuoraBot';
 import { useAuth } from './src/account/AuthProvider';
+import StudentCatalogueGate from './src/account/StudentCatalogueGate';
+import { catalogueAccess } from './src/account/studentAccess';
+import { clearListingPhotoUrls } from './src/listings/listingPhotoUrls';
 import { Icon, StuoraMark } from './src/ui/Brand';
 import { EditorialImage } from './src/ui/EditorialImage';
 import LegalPage, { LegalLinks, type LegalDocument } from './src/legal/LegalPage';
@@ -185,6 +188,9 @@ function SearchField({ value, onChangeText, placeholder, onSubmit, onClear, clea
 
 export default function App({ onOpenSavings }: { onOpenSavings: () => void }) {
   const { session, profile } = useAuth();
+  // Student-posted listings, photos and groups are for signed-in GISMA students only.
+  const access = catalogueAccess(session);
+  useEffect(() => { clearListingPhotoUrls(); }, [session?.user.id]);
   const { width, height } = useWindowDimensions();
   const isDesktop = width >= 960;
   const [initialWebDestination] = useState(readWebDestination);
@@ -353,11 +359,13 @@ export default function App({ onOpenSavings }: { onOpenSavings: () => void }) {
             {discoverySections.map(section => <DiscoverySectionPanel key={section.id} section={section} desktop={isDesktop} onOpen={goToCategory} />)}
           </View>
 
+          {access !== 'student' ? <StudentCatalogueGate access={access} onAccount={() => setTab('profile')} /> : <>
           <View style={styles.sectionHeaderInline}><Text style={styles.sectionTitle}>Community housing</Text><Pressable accessibilityRole="button" accessibilityLabel="See all housing" onPress={() => goToCategory('Housing')} style={styles.seeAllHitArea}><Text style={styles.linkText}>See all</Text></Pressable></View>
           <ListingWorkspace key={`home-${session?.user.id ?? 'public'}`} category="Housing" preferredCity={preferredCity} preview onAccount={() => setTab('profile')} onMessage={openListingConversation} onCreate={() => startListing('Housing')} />
 
           <View style={styles.sectionHeaderInline}><Text style={styles.sectionTitle}>Marketplace</Text><Pressable accessibilityRole="button" accessibilityLabel="See all marketplace" onPress={() => goToCategory('Marketplace')} style={styles.seeAllHitArea}><Text style={styles.linkText}>See all</Text></Pressable></View>
           <ListingWorkspace key={`home-market-${session?.user.id ?? 'public'}`} category="Marketplace" preferredCity={preferredCity} preview onAccount={() => setTab('profile')} onMessage={openListingConversation} onCreate={() => startListing('Marketplace')} />
+          </>}
           <LegalLinks onNavigate={openLegal} />
         </ScrollView>
       )}
@@ -398,7 +406,7 @@ export default function App({ onOpenSavings }: { onOpenSavings: () => void }) {
               <SearchField value={search} onChangeText={setSearch} onClear={() => setSearch('')} clearLabel={`Clear ${category.toLowerCase()} search`} label={category === 'People' ? 'Search people by name' : `Search ${category.toLowerCase()} listings`} placeholder={`Search ${category.toLowerCase()}…`} />
             </View>
           ) : null}
-          {category === 'Housing' || category === 'Marketplace' ? <ListingWorkspace key={`${category}-${session?.user.id ?? 'public'}`} category={category} preferredCity={preferredCity} search={search} onAccount={() => setTab('profile')} onMessage={openListingConversation} onCreate={() => startListing(category)} onClearSearch={() => setSearch('')} /> : category === 'People' ? <PeopleDirectory key={session?.user.id ?? 'public'} search={search} onAccount={() => setTab('profile')} /> : category === 'Groups' ? <GroupWorkspace key={session?.user.id ?? 'public'} onAccount={() => setTab('profile')} /> : <CommunityCatalog key={category + (session?.user.id ?? 'public')} onSignIn={() => setTab('profile')} category={category} search={search} preferredCity={preferredCity} onHousing={() => goToCategory('Housing')} />}
+          {access !== 'student' ? <StudentCatalogueGate access={access} onAccount={() => setTab('profile')} /> : category === 'Housing' || category === 'Marketplace' ? <ListingWorkspace key={`${category}-${session?.user.id ?? 'public'}`} category={category} preferredCity={preferredCity} search={search} onAccount={() => setTab('profile')} onMessage={openListingConversation} onCreate={() => startListing(category)} onClearSearch={() => setSearch('')} /> : category === 'People' ? <PeopleDirectory key={session?.user.id ?? 'public'} search={search} onAccount={() => setTab('profile')} /> : category === 'Groups' ? <GroupWorkspace key={session?.user.id ?? 'public'} onAccount={() => setTab('profile')} /> : <CommunityCatalog key={category + (session?.user.id ?? 'public')} onSignIn={() => setTab('profile')} category={category} search={search} preferredCity={preferredCity} onHousing={() => goToCategory('Housing')} />}
         </ScrollView>
       )}
 

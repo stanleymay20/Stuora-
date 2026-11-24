@@ -1,4 +1,9 @@
 -- ROLLBACK-ONLY staging authorization smoke test.
+-- SUPERSEDED after 20261124100000 (GISMA-only access): this script runs as the
+-- first two real student profiles, and staging has only one GISMA student, so a
+-- non-GISMA peer now (correctly) sees no files. Use
+-- stuora-group-files-gisma-staging-rollback.sql, which creates its identities
+-- inside the transaction.
 -- Uses two existing STAGING student identities without reading their names,
 -- sending notifications, downloading files, or persisting any data.
 -- Never execute in production. Entire transaction rolls back by design.

@@ -11,7 +11,7 @@ const ab = id(21), bc = id(22);
 async function database(inheritedGrants) {
   const db = new PGlite();
   await db.exec(`
-    create role anon; create role authenticated; create role service_role;
+    create role anon; create role authenticated; create role service_role; create role supabase_auth_admin;
     create schema auth;
     create table auth.users (id uuid primary key, email text, email_confirmed_at timestamptz);
     create function auth.uid() returns uuid language sql stable as
@@ -56,7 +56,8 @@ async function database(inheritedGrants) {
   assert.ok(files.length > 0, 'At least one controlled migration is required');
   for (const f of files) await db.exec(readFileSync(new URL(`../supabase/migrations/${f}`, import.meta.url), 'utf8'));
   await db.exec(`
-    insert into auth.users values ('${a}'), ('${b}'), ('${c}');
+    insert into auth.users (id, email, email_confirmed_at) values
+      ('${a}', 'alice@gisma-student.com', now()), ('${b}', 'bob@gisma-student.com', now()), ('${c}', 'charlie@gisma-student.com', now());
     insert into public.profiles (id, display_name, city, is_discoverable)
       values ('${a}', 'Alice', 'Aachen', true), ('${b}', 'Bob', 'Aachen', true), ('${c}', 'Private Charlie', 'Aachen', false);
     insert into public.listings (id, owner_id, kind, status, title, city, price_cents) values
@@ -67,6 +68,8 @@ async function database(inheritedGrants) {
     insert into public.housing_details (listing_id, housing_type, rent_cents) values ('${house}', 'room', 62000);
     insert into public.marketplace_details (listing_id) values ('${draft}');
     insert into public.trip_details (listing_id, destination, starts_at, capacity) values ('${trip}', 'Prague', now(), 2);
+    -- Trusted (no-JWT) seed: these community posts have already passed moderator review.
+    update public.listings set review_status = 'approved', reviewed_at = now() where id in ('${job}', '${trip}');
     insert into public.conversations (id, creator_id) values ('${ab}', '${a}'), ('${bc}', '${b}');
     insert into public.conversation_members (conversation_id, user_id) values
       ('${ab}', '${a}'), ('${ab}', '${b}'), ('${bc}', '${b}'), ('${bc}', '${c}');
@@ -95,7 +98,8 @@ for (const inheritedGrants of [false, true]) {
       await assert.rejects(as('authenticated', user, sql), e => e.code === code); assertions++;
     }
     try {
-      await count('anon', null, 'select * from public.listings', 3);
+      await count('anon', null, 'select * from public.listings', 0); // student-only catalogue
+      await count('authenticated', b, 'select * from public.listings', 3);
       await count('anon', null, 'select * from public.marketplace_details', 0);
       await count('authenticated', a, 'select * from public.listings', 4);
       await count('authenticated', b, `select * from public.listings where id = '${draft}'`, 0);
@@ -181,7 +185,8 @@ for (const inheritedGrants of [false, true]) {
       assert.equal(mediaGrants[0].owner_cleanup,true); assertions++;
       await db.query(`insert into public.listing_media(listing_id,object_path,sort_order)
         values ('${house}','${a}/${house}/room.jpg',0)`);
-      await count('anon',null,`select * from public.listing_media where listing_id='${house}'`,1);
+      await count('anon', null, `select * from public.listing_media where listing_id='${house}'`, 0); // student-only catalogue
+      await count('authenticated', b, `select * from public.listing_media where listing_id='${house}'`, 1);
       await db.query(`insert into public.listing_media(listing_id,object_path)
         values ('${draft}','${a}/${draft}/draft.jpg')`);
       await count('anon',null,`select * from public.listing_media where listing_id='${draft}'`,0);
@@ -326,11 +331,14 @@ for (const inheritedGrants of [false, true]) {
       const save = (listingId, kind, title, price = 3500, housingType = 'room', condition = 'good') => `select public.save_student_listing(${listingId ? `'${listingId}'` : 'null'}, '${kind}', '${title}', 'Student listing', 'Berlin', ${price}, '${housingType}', true, true, '${condition}') as id`;
       const { rows: created } = await as('authenticated', a, save(null, 'housing', 'Persistent room', 65000));
       const liveHouse = created[0].id;
-      await count('anon', null, `select * from public.housing_details where listing_id = '${liveHouse}' and rent_cents = 65000`, 1);
+      await count('anon', null, `select * from public.housing_details where listing_id = '${liveHouse}' and rent_cents = 65000`, 0); // student-only catalogue
+      await count('authenticated', b, `select * from public.housing_details where listing_id = '${liveHouse}' and rent_cents = 65000`, 1);
       await count('authenticated', a, save(liveHouse, 'housing', 'Edited room', 60000), 1);
-      await count('anon', null, `select * from public.housing_details where listing_id = '${liveHouse}' and rent_cents = 60000`, 1);
+      await count('anon', null, `select * from public.housing_details where listing_id = '${liveHouse}' and rent_cents = 60000`, 0); // student-only catalogue
+      await count('authenticated', b, `select * from public.housing_details where listing_id = '${liveHouse}' and rent_cents = 60000`, 1);
       await deny(a, save(liveHouse, 'housing', 'Rollback edited room', 100, 'invalid_type'), '23514');
-      await count('anon', null, `select * from public.listings where id = '${liveHouse}' and title = 'Edited room' and price_cents = 60000`, 1);
+      await count('anon', null, `select * from public.listings where id = '${liveHouse}' and title = 'Edited room' and price_cents = 60000`, 0); // student-only catalogue
+      await count('authenticated', b, `select * from public.listings where id = '${liveHouse}' and title = 'Edited room' and price_cents = 60000`, 1);
       await deny(b, save(liveHouse, 'housing', 'Hijacked room'));
       await deny(a, save(liveHouse, 'marketplace', 'Changed kind'));
       await deny(a, save(null, 'trip', 'Unsupported trip'), '22023');
@@ -344,9 +352,11 @@ for (const inheritedGrants of [false, true]) {
       await assert.rejects(as('anon', null, save(null, 'marketplace', 'Anonymous listing')), e => e.code === '42501'); assertions++;
       const { rows: market } = await as('authenticated', a, save(null, 'marketplace', 'Free desk', 0));
       const liveMarket = market[0].id;
-      await count('anon', null, `select * from public.marketplace_details where listing_id = '${liveMarket}' and item_condition = 'good'`, 1);
+      await count('anon', null, `select * from public.marketplace_details where listing_id = '${liveMarket}' and item_condition = 'good'`, 0); // student-only catalogue
+      await count('authenticated', b, `select * from public.marketplace_details where listing_id = '${liveMarket}' and item_condition = 'good'`, 1);
       await deny(a, save(liveMarket, 'marketplace', 'Invalid edit', 10, 'room', 'invalid'), '22P02');
-      await count('anon', null, `select * from public.listings where id = '${liveMarket}' and title = 'Free desk'`, 1);
+      await count('anon', null, `select * from public.listings where id = '${liveMarket}' and title = 'Free desk'`, 0); // student-only catalogue
+      await count('authenticated', b, `select * from public.listings where id = '${liveMarket}' and title = 'Free desk'`, 1);
       await deny(a, `delete from public.marketplace_details where listing_id='${liveMarket}'`, '23514');
       await count('authenticated', a, `update public.listings set status = 'closed' where id = '${liveMarket}' returning id`, 1);
       await count('anon', null, `select * from public.listings where id = '${liveMarket}'`, 0);
@@ -379,6 +389,8 @@ for (const inheritedGrants of [false, true]) {
         values ('${a}','trip','draft','Direct bypass trip','Aachen',0)`, '42501');
 
       await db.exec(`update auth.users set email=id::text || '@gisma-student.com',email_confirmed_at=now() where id in ('${a}','${b}')`);
+      // c stays confirmed but outside GISMA, so it must be refused.
+      await db.exec(`update auth.users set email='charlie@example.test' where id='${c}'`);
       for (const [kind, detail] of [
         ['event', {venue_name:'Campus Hall', starts_at:'2099-01-01T12:00Z', capacity:1}],
         ['trip', {destination:'Potsdam', starts_at:'2099-01-01T12:00Z', capacity:2}],
@@ -390,6 +402,20 @@ for (const inheritedGrants of [false, true]) {
         const activity = result.rows[0].id;
         const response = action => `select public.student_activity_response('${activity}','${action}') result`;
         const action = kind === 'job' ? 'apply' : 'join';
+        const review = decision => `select public.review_student_activity('${activity}','${decision}','Checked the organiser details.')`;
+        // Submitted, not published: only the author sees it, and nobody can act on it.
+        const { rows: own } = await as('authenticated', a, `select review_status from public.listings where id='${activity}'`);
+        assert.equal(own[0].review_status, 'pending');
+        await count('authenticated', b, `select id from public.listings where id='${activity}'`, 0);
+        await count('anon', null, `select id from public.listings where id='${activity}'`, 0);
+        await deny(b, response(action), '42501');
+        // Students cannot review, not even their own submission.
+        await deny(a, review('approve'), '42501');
+        await deny(b, review('approve'), '42501');
+        // A Stuora moderator (staff, not a GISMA student) approves it.
+        await db.exec(`insert into public.moderators(user_id) values ('${c}') on conflict do nothing`);
+        await as('authenticated', c, review('approve'));
+        await count('authenticated', b, `select id from public.listings where id='${activity}'`, 1);
         await deny(a, response(action),'42501');
         const first = await as('authenticated', b, response(action));
         assert.equal(first.rows[0].result[kind === 'job' ? 'applied' : 'joined'],true);
@@ -456,7 +482,7 @@ for (const inheritedGrants of [false, true]) {
       assert.equal(defaults.find(row => row.table_name === 'listings' && row.column_name === 'city')?.column_default, null);
       assertions += 4;
       const newId = id(99);
-      await db.exec(`insert into auth.users (id) values ('${newId}')`);
+      await db.exec(`insert into auth.users (id, email, email_confirmed_at) values ('${newId}', 'opt-in@gisma-student.com', now())`);
       const { rows: privateNew } = await as('authenticated', newId,
         `insert into public.profiles (id, display_name, city) values ('${newId}', 'Opt In Only', 'Köln') returning is_discoverable`);
       assert.equal(privateNew[0].is_discoverable, false); assertions++;
@@ -498,7 +524,8 @@ for (const inheritedGrants of [false, true]) {
       const { rows: created } = await as('authenticated', a,
         "select public.create_student_group('Berlin Physics', 'Weekly study circle', 'Berlin', 'Study') id");
       const groupId = created[0].id;
-      await expectCount('anon', null, `select * from public.student_groups where id = '${groupId}'`, 1);
+      await expectCount('anon', null, `select * from public.student_groups where id = '${groupId}'`, 0); // student-only catalogue
+      await expectCount('authenticated', b, `select * from public.student_groups where id = '${groupId}'`, 1);
       await expectCount('authenticated', a, `select * from public.student_group_members where group_id = '${groupId}'`, 1);
       await expectCount('authenticated', b, `select * from public.student_group_members where group_id = '${groupId}'`, 0);
       await assert.rejects(as('authenticated', b,

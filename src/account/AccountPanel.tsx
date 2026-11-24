@@ -7,7 +7,7 @@ import { credentialsError, emailError, newPasswordError, profileError } from './
 import { stuoraAuthError } from './authCopy';
 import AccountDataControls from './AccountDataControls';
 import { LegalLinks, type LegalDocument } from '../legal/LegalPage';
-import { ModerationNotices, ModerationQueue } from '../moderation/ModerationQueue';
+import { ActivityReviewQueue, ModerationNotices, ModerationQueue } from '../moderation/ModerationQueue';
 
 const authRedirectUrl = () => Platform.OS === 'web' && typeof window !== 'undefined'
   ? window.location.origin
@@ -276,6 +276,7 @@ export default function AccountPanel({ onLegal }: { onLegal?: (doc: LegalDocumen
       {button('Sign out', () => void logout())}
       <ModerationNotices userId={session.user.id} />
       {isModerator ? <ModerationQueue /> : null}
+      {isModerator ? <ActivityReviewQueue /> : null}
       <AccountDataControls />
     </>}
     {onLegal ? <LegalLinks onNavigate={onLegal} /> : null}

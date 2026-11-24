@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { account, session, signin } from './account-fixtures';
+import { account, session, signin, asStudent } from './account-fixtures';
 const userId = session().user.id;
 type Media = { id: string; listing_id: string; object_path: string; sort_order: number; created_at: string };
 type Stored = { id: string; owner_id: string; kind: string; status: string; title: string; description: string; city: string; price_cents: number; housing_details: Record<string, unknown> | null; marketplace_details: Record<string, unknown> | null; listing_media: Media[] };
@@ -113,7 +113,10 @@ for (const category of ['Housing', 'Marketplace']) for (const closure of ['archi
     await expect(page.getByText('Listing saved. Photo uploads are temporarily paused while Stuora completes secure processing.')).toBeVisible();
     await expect(page.getByRole('button', { name: /^Add photo/ })).toHaveCount(0);
     expect(data.rows[0].price_cents).toBe(category === 'Housing' ? 65025 : 0);
-    const secondContext = await browser.newContext(); const second = await secondContext.newPage(); await data.install(second); await second.goto('/'); await explore(second, category);
+    const secondContext = await browser.newContext(); const second = await secondContext.newPage();
+    // The second client is another GISMA student: the catalogue is student-only.
+    await asStudent(second, 'bob@gisma-student.com', '00000000-0000-0000-0000-000000000002');
+    await data.install(second); await second.goto('/'); await explore(second, category);
     await second.getByRole('button', { name: `View ${category} from Alice` }).click();
     await expect(second.getByText('A real persistent student listing')).toBeVisible();
     await expect(second.getByRole('button', { name: 'Edit listing', exact: true })).toHaveCount(0);
@@ -170,6 +173,7 @@ test('Stuora paused-photo release blocks direct Storage uploading for owners and
   await page.getByRole('button',{name:'View Media desk'}).click();
   await expect(page.getByRole('button',{name:/^Add photo/})).toHaveCount(0);
   const visitor=await browser.newContext(),other=await visitor.newPage();
+  await asStudent(other,'bob@gisma-student.com','00000000-0000-0000-0000-000000000002');
   await data.install(other); await other.goto('/'); await explore(other,'Marketplace');
   await other.getByRole('button',{name:'View Media desk'}).click();
   await expect(other.getByRole('button',{name:/^Add photo/})).toHaveCount(0);
@@ -212,6 +216,7 @@ test('anonymous posting gate, listing read failure, validation and save retry pr
 });
 
 test('public pagination loads beyond the first page', async ({ page }) => {
+  await asStudent(page);
   const data = api();
   for (let n = 0; n < 25; n++) data.rows.push({ id: `page-${n}`, owner_id: userId, kind: 'marketplace', status: 'active', title: `Desk ${n}`, description: '', city: 'Berlin', price_cents: 100, housing_details: null, marketplace_details: { item_condition: 'good' }, listing_media: [] });
   await data.install(page); await page.goto('/'); await explore(page, 'Marketplace');
@@ -231,6 +236,7 @@ test('unsupported categories cannot publish session-only data', async ({ page })
 });
 
 test('stalled listing read times out and retry recovers without stale results', async ({ page }) => {
+  await asStudent(page);
   const data = api(); await data.install(page); await page.clock.install();
   await page.goto('/'); await explore(page, 'Marketplace');
   await expect(page.getByRole('button', { name: 'Refresh listings' })).toBeEnabled();
@@ -258,6 +264,7 @@ test('stalled listing read times out and retry recovers without stale results', 
 });
 
 test('search changes cancel old listing requests and their timers', async ({ page }) => {
+  await asStudent(page);
   const data = api(); await data.install(page); await page.clock.install();
   await page.goto('/'); await explore(page, 'Marketplace');
   await expect(page.getByRole('button', { name: 'Refresh listings' })).toBeEnabled();
@@ -284,6 +291,7 @@ test('search changes cancel old listing requests and their timers', async ({ pag
 
 for (const category of ['Housing', 'Marketplace'] as const) {
   test(`${category}: city and maximum-price filters are sent to Supabase and clear correctly`, async ({ page }) => {
+    await asStudent(page);
     const data = api(); await data.install(page);
     const requests: { kind: string | null; city: string | null; maximum: string | null }[] = [];
     await page.route('**/rest/v1/listings?*', async route => {
