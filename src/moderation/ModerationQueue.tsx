@@ -15,6 +15,7 @@ export function ModerationQueue() {
   const [state, setState] = useState<'loading' | 'ready' | 'error'>('loading');
   const [reasons, setReasons] = useState<Record<string, string>>({});
   const [message, setMessage] = useState('');
+  const [saving, setSaving] = useState<string | null>(null);
   const load = useCallback(async () => {
     setState('loading');
     const { data, error } = await supabase.rpc('moderation_queue', { p_status: 'open', p_limit: 50 });
@@ -23,9 +24,12 @@ export function ModerationQueue() {
   }, []);
   useEffect(() => { void load(); }, [load]);
   const decide = async (item: Item, action: Action) => {
+    if (saving) return; // one decision at a time; a double tap must not send a second one
     const reason = (reasons[item.id] ?? '').trim();
     if (reason.length < 10) { setMessage('Write a reason of at least 10 characters. The student will see it.'); return; }
+    setSaving(item.id);
     const { error } = await supabase.rpc('moderate_report', { p_report: item.id, p_action: action, p_reason: reason });
+    setSaving(null);
     if (error) { setMessage(error.message.length < 160 ? error.message : 'The decision could not be saved.'); return; }
     setMessage(`${actionLabels[action]} recorded.`);
     setItems(current => current.filter(i => i.id !== item.id));
@@ -48,8 +52,10 @@ export function ModerationQueue() {
             placeholder="Reason shown to the student" placeholderTextColor="#6B7287" style={styles.input} />
           <View style={styles.actions}>
             {(Object.keys(actionLabels) as Action[]).filter(a => !(a === 'remove_content' && item.target_kind === 'user')).map(action => (
-              <Pressable key={action} accessibilityRole="button" onPress={() => void decide(item, action)}
-                style={[styles.button, action === 'suspend_user' && styles.danger]}>
+              <Pressable key={action} accessibilityRole="button" disabled={saving !== null}
+                accessibilityState={{ disabled: saving !== null, busy: saving === item.id }}
+                onPress={() => void decide(item, action)}
+                style={[styles.button, action === 'suspend_user' && styles.danger, saving !== null && styles.disabled]}>
                 <Text style={[styles.buttonText, action === 'suspend_user' && styles.dangerText]}>{actionLabels[action]}</Text>
               </Pressable>
             ))}
@@ -82,6 +88,7 @@ export function ActivityReviewQueue() {
   const [state, setState] = useState<'loading' | 'ready' | 'error'>('loading');
   const [reasons, setReasons] = useState<Record<string, string>>({});
   const [message, setMessage] = useState('');
+  const [saving, setSaving] = useState<string | null>(null);
   const load = useCallback(async () => {
     setState('loading');
     const { data, error } = await supabase.rpc('list_pending_student_activities');
@@ -90,9 +97,12 @@ export function ActivityReviewQueue() {
   }, []);
   useEffect(() => { void load(); }, [load]);
   const decide = async (item: Activity, decision: 'approve' | 'reject') => {
+    if (saving) return; // one decision at a time; a double tap must not send a second one
     const reason = (reasons[item.id] ?? '').trim();
     if (reason.length < 10) { setMessage('Write a reason of at least 10 characters. The student will see it.'); return; }
+    setSaving(item.id);
     const { error } = await supabase.rpc('review_student_activity', { p_listing: item.id, p_decision: decision, p_reason: reason });
+    setSaving(null);
     if (error) { setMessage(error.message.length < 160 ? error.message : 'The decision could not be saved.'); return; }
     setMessage(decision === 'approve' ? 'Approved. It is now visible to students.' : 'Rejected. The student has been told why.');
     setItems(current => current.filter(i => i.id !== item.id));
@@ -114,10 +124,14 @@ export function ActivityReviewQueue() {
             onChangeText={text => setReasons(r => ({ ...r, [item.id]: text }))}
             placeholder="Reason shown to the student" placeholderTextColor="#6B7287" style={styles.input} />
           <View style={styles.actions}>
-            <Pressable accessibilityRole="button" accessibilityLabel={`Approve ${item.title}`} onPress={() => void decide(item, 'approve')} style={styles.button}>
+            <Pressable accessibilityRole="button" accessibilityLabel={`Approve ${item.title}`} disabled={saving !== null}
+              accessibilityState={{ disabled: saving !== null, busy: saving === item.id }}
+              onPress={() => void decide(item, 'approve')} style={[styles.button, saving !== null && styles.disabled]}>
               <Text style={styles.buttonText}>Approve</Text>
             </Pressable>
-            <Pressable accessibilityRole="button" accessibilityLabel={`Reject ${item.title}`} onPress={() => void decide(item, 'reject')} style={[styles.button, styles.danger]}>
+            <Pressable accessibilityRole="button" accessibilityLabel={`Reject ${item.title}`} disabled={saving !== null}
+              accessibilityState={{ disabled: saving !== null, busy: saving === item.id }}
+              onPress={() => void decide(item, 'reject')} style={[styles.button, styles.danger, saving !== null && styles.disabled]}>
               <Text style={[styles.buttonText, styles.dangerText]}>Reject</Text>
             </Pressable>
           </View>
@@ -176,4 +190,5 @@ const styles = StyleSheet.create({
   buttonText: { color: '#4325C9', fontWeight: '800', fontSize: 12 },
   danger: { backgroundColor: '#FCE8EE' },
   dangerText: { color: '#8A1C3A' },
+  disabled: { opacity: 0.55 },
 });
