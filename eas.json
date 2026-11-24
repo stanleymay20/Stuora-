@@ -1,0 +1,40 @@
+{
+  "cli": {
+    "appVersionSource": "local"
+  },
+  "build": {
+    "play-internal": {
+      "distribution": "store",
+      "environment": "preview",
+      "env": {
+        "EXPO_PUBLIC_STUORA_ENV": "staging",
+        "EXPO_PUBLIC_SUPABASE_URL": "https://uptjcspizukpjcoayhtn.supabase.co",
+        "EXPO_PUBLIC_STUORA_EXTERNAL_FEEDS": "enabled"
+      },
+      "android": {
+        "buildType": "app-bundle",
+        "credentialsSource": "remote"
+      }
+    },
+    "testflight": {
+      "extends": "play-internal",
+      "ios": {
+        "credentialsSource": "remote"
+      }
+    },
+    "ios-simulator": {
+      "extends": "play-internal",
+      "distribution": "internal",
+      "ios": {
+        "simulator": true
+      }
+    }
+  },
+  "submit": {
+    "testflight": {
+      "ios": {
+        "ascAppId": "6838005817"
+      }
+    }
+  }
+}
