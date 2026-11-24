@@ -12,7 +12,6 @@ import FloatingStuoraBot from './src/ai/FloatingStuoraBot';
 import { useAuth } from './src/account/AuthProvider';
 import StudentCatalogueGate from './src/account/StudentCatalogueGate';
 import { catalogueAccess } from './src/account/studentAccess';
-import { clearListingPhotoUrls } from './src/listings/listingPhotoUrls';
 import { Icon, StuoraMark } from './src/ui/Brand';
 import { EditorialImage } from './src/ui/EditorialImage';
 import LegalPage, { LegalLinks, type LegalDocument } from './src/legal/LegalPage';
@@ -190,7 +189,6 @@ export default function App({ onOpenSavings }: { onOpenSavings: () => void }) {
   const { session, profile } = useAuth();
   // Student-posted listings, photos and groups are for signed-in GISMA students only.
   const access = catalogueAccess(session);
-  useEffect(() => { clearListingPhotoUrls(); }, [session?.user.id]);
   const { width, height } = useWindowDimensions();
   const isDesktop = width >= 960;
   const [initialWebDestination] = useState(readWebDestination);

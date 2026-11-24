@@ -5,6 +5,7 @@ import { initialAuthUrl, supabase } from '../backend/supabase';
 import { authCallbackMessage, classifyAuthCallback, stripAuthCallbackParams } from './authCallbackNotice';
 import type { Database } from '../backend/database.types';
 import { parseStuoraNativeAuthCallback } from './nativeAuthCallback';
+import { clearListingPhotoUrls } from '../listings/listingPhotoUrls';
 
 export type Profile = Database['public']['Tables']['profiles']['Row'];
 type AuthState = {
@@ -26,6 +27,17 @@ const AuthContext = createContext<AuthState | null>(null);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
+  // Synchronous invalidation before rendering another viewer: an effect in
+  // App runs too late for pending signed Storage URL responses.
+  const viewerId = React.useRef<string | null>(null);
+  const updateSession = (next: Session | null) => {
+    const nextId = next?.user.id ?? null;
+    if (nextId !== viewerId.current) {
+      clearListingPhotoUrls();
+      viewerId.current = nextId;
+    }
+    setSession(next);
+  };
   const [initializing, setInitializing] = useState(true);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loadedUser, setLoadedUser] = useState<string | undefined>(undefined);
@@ -48,7 +60,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
       if (event === 'SIGNED_IN') setRecoveryComplete(false);
       if (event === 'SIGNED_OUT') setRecoveryMode(false);
-      setSession(next);
+      updateSession(next);
       setInitializing(false);
     });
 
@@ -61,7 +73,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         window.history.replaceState(window.history.state, '', stripAuthCallbackParams(window.location.href));
       }
       if (!active || authEvent) return;
-      setSession(data.session);
+      updateSession(data.session);
       setError(issue ? 'Could not restore your session. Please sign in again.' : '');
       setInitializing(false);
     }).catch(() => {

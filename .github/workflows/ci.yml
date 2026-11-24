@@ -5,7 +5,7 @@ on:
     branches: [main, feat/mvp-shell, 'release/android-internal-*', 'release/ios-testflight-*', 'feature/professor-three-section-ui-*', 'feature/private-group-files-*', 'feature/group-file-intake-*', 'feature/group-file-pdf-scan-*', 'feature/self-hosted-clamav-scanner-*', 'feature/clamav-staging-readiness-*']
   pull_request:
     # Also gate stacked PRs that target a feature branch (e.g. remediation PRs).
-    branches: [main, 'feat/**']
+    branches: [main, 'feat/**', 'claude/stuora-0.1.7-integration']
 
 jobs:
   dependency-audit:
@@ -201,6 +201,9 @@ jobs:
 
       - name: Scan web bundle for leaked secrets
         run: node scripts/scan-secrets.mjs
+
+      - name: Reject stale signed-photo URLs after auth-session changes
+        run: node --experimental-strip-types --test tests/photo-session-cache.test.mjs
 
       - name: Install browser for account regression tests
         run: npx playwright install --with-deps chromium
