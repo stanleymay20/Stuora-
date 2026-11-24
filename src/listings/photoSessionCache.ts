@@ -13,6 +13,7 @@ export class SessionScopedPhotoCache {
   private epoch = 0;
   private cache = new Map<string, CachedUrl>();
   private pending: Batch | null = null;
+  private listeners = new Set<() => void>();
   private readonly sign: (paths: string[]) => Promise<Map<string, string>>;
   private readonly fallback: (path: string) => string;
   private readonly ttlMs: number;
@@ -36,6 +37,17 @@ export class SessionScopedPhotoCache {
     this.schedule = schedule;
   }
 
+  /** Changes whenever the viewer changes; URLs resolved under another value are stale. */
+  get generation(): number {
+    return this.epoch;
+  }
+
+  /** Notified synchronously on clear(), so mounted images drop an earlier viewer's URL. */
+  subscribe(listener: () => void): () => void {
+    this.listeners.add(listener);
+    return () => { this.listeners.delete(listener); };
+  }
+
   peek(path: string): string | null {
     const hit = this.cache.get(path);
     return hit && hit.expiresAt - this.refreshMarginMs > this.now() ? hit.url : null;
@@ -47,6 +59,7 @@ export class SessionScopedPhotoCache {
     this.epoch++;
     this.cache.clear();
     this.pending = null;
+    for (const listener of [...this.listeners]) listener();
   }
 
   resolve(path: string): Promise<string | null> {

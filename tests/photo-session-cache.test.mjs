@@ -103,3 +103,63 @@ test('signing failure uses public fallback before bucket cutover; stale failure 
   assert.equal(await fallback, 'https://storage.invalid/public/a.webp');
   assert.equal(failedCache.peek('a.webp'), null, 'failed signing never caches a public URL as a signed one');
 });
+
+test('rapid account switches: only the newest viewer caches, and only one request per viewer is sent', async () => {
+  const tasks = [];
+  const replies = [];
+  const cache = new SessionScopedPhotoCache(paths => {
+    const d = deferred(); replies.push({ paths, d }); return d.promise;
+  }, path => 'https://storage.invalid/public/' + path, 3_600_000, 300_000, () => 0, cb => tasks.push(cb));
+  const results = [];
+  for (let viewer = 0; viewer < 3; viewer++) {
+    results.push(cache.resolve('p.webp'));
+    tasks.shift()();
+    if (viewer < 2) cache.clear();
+  }
+  assert.equal(replies.length, 3);
+  // Replies arrive newest-first, then oldest: no ordering lets an old viewer win.
+  replies[2].d.resolve(new Map([['p.webp', 'signed?token=viewer-2']]));
+  replies[0].d.resolve(new Map([['p.webp', 'signed?token=viewer-0']]));
+  replies[1].d.resolve(new Map([['p.webp', 'signed?token=viewer-1']]));
+  assert.deepEqual(await Promise.all(results), [null, null, 'signed?token=viewer-2']);
+  assert.equal(cache.peek('p.webp'), 'signed?token=viewer-2');
+});
+
+test('concurrent requests for one path share a single signing call; partial replies fall back per path', async () => {
+  const tasks = [];
+  let calls = 0;
+  const cache = new SessionScopedPhotoCache(async paths => {
+    calls++;
+    assert.deepEqual(paths, ['a.webp', 'b.webp']);
+    return new Map([['a.webp', 'signed?a']]); // b is refused by Storage policy
+  }, path => 'public/' + path, 3_600_000, 300_000, () => 0, cb => tasks.push(cb));
+  const reqs = [cache.resolve('a.webp'), cache.resolve('a.webp'), cache.resolve('b.webp')];
+  tasks.shift()();
+  assert.deepEqual(await Promise.all(reqs), ['signed?a', 'signed?a', 'public/b.webp']);
+  assert.equal(calls, 1);
+  assert.equal(cache.peek('b.webp'), null, 'unsigned fallbacks are never cached');
+});
+
+test('an expired entry is re-signed rather than reused', async () => {
+  const tasks = [];
+  let now = 0, calls = 0;
+  const cache = new SessionScopedPhotoCache(async () => {
+    calls++; return new Map([['a.webp', 'signed?v=' + calls]]);
+  }, path => 'public/' + path, 3_600_000, 300_000, () => now, cb => tasks.push(cb));
+  const first = cache.resolve('a.webp'); tasks.shift()(); assert.equal(await first, 'signed?v=1');
+  now = 4_000_000;
+  assert.equal(cache.peek('a.webp'), null, 'expired URLs are never handed out');
+  const second = cache.resolve('a.webp'); tasks.shift()(); assert.equal(await second, 'signed?v=2');
+});
+
+test('clear() advances the generation and synchronously notifies mounted images', () => {
+  const cache = new SessionScopedPhotoCache(async () => new Map(), p => p, 1, 0, () => 0, cb => cb());
+  const seen = [];
+  const unsubscribe = cache.subscribe(() => seen.push(cache.generation));
+  const before = cache.generation;
+  cache.clear();
+  assert.deepEqual(seen, [before + 1], 'listener runs inside clear(), before the next render');
+  unsubscribe();
+  cache.clear();
+  assert.equal(seen.length, 1, 'unsubscribed listeners are not called');
+});

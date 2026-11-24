@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useSyncExternalStore } from 'react';
 import { supabase } from '../backend/supabase';
 import { SessionScopedPhotoCache } from './photoSessionCache';
 
@@ -31,23 +31,29 @@ export function clearListingPhotoUrls() {
   photos.clear();
 }
 
+const subscribe = (listener: () => void) => photos.subscribe(listener);
+const generation = () => photos.generation;
+
 export function useListingPhotoUrl(path: string | null | undefined): string | null {
-  const [resolved, setResolved] = useState<{ path: string | null; url: string | null }>(() => ({
+  // Re-render on every viewer change, even if this image stays mounted.
+  const epoch = useSyncExternalStore(subscribe, generation, generation);
+  const [resolved, setResolved] = useState<{ path: string | null; epoch: number; url: string | null }>(() => ({
     path: path ?? null,
+    epoch,
     url: path ? photos.peek(path) : null,
   }));
   useEffect(() => {
     if (!path) {
-      setResolved({ path: null, url: null });
+      setResolved({ path: null, epoch, url: null });
       return;
     }
     let active = true;
-    setResolved({ path, url: photos.peek(path) });
+    setResolved({ path, epoch, url: photos.peek(path) });
     void photos.resolve(path).then(next => {
-      if (active) setResolved({ path, url: next });
+      if (active) setResolved({ path, epoch, url: next });
     });
     return () => { active = false; };
-  }, [path]);
-  // A component reused for a different picture must never flash an old image.
-  return resolved.path === (path ?? null) ? resolved.url : null;
+  }, [path, epoch]);
+  // Never show a URL resolved for another picture or another signed-in viewer.
+  return resolved.path === (path ?? null) && resolved.epoch === epoch ? resolved.url : null;
 }
