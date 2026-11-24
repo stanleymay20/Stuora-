@@ -11,7 +11,7 @@ const ab = id(21), bc = id(22);
 async function database(inheritedGrants) {
   const db = new PGlite();
   await db.exec(`
-    create role anon; create role authenticated; create role service_role;
+    create role anon; create role authenticated; create role service_role; create role supabase_auth_admin;
     create schema auth;
     create table auth.users (id uuid primary key, email text, email_confirmed_at timestamptz);
     create function auth.uid() returns uuid language sql stable as
@@ -56,7 +56,8 @@ async function database(inheritedGrants) {
   assert.ok(files.length > 0, 'At least one controlled migration is required');
   for (const f of files) await db.exec(readFileSync(new URL(`../supabase/migrations/${f}`, import.meta.url), 'utf8'));
   await db.exec(`
-    insert into auth.users values ('${a}'), ('${b}'), ('${c}');
+    insert into auth.users (id, email, email_confirmed_at) values
+      ('${a}', 'alice@gisma-student.com', now()), ('${b}', 'bob@gisma-student.com', now()), ('${c}', 'charlie@gisma-student.com', now());
     insert into public.profiles (id, display_name, city, is_discoverable)
       values ('${a}', 'Alice', 'Aachen', true), ('${b}', 'Bob', 'Aachen', true), ('${c}', 'Private Charlie', 'Aachen', false);
     insert into public.listings (id, owner_id, kind, status, title, city, price_cents) values
@@ -379,6 +380,8 @@ for (const inheritedGrants of [false, true]) {
         values ('${a}','trip','draft','Direct bypass trip','Aachen',0)`, '42501');
 
       await db.exec(`update auth.users set email=id::text || '@gisma-student.com',email_confirmed_at=now() where id in ('${a}','${b}')`);
+      // c stays confirmed but outside GISMA, so it must be refused.
+      await db.exec(`update auth.users set email='charlie@example.test' where id='${c}'`);
       for (const [kind, detail] of [
         ['event', {venue_name:'Campus Hall', starts_at:'2099-01-01T12:00Z', capacity:1}],
         ['trip', {destination:'Potsdam', starts_at:'2099-01-01T12:00Z', capacity:2}],
@@ -456,7 +459,7 @@ for (const inheritedGrants of [false, true]) {
       assert.equal(defaults.find(row => row.table_name === 'listings' && row.column_name === 'city')?.column_default, null);
       assertions += 4;
       const newId = id(99);
-      await db.exec(`insert into auth.users (id) values ('${newId}')`);
+      await db.exec(`insert into auth.users (id, email, email_confirmed_at) values ('${newId}', 'opt-in@gisma-student.com', now())`);
       const { rows: privateNew } = await as('authenticated', newId,
         `insert into public.profiles (id, display_name, city) values ('${newId}', 'Opt In Only', 'Köln') returning is_discoverable`);
       assert.equal(privateNew[0].is_discoverable, false); assertions++;

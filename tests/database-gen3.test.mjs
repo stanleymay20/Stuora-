@@ -14,7 +14,7 @@ const migrationFiles = readdirSync(migrationsDir).filter(f => f.endsWith('.sql')
 async function harness({ stopBefore } = {}) {
   const db = new PGlite();
   await db.exec(`
-    create role anon; create role authenticated; create role service_role bypassrls;
+    create role anon; create role authenticated; create role service_role bypassrls; create role supabase_auth_admin;
     create schema auth;
     create table auth.users (id uuid primary key, email text, email_confirmed_at timestamptz default now());
     create function auth.uid() returns uuid language sql stable as
@@ -46,8 +46,10 @@ async function harness({ stopBefore } = {}) {
 async function seed(db) {
   await db.exec(`
     insert into auth.users (id, email) values
-      ('${A}','a@example.test'),('${B}','b@example.test'),('${C}','c@example.test'),
-      ('${D}','d@example.test'),('${E}','e@example.test'),('${M}','m@example.test');
+      ('${A}','a@gisma-student.com'),('${B}','b@gisma-student.com'),('${C}','c@gisma-student.com'),
+      ('${D}','d@gisma-student.com'),('${E}','e@gisma-student.com'),
+      -- Staff moderator deliberately outside GISMA: moderation must not need a student address.
+      ('${M}','m@example.test');
     insert into public.profiles (id, display_name, city) values
       ('${A}','Alice','Köln'),('${B}','Bob','Köln'),('${C}','Chloé','Łódź'),
       ('${D}','Dan','Köln'),('${E}','Eve','Köln'),('${M}','Mod','Köln');
@@ -108,7 +110,7 @@ test('D-07: archiving a listing closes its conversation; L2: 20 messages/minute'
 
 test('R-04: directory needs recorded consent; legacy flags preserved but hidden', async () => {
   const { db, rest } = await harness({ stopBefore: '20261023013000' });
-  await db.exec(`insert into auth.users (id) values ('${LEGACY}'), ('${A}');
+  await db.exec(`insert into auth.users (id, email) values ('${LEGACY}', 'legacy@gisma-student.com'), ('${A}', 'a@gisma-student.com');
     insert into public.profiles (id, display_name, city, is_discoverable) values
       ('${LEGACY}', 'Pre-ticked legacy', 'Köln', true), ('${A}', 'Alice', 'Köln', false);`);
   await rest();
@@ -133,7 +135,7 @@ test('R-04: directory needs recorded consent; legacy flags preserved but hidden'
   assert.equal((await as(A, `select id from public.profiles where id='${LEGACY}'`)).rows.length, 0);
   await assert.rejects(as(null, `select public.set_profile_discovery(true)`), e => e.code === '42501');
   // A new profile created with the explicit toggle ON is stamped at insert.
-  await db.exec(`insert into auth.users (id) values ('${B}')`);
+  await db.exec(`insert into auth.users (id, email) values ('${B}', 'b@gisma-student.com')`);
   await as(B, `insert into public.profiles (id, display_name, city, is_discoverable) values ('${B}','Bob','Köln', true)`);
   assert.equal((await as(A, `select id from public.profiles where id='${B}'`)).rows.length, 1);
   await db.close();
@@ -194,7 +196,7 @@ test('D-11: reporting, moderator decisions, notices and suspension', async () =>
   const B2 = '00000000-0000-4000-8000-0000000000b2';
   await db.exec(`insert into public.account_suspensions(user_id, reason) values ('${E}', 'Suspended before deleting account.')`);
   await db.exec(`delete from public.profiles where id='${E}'; delete from auth.users where id='${E}';
-                 insert into auth.users(id, email) values ('${B2}', ' E@Example.test ')`);
+                 insert into auth.users(id, email) values ('${B2}', ' E@GISMA-Student.com ')`);
   await assert.rejects(db.query(`insert into public.profiles(id, display_name, city) values ('${B2}','Eve again','Köln')`), e => e.code === '42501');
   await as(M, `select public.lift_suspension('${B}', 'Appeal accepted after identity check.')`);
   assert.ok((await as(B, `select public.save_student_listing(null,'housing','Legit room','', 'Köln', 40000,'room',false,false,'good') id`)).rows[0].id);
@@ -219,6 +221,8 @@ test('Erasure: a reported student can still delete their account; the report sur
   assert.equal(rows.length, 2, 'reports kept for abuse handling');
   assert.ok(rows.every(r => r.listing_id === null && r.reported_user_id === null && r.content_snapshot), 'targets detached, snapshot kept');
   // A target is still required when filing.
+  // Privileged insert: clear the session claim the actor helper leaves behind.
+  await db.exec(`select set_config('request.jwt.claim.sub', '', false)`);
   await assert.rejects(db.query(`insert into public.reports(reporter_id, reason) values ('${B}', 'spam')`), e => e.code === '23514');
   await db.close();
 });
@@ -247,7 +251,7 @@ test('D-10: export returns only the caller\'s own data and is rate-limited', asy
   await as(A, `insert into public.messages(conversation_id,sender_id,body) values ('${conv}','${A}','from Alice')`);
   const { rows } = await as(A, `select public.export_my_data() d`);
   const d = rows[0].d;
-  assert.equal(d.account.email, 'a@example.test');
+  assert.equal(d.account.email, 'a@gisma-student.com');
   assert.equal(d.listings.length, 1);
   assert.deepEqual(d.messages_sent.map(m => m.body), ['from Alice'], 'only messages the caller sent');
   assert.equal(JSON.stringify(d).includes('from Bob'), false);
@@ -315,5 +319,83 @@ test('D-07 UI: conversation safety state and blocking by conversation', async ()
   await as(A, `update public.listings set status='closed' where id='${l}'`);
   assert.equal((await state(B)).closed, true);
   await deny(null, `select public.conversation_safety_state('${conv}')`);
+  await db.close();
+});
+
+test('GISMA-only: non-GISMA accounts cannot use core student features; protective paths remain', async () => {
+  // Start just before the access migration so an existing outsider profile is in the directory.
+  const { db, rest } = await harness({ stopBefore: '20261124100000' });
+  await seed(db);
+  const O = id(11), O2 = id(12), U = id(13);
+  await db.exec(`insert into auth.users (id, email) values ('${O}', 'outsider@example.com');
+    insert into public.profiles (id, display_name, city) values ('${O}', 'Outsider', 'Köln');`);
+  const before = actors(db);
+  await before.as(O, `select public.set_profile_discovery(true)`);
+  await before.as(A, `select public.set_profile_discovery(true)`);
+  await db.exec(`select set_config('request.jwt.claim.sub', '', false)`);
+  await rest();
+  const { as, svc, deny, listing } = actors(db);
+
+  // Existing outsider is removed from the directory; students are unaffected.
+  assert.equal((await as(B, `select id from public.profiles where id='${O}'`)).rows.length, 0, 'outsider hidden');
+  assert.equal((await as(B, `select id from public.profiles where id='${A}'`)).rows.length, 1, 'student still listed');
+
+  // Every student write path refuses the outsider.
+  const l = await listing(A, 'housing', 'Room near campus');
+  const g = (await as(A, "select public.create_student_group('Study circle','', 'Köln','Study') id")).rows[0].id;
+  await deny(O, `select public.save_student_listing(null,'housing','Room','', 'Köln', 40000,'room',false,false,'good')`);
+  await deny(O, `insert into public.listings(owner_id,kind,status,title,city,price_cents) values ('${O}','marketplace','draft','Lamp','Köln',100)`);
+  await deny(O, `select public.start_listing_conversation('${l}')`);
+  await deny(O, `select public.create_student_group('Outsider group','', 'Köln','Study')`);
+  await deny(O, `insert into public.student_group_members(group_id,user_id) values ('${g}','${O}')`);
+  await deny(O, `select public.report_content('listing', '${l}', 'spam', 'Outsider report')`);
+  await deny(O, `select public.set_profile_discovery(true)`);
+  await deny(O, `select public.require_external_student()`);
+  await deny(O, `select public.publish_student_activity('event','Party','Köln','x','{"venue_name":"Hall","starts_at":"2099-01-01T12:00Z","capacity":5}')`);
+  assert.equal((await svc(`select public.consume_ai_request('${O}') ok`)).rows[0].ok, false);
+  assert.equal((await svc(`select public.consume_external_data_request('${O}') ok`)).rows[0].ok, false);
+  // A new outsider cannot even create a profile.
+  await db.exec(`insert into auth.users (id, email) values ('${O2}', 'new@gmail.com')`);
+  await deny(O2, `insert into public.profiles (id, display_name, city) values ('${O2}', 'New', 'Köln')`);
+
+  // Protective, self-only paths still work for the outsider.
+  await as(O, `select public.set_profile_discovery(false)`);
+  await as(O, `update public.profiles set bio='leaving soon' where id='${O}'`);
+  assert.ok((await as(O, `select public.export_my_data() d`)).rows[0].d.account);
+  await as(O, `insert into public.user_blocks(blocker_id, blocked_id) values ('${O}', '${A}')`);
+
+  // Unconfirmed GISMA address is not enough.
+  await db.exec(`insert into auth.users (id, email, email_confirmed_at) values ('${U}', 'u@gisma-student.com', null)`);
+  await deny(U, `insert into public.profiles (id, display_name, city) values ('${U}', 'Unconfirmed', 'Köln')`);
+  // Mixed case and surrounding spaces are normalised; the student keeps working.
+  await db.exec(`update auth.users set email=' Bob@GISMA-Student.com ' where id='${B}'`);
+  assert.ok((await as(B, `select public.start_listing_conversation('${l}') id`)).rows[0].id);
+
+  // An owner who leaves GISMA can archive but not edit or publish.
+  await db.exec(`update auth.users set email='alice@example.com' where id='${A}'`);
+  await deny(A, `select public.save_student_listing('${l}','housing','Edited','', 'Köln', 1,'room',false,false,'good')`);
+  await as(A, `update public.listings set status='closed' where id='${l}' and owner_id='${A}'`);
+  assert.equal((await db.query(`select status from public.listings where id='${l}'`)).rows[0].status, 'closed');
+
+  // Suspension keeps its own error and the harassment-reporting path (checked by the suspension guard).
+  await db.exec(`insert into public.account_suspensions(user_id, reason) values ('${D}', 'Suspended for testing purposes.')`);
+  await assert.rejects(as(D, `select public.create_student_group('D group','', 'Köln','Study')`), e => /suspended/i.test(e.message));
+  assert.ok((await as(D, `select public.report_content('user', '${C}', 'harassment', 'Keeps messaging me') id`)).rows[0].id);
+  await db.close();
+});
+
+test('GISMA-only signup hook accepts only exact @gisma-student.com addresses and is Auth-only', async () => {
+  const { db } = await harness();
+  const verdict = async email => (await db.query(
+    `select public.hook_require_gisma_signup($1::jsonb) r`, [JSON.stringify({ user: { email } })])).rows[0].r;
+  for (const ok of ['s1@gisma-student.com', ' Name.Surname@GISMA-Student.com '])
+    assert.deepEqual(await verdict(ok), {}, ok);
+  for (const bad of ['s@gmail.com', 's@gisma-student.com.evil.io', 's@sub.gisma-student.com', 's@gisma-student.co',
+                     's@gisma-studentxcom', 'gisma-student.com', '', null])
+    assert.equal((await verdict(bad)).error?.http_code, 403, String(bad));
+  const priv = role => db.query(`select has_function_privilege('${role}', 'public.hook_require_gisma_signup(jsonb)', 'execute') ok`)
+    .then(r => r.rows[0].ok);
+  assert.equal(await priv('supabase_auth_admin'), true);
+  for (const role of ['anon', 'authenticated']) assert.equal(await priv(role), false, role);
   await db.close();
 });
