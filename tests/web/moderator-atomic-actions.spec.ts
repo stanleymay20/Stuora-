@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 import { asStudent, backend } from './account-fixtures';
 
 // These two tests intentionally fire two clicks in ONE JavaScript task.
@@ -19,7 +19,7 @@ const report = {
   decision: null, decision_reason: null, decided_at: null,
 };
 
-async function startModerator(page) {
+async function startModerator(page: Page) {
   await asStudent(page, 'moderator@stuora-staff.example');
   await backend(page);
   await page.route('**/rest/v1/rpc/am_i_moderator', route => route.fulfill({ json: true }));
