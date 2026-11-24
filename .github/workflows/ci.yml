@@ -202,6 +202,9 @@ jobs:
       - name: Scan web bundle for leaked secrets
         run: node scripts/scan-secrets.mjs
 
+      - name: Reject stale signed-photo URLs after auth-session changes
+        run: node --experimental-strip-types --test tests/photo-session-cache.test.mjs
+
       - name: Install browser for account regression tests
         run: npx playwright install --with-deps chromium
 
