@@ -13,15 +13,28 @@ export class SessionScopedPhotoCache {
   private epoch = 0;
   private cache = new Map<string, CachedUrl>();
   private pending: Batch | null = null;
+  private readonly sign: (paths: string[]) => Promise<Map<string, string>>;
+  private readonly fallback: (path: string) => string;
+  private readonly ttlMs: number;
+  private readonly refreshMarginMs: number;
+  private readonly now: () => number;
+  private readonly schedule: (task: () => void) => void;
 
   constructor(
-    private readonly sign: (paths: string[]) => Promise<Map<string, string>>,
-    private readonly fallback: (path: string) => string,
-    private readonly ttlMs: number = 60 * 60 * 1000,
-    private readonly refreshMarginMs: number = 5 * 60 * 1000,
-    private readonly now: () => number = () => Date.now(),
-    private readonly schedule: (task: () => void) => void = task => { setTimeout(task, 0); },
-  ) {}
+    sign: (paths: string[]) => Promise<Map<string, string>>,
+    fallback: (path: string) => string,
+    ttlMs: number = 60 * 60 * 1000,
+    refreshMarginMs: number = 5 * 60 * 1000,
+    now: () => number = () => Date.now(),
+    schedule: (task: () => void) => void = task => { setTimeout(task, 0); },
+  ) {
+    this.sign = sign;
+    this.fallback = fallback;
+    this.ttlMs = ttlMs;
+    this.refreshMarginMs = refreshMarginMs;
+    this.now = now;
+    this.schedule = schedule;
+  }
 
   peek(path: string): string | null {
     const hit = this.cache.get(path);
