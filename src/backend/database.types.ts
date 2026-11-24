@@ -829,6 +829,23 @@ export type Database = {
         Args: { p_report: string; p_action: "dismiss" | "remove_content" | "suspend_user"; p_reason: string }
         Returns: undefined
       }
+      list_pending_student_activities: {
+        Args: Record<PropertyKey, never>
+        Returns: {
+          id: string
+          kind: Database["public"]["Enums"]["listing_kind"]
+          title: string
+          description: string
+          city: string
+          owner_id: string
+          created_at: string
+          details: Json | null
+        }[]
+      }
+      review_student_activity: {
+        Args: { p_listing: string; p_decision: "approve" | "reject"; p_reason: string }
+        Returns: undefined
+      }
       moderation_queue: {
         Args: { p_status?: "open" | "actioned" | "dismissed"; p_limit?: number }
         Returns: {
