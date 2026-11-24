@@ -1,22 +1,23 @@
 import { expect, test } from '@playwright/test';
-import { account, backend, session, signin } from './account-fixtures';
+import { account, backend, session, signin, asStudent } from './account-fixtures';
 
 const ownerId = session().user.id;
 const groupId = '00000000-0000-0000-0000-000000000091';
 const messageId = '00000000-0000-0000-0000-000000000092';
 const memberId = '00000000-0000-0000-0000-000000000093';
 
-test('students can discover groups anonymously but creating requires a completed account', async ({ page }) => {
+test('signed-out visitors never load group names and are sent to sign in', async ({ page }) => {
   await backend(page);
-  await page.route('**/rest/v1/student_groups?*', async route => route.fulfill({ json: [] }));
+  let groupReads = 0;
+  await page.route('**/rest/v1/student_groups?*', async route => { groupReads++; return route.fulfill({ json: [] }); });
   await page.goto('/');
   await page.getByRole('button', { name: 'Browse Groups', exact: true }).click();
-  await expect(page.getByText('STUORA / GROUPS', { exact: true })).toBeVisible();
-  await expect(page.getByText('No student groups found.', { exact: true })).toBeVisible();
+  await expect(page.getByTestId('student-catalogue-gate')).toBeVisible();
   await expect.poll(() => new URL(page.url()).searchParams.get('stuora')).toBe('groups');
   await page.reload();
-  await expect(page.getByRole('button', { name: 'Create a group' })).toBeVisible();
-  await page.getByRole('button', { name: 'Create a group' }).click();
+  await expect(page.getByTestId('student-catalogue-gate')).toBeVisible();
+  expect(groupReads).toBe(0);
+  await page.getByRole('button', { name: 'Sign in to browse' }).click();
   await expect(page.getByText('Welcome to Stuora', { exact: true })).toBeVisible();
 });
 

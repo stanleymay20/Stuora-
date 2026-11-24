@@ -7,6 +7,7 @@ import { EditorialImage } from '../ui/EditorialImage';
 import type { Database } from '../backend/database.types';
 import ReportButton from '../moderation/ReportButton';
 import { useDebouncedValue } from '../hooks/useDebouncedValue';
+import { useListingPhotoUrl } from './listingPhotoUrls';
 
 type Row = Database['public']['Tables']['listings']['Row'];
 type Housing = Database['public']['Tables']['housing_details']['Row'];
@@ -25,8 +26,11 @@ function normalizeItem(raw: unknown): Item {
   const item = raw as Item;
   return { ...item, listing_media: [...(item.listing_media ?? [])].sort((a, b) => a.sort_order - b.sort_order || a.created_at.localeCompare(b.created_at)) };
 }
-function mediaUrl(path: string) {
-  return supabase.storage.from('listing-media').getPublicUrl(path).data.publicUrl;
+// Photos load through short-lived signed URLs (student-only catalogue).
+function ListingImage({ path, label, style }: { path: string; label: string; style: object }) {
+  const uri = useListingPhotoUrl(path);
+  return uri ? <Image source={{ uri }} accessibilityLabel={label} style={style} resizeMode="cover" />
+    : <View accessibilityLabel={`${label} loading`} style={[style, s.photoLoading]} />;
 }
 function Button({ title, onPress, disabled = false }: { title: string; onPress: () => void; disabled?: boolean }) {
   return <Pressable accessibilityRole="button" accessibilityLabel={title} disabled={disabled} onPress={onPress} style={[s.button, disabled && s.disabled]}><Text style={s.buttonText}>{title}</Text></Pressable>;
@@ -39,7 +43,7 @@ function Toggle({ label, value, onChange }: { label: string; value: boolean; onC
 }
 function Photo({ media, title, index, removable, disabled, onRemove }: { media: Media; title: string; index: number; removable?: boolean; disabled?: boolean; onRemove?: () => void }) {
   return <View style={s.photoWrap}>
-    <Image source={{ uri: mediaUrl(media.object_path) }} accessibilityLabel={`${title} photo ${index + 1}`} style={s.photo} resizeMode="cover" />
+    <ListingImage path={media.object_path} label={`${title} photo ${index + 1}`} style={s.photo} />
     {removable && onRemove ? <Pressable accessibilityRole="button" accessibilityLabel={`Remove photo ${index + 1}`} disabled={disabled} onPress={onRemove} style={[s.removePhoto, disabled && s.disabled]}><Text style={s.removePhotoText}>Remove</Text></Pressable> : null}
   </View>;
 }
@@ -389,7 +393,7 @@ export default function ListingWorkspace({ category, mode = 'browse', search: se
           const cover = item.listing_media[0];
           return <Pressable key={item.id} accessibilityRole="button" accessibilityLabel={`View ${item.title}`} onPress={() => { setSelected(item); setNotice(''); setActionError(''); }} style={s.listing}>
             <View style={s.coverWrap}>
-              {cover ? <Image source={{ uri: mediaUrl(cover.object_path) }} accessibilityLabel={`${item.title} cover photo`} style={s.cardImage} resizeMode="cover" /> : <View style={s.visual}><Icon name={kind === 'housing' ? 'housing' : 'marketplace'} size={44} color="#7048FF" /><Text style={s.hint}>Photo not added yet</Text></View>}
+              {cover ? <ListingImage path={cover.object_path} label={`${item.title} cover photo`} style={s.cardImage} /> : <View style={s.visual}><Icon name={kind === 'housing' ? 'housing' : 'marketplace'} size={44} color="#7048FF" /><Text style={s.hint}>Photo not added yet</Text></View>}
             </View>
             <View style={s.listingDetails}>
               <Text style={s.title} numberOfLines={2}>{item.title}</Text>
@@ -405,6 +409,7 @@ export default function ListingWorkspace({ category, mode = 'browse', search: se
 }
 
 const s = StyleSheet.create({
+  photoLoading: { backgroundColor: '#F4F1FF' },
   workspace: { gap: 16, width: '100%' },
   filters: { backgroundColor: '#FFFFFF', borderColor: '#E9EAF1', borderWidth: 1, borderRadius: 17, padding: 17, gap: 13 },
   filtersHeading: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 },

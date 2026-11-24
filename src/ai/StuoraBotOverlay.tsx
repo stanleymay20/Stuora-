@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Image, Modal, Pressable, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View } from 'react-native';
 import { supabase } from '../backend/supabase';
 import { useAuth } from '../account/AuthProvider';
+import { catalogueAccess } from '../account/studentAccess';
 import { features } from '../backend/features';
 import { invokeFunction, ServiceError } from '../backend/externalData';
 import { botGuidance, botWelcome, euroFromCents, parseBotIntent, safeLike, type BotDomain } from './botCore';
@@ -26,10 +27,13 @@ async function askAssistant(prompt: string, preferredCity: string): Promise<BotR
   return { prompt, answer: String(reply.answer ?? ''), results, domain: reply.intent?.domain ?? null, sourceLabel: String(reply.sourceLabel ?? 'Stuora') };
 }
 
-async function searchStuora(prompt: string, signal: AbortSignal, preferredCity = ''): Promise<BotReply> {
+async function searchStuora(prompt: string, signal: AbortSignal, preferredCity = '', student = true): Promise<BotReply> {
   const intent = parseBotIntent(prompt);
   const city = intent.city || preferredCity.trim();
   if (!intent.domain) return { prompt, answer: botGuidance(), results: [], domain: null, sourceLabel: 'Keyword search' };
+  // The server returns no student content to anyone else; say why instead of "no results".
+  if (!student) return { prompt, results: [], domain: intent.domain, sourceLabel: 'Keyword search',
+    answer: 'Student listings and groups are visible only to signed-in GISMA students. Sign in with your @gisma-student.com email to search them.' };
   let results: BotResult[] = [];
   if (intent.domain === 'groups') {
     let query = supabase.from('student_groups')
@@ -88,6 +92,7 @@ export default function StuoraBotOverlay({ open, preferredCity = '', onClose, on
   const desktop = width >= 960;
   const { session } = useAuth();
   const useAssistant = features.aiAssistant && !!session;
+  const student = catalogueAccess(session) === 'student';
   const [input, setInput] = useState('');
   const [replies, setReplies] = useState<BotReply[]>([]);
   const [busy, setBusy] = useState(false);
@@ -121,11 +126,11 @@ export default function StuoraBotOverlay({ open, preferredCity = '', onClose, on
           if (error instanceof ServiceError && error.code === 'RATE_LIMIT') { setFailure(error.message); return; }
           // Any other assistant failure falls back to the on-device keyword search,
           // and the label says why so operators can diagnose configuration.
-          reply = await searchStuora(text, ac.signal, preferredCity);
+          reply = await searchStuora(text, ac.signal, preferredCity, student);
           const why = error instanceof ServiceError ? error.code : 'UNAVAILABLE';
           reply = { ...reply, sourceLabel: `Keyword search (AI unavailable: ${why})` };
         }
-      } else reply = await searchStuora(text, ac.signal, preferredCity);
+      } else reply = await searchStuora(text, ac.signal, preferredCity, student);
       if (ac.signal.aborted) return;
       setReplies(old => [...old.slice(-9), reply]); setInput('');
     } catch {

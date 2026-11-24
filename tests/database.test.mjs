@@ -98,7 +98,8 @@ for (const inheritedGrants of [false, true]) {
       await assert.rejects(as('authenticated', user, sql), e => e.code === code); assertions++;
     }
     try {
-      await count('anon', null, 'select * from public.listings', 3);
+      await count('anon', null, 'select * from public.listings', 0); // student-only catalogue
+      await count('authenticated', b, 'select * from public.listings', 3);
       await count('anon', null, 'select * from public.marketplace_details', 0);
       await count('authenticated', a, 'select * from public.listings', 4);
       await count('authenticated', b, `select * from public.listings where id = '${draft}'`, 0);
@@ -184,7 +185,8 @@ for (const inheritedGrants of [false, true]) {
       assert.equal(mediaGrants[0].owner_cleanup,true); assertions++;
       await db.query(`insert into public.listing_media(listing_id,object_path,sort_order)
         values ('${house}','${a}/${house}/room.jpg',0)`);
-      await count('anon',null,`select * from public.listing_media where listing_id='${house}'`,1);
+      await count('anon', null, `select * from public.listing_media where listing_id='${house}'`, 0); // student-only catalogue
+      await count('authenticated', b, `select * from public.listing_media where listing_id='${house}'`, 1);
       await db.query(`insert into public.listing_media(listing_id,object_path)
         values ('${draft}','${a}/${draft}/draft.jpg')`);
       await count('anon',null,`select * from public.listing_media where listing_id='${draft}'`,0);
@@ -329,11 +331,14 @@ for (const inheritedGrants of [false, true]) {
       const save = (listingId, kind, title, price = 3500, housingType = 'room', condition = 'good') => `select public.save_student_listing(${listingId ? `'${listingId}'` : 'null'}, '${kind}', '${title}', 'Student listing', 'Berlin', ${price}, '${housingType}', true, true, '${condition}') as id`;
       const { rows: created } = await as('authenticated', a, save(null, 'housing', 'Persistent room', 65000));
       const liveHouse = created[0].id;
-      await count('anon', null, `select * from public.housing_details where listing_id = '${liveHouse}' and rent_cents = 65000`, 1);
+      await count('anon', null, `select * from public.housing_details where listing_id = '${liveHouse}' and rent_cents = 65000`, 0); // student-only catalogue
+      await count('authenticated', b, `select * from public.housing_details where listing_id = '${liveHouse}' and rent_cents = 65000`, 1);
       await count('authenticated', a, save(liveHouse, 'housing', 'Edited room', 60000), 1);
-      await count('anon', null, `select * from public.housing_details where listing_id = '${liveHouse}' and rent_cents = 60000`, 1);
+      await count('anon', null, `select * from public.housing_details where listing_id = '${liveHouse}' and rent_cents = 60000`, 0); // student-only catalogue
+      await count('authenticated', b, `select * from public.housing_details where listing_id = '${liveHouse}' and rent_cents = 60000`, 1);
       await deny(a, save(liveHouse, 'housing', 'Rollback edited room', 100, 'invalid_type'), '23514');
-      await count('anon', null, `select * from public.listings where id = '${liveHouse}' and title = 'Edited room' and price_cents = 60000`, 1);
+      await count('anon', null, `select * from public.listings where id = '${liveHouse}' and title = 'Edited room' and price_cents = 60000`, 0); // student-only catalogue
+      await count('authenticated', b, `select * from public.listings where id = '${liveHouse}' and title = 'Edited room' and price_cents = 60000`, 1);
       await deny(b, save(liveHouse, 'housing', 'Hijacked room'));
       await deny(a, save(liveHouse, 'marketplace', 'Changed kind'));
       await deny(a, save(null, 'trip', 'Unsupported trip'), '22023');
@@ -347,9 +352,11 @@ for (const inheritedGrants of [false, true]) {
       await assert.rejects(as('anon', null, save(null, 'marketplace', 'Anonymous listing')), e => e.code === '42501'); assertions++;
       const { rows: market } = await as('authenticated', a, save(null, 'marketplace', 'Free desk', 0));
       const liveMarket = market[0].id;
-      await count('anon', null, `select * from public.marketplace_details where listing_id = '${liveMarket}' and item_condition = 'good'`, 1);
+      await count('anon', null, `select * from public.marketplace_details where listing_id = '${liveMarket}' and item_condition = 'good'`, 0); // student-only catalogue
+      await count('authenticated', b, `select * from public.marketplace_details where listing_id = '${liveMarket}' and item_condition = 'good'`, 1);
       await deny(a, save(liveMarket, 'marketplace', 'Invalid edit', 10, 'room', 'invalid'), '22P02');
-      await count('anon', null, `select * from public.listings where id = '${liveMarket}' and title = 'Free desk'`, 1);
+      await count('anon', null, `select * from public.listings where id = '${liveMarket}' and title = 'Free desk'`, 0); // student-only catalogue
+      await count('authenticated', b, `select * from public.listings where id = '${liveMarket}' and title = 'Free desk'`, 1);
       await deny(a, `delete from public.marketplace_details where listing_id='${liveMarket}'`, '23514');
       await count('authenticated', a, `update public.listings set status = 'closed' where id = '${liveMarket}' returning id`, 1);
       await count('anon', null, `select * from public.listings where id = '${liveMarket}'`, 0);
@@ -517,7 +524,8 @@ for (const inheritedGrants of [false, true]) {
       const { rows: created } = await as('authenticated', a,
         "select public.create_student_group('Berlin Physics', 'Weekly study circle', 'Berlin', 'Study') id");
       const groupId = created[0].id;
-      await expectCount('anon', null, `select * from public.student_groups where id = '${groupId}'`, 1);
+      await expectCount('anon', null, `select * from public.student_groups where id = '${groupId}'`, 0); // student-only catalogue
+      await expectCount('authenticated', b, `select * from public.student_groups where id = '${groupId}'`, 1);
       await expectCount('authenticated', a, `select * from public.student_group_members where group_id = '${groupId}'`, 1);
       await expectCount('authenticated', b, `select * from public.student_group_members where group_id = '${groupId}'`, 0);
       await assert.rejects(as('authenticated', b,

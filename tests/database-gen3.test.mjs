@@ -361,9 +361,11 @@ test('GISMA-only: non-GISMA accounts cannot use core student features; protectiv
   assert.equal((await as(B, `select body from public.student_group_messages where group_id='${g}'`)).rows.length, 2);
   assert.equal((await as(A, `select body from public.messages where conversation_id='${conv}'`)).rows.length, 2,
     'the student still sees the whole thread');
-  // The public catalogue is unchanged: the same rows a signed-out visitor sees.
-  assert.equal((await rows(`select id from public.listings where id='${l}'`)).length, 1);
-  assert.equal((await as(null, `select id from public.listings where id='${l}'`)).rows.length, 1);
+  // The catalogue is student-only: neither the outsider nor a signed-out visitor sees it.
+  assert.equal((await rows(`select id from public.listings where id='${l}'`)).length, 0);
+  assert.equal((await rows(`select id from public.student_groups where id='${g}'`)).length, 0);
+  assert.equal((await as(null, `select id from public.listings where id='${l}'`)).rows.length, 0);
+  assert.equal((await as(C, `select id from public.listings where id='${l}'`)).rows.length, 1, 'students still browse');
 
   // Every student write path refuses the outsider.
   await deny(O, `select public.save_student_listing(null,'housing','Room','', 'Köln', 40000,'room',false,false,'good')`);
@@ -477,7 +479,8 @@ test('Activity review: Jobs, Trips and Events publish only after a Stuora modera
 
   // Approved: discoverable and actionable. Rejected: still hidden and closed to applications.
   assert.equal(await visible(B, `select id from public.listings where id='${ev}'`), 1);
-  assert.equal(await visible(null, `select listing_id from public.event_details where listing_id='${ev}'`), 1);
+  assert.equal(await visible(C, `select listing_id from public.event_details where listing_id='${ev}'`), 1);
+  assert.equal(await visible(null, `select listing_id from public.event_details where listing_id='${ev}'`), 0, 'students only');
   assert.equal((await as(B, `select public.student_activity_response('${ev}','join') r`)).rows[0].r.joined, true);
   assert.equal(await visible(B, `select id from public.listings where id='${job}'`), 0);
   await deny(B, `select public.student_activity_response('${job}','apply','Hello')`);
@@ -503,5 +506,50 @@ test('Activity review: Jobs, Trips and Events publish only after a Stuora modera
   const r = (await as(B, `select public.report_content('listing', '${room}', 'fraud', 'Asks for a deposit first') id`)).rows[0].id;
   await as(M, `select public.moderate_report('${r}', 'remove_content', 'Deposit scams are not allowed.')`);
   assert.equal((await db.query(`select status from public.listings where id='${room}'`)).rows[0].status, 'closed');
+  await db.close();
+});
+
+test('Student-only catalogue: listings, photos and group names need a signed-in GISMA student', async () => {
+  const { db } = await harness(); await seed(db);
+  const { as, listing } = actors(db);
+  const O = id(11);
+  await db.exec(`insert into auth.users (id, email) values ('${O}', 'legacy@example.com');
+    insert into public.profiles (id, display_name, city) values ('${O}', 'Legacy outsider', 'Köln');`);
+  const room = await listing(A, 'housing', 'Room near campus');
+  const g = (await as(A, "select public.create_student_group('Study circle','', 'Köln','Study') id")).rows[0].id;
+  const photo = `${A}/${room}/cover.webp`;
+  await db.exec(`select set_config('request.jwt.claim.sub', '', false);
+    insert into public.listing_media (listing_id, object_path, sort_order) values ('${room}', '${photo}', 0);
+    insert into storage.objects (bucket_id, name) values ('listing-media', '${photo}');
+    -- A legacy listing and group owned by the outsider, created before the rule.
+    insert into public.listings (id, owner_id, kind, status, title, city, price_cents)
+      values ('00000000-0000-4000-8000-0000000000e1', '${O}', 'marketplace', 'draft', 'Legacy draft', 'Köln', 100);
+    insert into public.student_groups (id, owner_id, name, city, topic)
+      values ('00000000-0000-4000-8000-0000000000e2', '${O}', 'Legacy group', 'Köln', 'Study');`);
+  const n = async (user, sql) => (await as(user, sql)).rows.length;
+  const catalogue = {
+    listing: `select id from public.listings where id='${room}'`,
+    details: `select listing_id from public.housing_details where listing_id='${room}'`,
+    media: `select id from public.listing_media where listing_id='${room}'`,
+    group: `select id from public.student_groups where id='${g}'`,
+  };
+  for (const [what, sql] of Object.entries(catalogue)) {
+    assert.equal(await n(null, sql), 0, `signed-out visitor cannot read ${what}`);
+    assert.equal(await n(O, sql), 0, `legacy non-GISMA account cannot read ${what}`);
+    assert.equal(await n(B, sql), 1, `GISMA student reads ${what}`);
+  }
+  // Photo files: the bucket no longer serves public URLs, and object reads follow the listing.
+  assert.equal((await db.query(`select public from storage.buckets where id='listing-media'`)).rows[0].public, false);
+  const file = `select name from storage.objects where bucket_id='listing-media' and name='${photo}'`;
+  assert.equal(await n(O, file), 0, 'legacy account cannot sign or download the photo');
+  assert.equal(await n(B, file), 1, 'GISMA student can sign and load the photo');
+  assert.equal(await n(A, file), 1, 'owner keeps access');
+  await as(A, `update public.listings set status='closed' where id='${room}'`);
+  assert.equal(await n(B, file), 0, 'an archived listing photo is no longer retrievable by others');
+  assert.equal(await n(A, file), 1);
+  // Owners keep their own rows; student browsing is otherwise unaffected.
+  assert.equal(await n(O, `select id from public.listings where owner_id='${O}'`), 1);
+  assert.equal(await n(O, `select id from public.student_groups where owner_id='${O}'`), 1);
+  assert.equal(await n(B, `select id from public.student_groups`), 2, 'students see every group name');
   await db.close();
 });
