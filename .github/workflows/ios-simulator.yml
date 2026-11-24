@@ -1,0 +1,31 @@
+name: iPhone Simulator
+on:
+  push:
+    branches: ['release/ios-testflight-*']
+permissions:
+  contents: read
+jobs:
+  simulator:
+    runs-on: macos-26
+    timeout-minutes: 60
+    env:
+      EXPO_PUBLIC_STUORA_ENV: test
+      EXPO_PUBLIC_SUPABASE_URL: https://stuora-test.invalid
+      EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY: sb_publishable_test_fixture
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22.13.0'
+      - run: npm ci
+      - run: npx expo prebuild --platform ios --no-install
+      - run: pod install --project-directory=ios
+      - name: Compile, install and launch Stuora
+        run: |
+          device=$(xcrun simctl list devices available -j | jq -er '[.devices[][] | select(.name | startswith("iPhone"))][0].udid')
+          xcrun simctl boot "$device"
+          xcodebuild -workspace ios/Stuora.xcworkspace -scheme Stuora -configuration Release -destination "id=$device" -derivedDataPath "$RUNNER_TEMP/StuoraBuild" CODE_SIGNING_ALLOWED=NO build
+          xcrun simctl bootstatus "$device" -b
+          xcrun simctl install "$device" "$RUNNER_TEMP/StuoraBuild/Build/Products/Release-iphonesimulator/Stuora.app"
+          xcrun simctl launch "$device" com.stuora.app
+          xcrun simctl openurl "$device" 'stuora://auth-callback'

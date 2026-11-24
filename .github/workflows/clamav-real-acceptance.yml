@@ -1,0 +1,51 @@
+name: Stuora real ClamAV acceptance
+
+on:
+  # Only this isolated development branch; never run ClamAV on every app build.
+  push:
+    branches: ['feature/clamav-staging-readiness-*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  real-clamav:
+    name: Genuine ClamAV PDF / EICAR smoke
+    runs-on: ubuntu-24.04
+    timeout-minutes: 18
+    steps:
+      - name: Checkout scanner source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Use Node 22
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '22.13.0'
+
+      - name: Validate private-only Compose configuration
+        env:
+          # Only a dummy value for a non-executed Compose config check.
+          SCANNER_AUTH_TOKEN: "ci-dummy-only-never-a-production-secret-123456789"
+        run: |
+          docker compose -f services/stuora-pdf-scanner/compose.local.yaml config --quiet
+
+      - name: Start official ClamAV container in isolated CI
+        run: |
+          docker run -d --rm --name stuora-clamd-ci \
+            --publish 127.0.0.1:3310:3310 \
+            clamav/clamav:stable
+
+      - name: Validate real clean and EICAR decisions
+        env:
+          CLAMD_HOST: 127.0.0.1
+          CLAMD_PORT: "3310"
+        run: node --test services/stuora-pdf-scanner/real-clamd.test.mjs
+
+      - name: Show only ClamAV startup/health logs on failure
+        if: failure()
+        run: docker logs --tail 100 stuora-clamd-ci 2>&1 || true
+
+      - name: Remove ephemeral scanner
+        if: always()
+        run: docker stop stuora-clamd-ci 2>/dev/null || true

@@ -326,12 +326,14 @@ export type Database = {
           kind: Database["public"]["Enums"]["listing_kind"]
           owner_id: string
           price_cents: number | null
+          review_status: string
+          reviewed_at: string | null
           status: Database["public"]["Enums"]["listing_status"]
           title: string
           updated_at: string
         }
         Insert: {
-          city?: string
+          city: string
           created_at?: string
           currency?: string
           description?: string
@@ -434,6 +436,26 @@ export type Database = {
           },
         ]
       }
+      account_suspensions: {
+        Row: { reason: string; suspended_at: string; suspended_by: string | null; user_id: string }
+        Insert: never
+        Update: never
+        Relationships: []
+      }
+      moderation_notices: {
+        Row: {
+          created_at: string
+          id: string
+          kind: "report_outcome" | "content_action" | "account_suspended" | "suspension_lifted"
+          message: string
+          read_at: string | null
+          report_id: string | null
+          user_id: string
+        }
+        Insert: never
+        Update: { read_at?: string | null }
+        Relationships: []
+      }
       profiles: {
         Row: {
           account_kind: Database["public"]["Enums"]["account_kind"]
@@ -442,6 +464,7 @@ export type Database = {
           city: string
           created_at: string
           display_name: string
+          discoverable_consented_at: string | null
           id: string
           is_discoverable: boolean
           student_status: Database["public"]["Enums"]["student_verification_status"]
@@ -451,9 +474,10 @@ export type Database = {
           account_kind?: Database["public"]["Enums"]["account_kind"]
           avatar_path?: string | null
           bio?: string
-          city?: string
+          city: string
           created_at?: string
           display_name: string
+          discoverable_consented_at?: string | null
           id: string
           is_discoverable?: boolean
           student_status?: Database["public"]["Enums"]["student_verification_status"]
@@ -466,6 +490,7 @@ export type Database = {
           city?: string
           created_at?: string
           display_name?: string
+          discoverable_consented_at?: string | null
           id?: string
           is_discoverable?: boolean
           student_status?: Database["public"]["Enums"]["student_verification_status"]
@@ -482,6 +507,14 @@ export type Database = {
           reason: Database["public"]["Enums"]["report_reason"]
           reported_user_id: string | null
           reporter_id: string
+          content_snapshot: string | null
+          decided_at: string | null
+          decided_by: string | null
+          decision: string | null
+          decision_reason: string | null
+          group_message_id: string | null
+          message_id: string | null
+          status: "open" | "actioned" | "dismissed"
         }
         Insert: {
           created_at?: string
@@ -491,6 +524,14 @@ export type Database = {
           reason: Database["public"]["Enums"]["report_reason"]
           reported_user_id?: string | null
           reporter_id: string
+          content_snapshot?: string | null
+          decided_at?: string | null
+          decided_by?: string | null
+          decision?: string | null
+          decision_reason?: string | null
+          group_message_id?: string | null
+          message_id?: string | null
+          status?: "open" | "actioned" | "dismissed"
         }
         Update: {
           created_at?: string
@@ -500,6 +541,14 @@ export type Database = {
           reason?: Database["public"]["Enums"]["report_reason"]
           reported_user_id?: string | null
           reporter_id?: string
+          content_snapshot?: string | null
+          decided_at?: string | null
+          decided_by?: string | null
+          decision?: string | null
+          decision_reason?: string | null
+          group_message_id?: string | null
+          message_id?: string | null
+          status?: "open" | "actioned" | "dismissed"
         }
         Relationships: [
           {
@@ -556,6 +605,69 @@ export type Database = {
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
+        ]
+      }
+      student_group_bans: {
+        Row: { group_id: string; user_id: string; banned_by: string; banned_at: string }
+        Insert: { group_id: string; user_id: string; banned_by: string; banned_at?: string }
+        Update: { group_id?: string; user_id?: string; banned_by?: string; banned_at?: string }
+        Relationships: [
+          { foreignKeyName: "student_group_bans_group_id_fkey"; columns: ["group_id"]; isOneToOne: false; referencedRelation: "student_groups"; referencedColumns: ["id"] },
+          { foreignKeyName: "student_group_bans_user_id_fkey"; columns: ["user_id"]; isOneToOne: false; referencedRelation: "profiles"; referencedColumns: ["id"] },
+          { foreignKeyName: "student_group_bans_banned_by_fkey"; columns: ["banned_by"]; isOneToOne: false; referencedRelation: "profiles"; referencedColumns: ["id"] },
+        ]
+      }
+      student_group_files: {
+        Row: {
+          id: string; group_id: string; uploader_id: string; original_name: string;
+          object_path: string; media_type: "application/pdf" | "image/webp";
+          size_bytes: number; status: "pending_review" | "approved" | "blocked";
+          inspection_method: string | null; inspected_at: string | null; created_at: string;
+          scan_sha256: string | null; scan_engine: string | null;
+        }
+        Insert: {
+          id?: string; group_id: string; uploader_id: string; original_name: string;
+          object_path: string; media_type: "application/pdf" | "image/webp";
+          size_bytes: number; status?: "pending_review" | "approved" | "blocked";
+          inspection_method?: string | null; inspected_at?: string | null; created_at?: string;
+          scan_sha256?: string | null; scan_engine?: string | null;
+        }
+        Update: {
+          id?: string; group_id?: string; uploader_id?: string; original_name?: string;
+          object_path?: string; media_type?: "application/pdf" | "image/webp";
+          size_bytes?: number; status?: "pending_review" | "approved" | "blocked";
+          inspection_method?: string | null; inspected_at?: string | null; created_at?: string;
+          scan_sha256?: string | null; scan_engine?: string | null;
+        }
+        Relationships: [
+          { foreignKeyName: "student_group_files_group_id_fkey"; columns: ["group_id"]; isOneToOne: false; referencedRelation: "student_groups"; referencedColumns: ["id"] },
+          { foreignKeyName: "student_group_files_uploader_id_fkey"; columns: ["uploader_id"]; isOneToOne: false; referencedRelation: "profiles"; referencedColumns: ["id"] },
+        ]
+      }
+      student_group_members: {
+        Row: { group_id: string; user_id: string; joined_at: string }
+        Insert: { group_id: string; user_id: string; joined_at?: string }
+        Update: { group_id?: string; user_id?: string; joined_at?: string }
+        Relationships: [
+          { foreignKeyName: "student_group_members_group_id_fkey"; columns: ["group_id"]; isOneToOne: false; referencedRelation: "student_groups"; referencedColumns: ["id"] },
+          { foreignKeyName: "student_group_members_user_id_fkey"; columns: ["user_id"]; isOneToOne: false; referencedRelation: "profiles"; referencedColumns: ["id"] },
+        ]
+      }
+      student_group_messages: {
+        Row: { id: string; group_id: string; author_id: string; body: string; created_at: string }
+        Insert: { id?: string; group_id: string; author_id: string; body: string; created_at?: string }
+        Update: { id?: string; group_id?: string; author_id?: string; body?: string; created_at?: string }
+        Relationships: [
+          { foreignKeyName: "student_group_messages_group_id_fkey"; columns: ["group_id"]; isOneToOne: false; referencedRelation: "student_groups"; referencedColumns: ["id"] },
+          { foreignKeyName: "student_group_messages_author_id_fkey"; columns: ["author_id"]; isOneToOne: false; referencedRelation: "profiles"; referencedColumns: ["id"] },
+        ]
+      }
+      student_groups: {
+        Row: { id: string; owner_id: string; name: string; description: string; city: string; topic: string; created_at: string; updated_at: string }
+        Insert: { id?: string; owner_id: string; name: string; description?: string; city: string; topic: string; created_at?: string; updated_at?: string }
+        Update: { id?: string; owner_id?: string; name?: string; description?: string; city?: string; topic?: string; created_at?: string; updated_at?: string }
+        Relationships: [
+          { foreignKeyName: "student_groups_owner_id_fkey"; columns: ["owner_id"]; isOneToOne: false; referencedRelation: "profiles"; referencedColumns: ["id"] },
         ]
       }
       student_benefits: {
@@ -696,6 +808,74 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      publish_student_activity: {
+        Args: { p_kind: 'trip' | 'job' | 'event'; p_title: string; p_city: string; p_description: string; p_details: Json }
+        Returns: string
+      }
+      student_activity_response: {
+        Args: { p_id: string; p_action: string; p_note?: string }
+        Returns: Json
+      }
+      close_student_activity: { Args: { p_id: string }; Returns: undefined }
+      delete_student_group_file: { Args: { p_file: string }; Returns: boolean }
+      am_i_moderator: { Args: Record<string, never>; Returns: boolean }
+      conversation_safety_state: {
+        Args: { p_conversation: string }
+        Returns: { closed: boolean; blocked_by_me: boolean; other_member_left: boolean }
+      }
+      export_my_data: { Args: Record<string, never>; Returns: Json }
+      lift_suspension: { Args: { p_user: string; p_reason: string }; Returns: undefined }
+      moderate_report: {
+        Args: { p_report: string; p_action: "dismiss" | "remove_content" | "suspend_user"; p_reason: string }
+        Returns: undefined
+      }
+      moderation_queue: {
+        Args: { p_status?: "open" | "actioned" | "dismissed"; p_limit?: number }
+        Returns: {
+          id: string
+          created_at: string
+          reason: Database["public"]["Enums"]["report_reason"]
+          details: string
+          status: string
+          target_kind: "listing" | "group_message" | "message" | "user"
+          listing_id: string | null
+          group_message_id: string | null
+          message_id: string | null
+          reported_user_id: string | null
+          content_snapshot: string | null
+          prior_reports: number
+          decision: string | null
+          decision_reason: string | null
+          decided_at: string | null
+        }[]
+      }
+      report_content: {
+        Args: {
+          p_target_kind: "listing" | "group_message" | "message" | "user"
+          p_target_id: string
+          p_reason: Database["public"]["Enums"]["report_reason"]
+          p_details?: string
+        }
+        Returns: string
+      }
+      set_conversation_block: { Args: { p_conversation: string; p_block: boolean }; Returns: undefined }
+      set_profile_discovery: { Args: { p_discoverable: boolean }; Returns: string | null }
+      create_student_group: {
+        Args: { p_name: string; p_description: string; p_city: string; p_topic: string }
+        Returns: string
+      }
+      remove_student_group_member: {
+        Args: { p_group_id: string; p_user_id: string }
+        Returns: undefined
+      }
+      restore_student_group_member: {
+        Args: { p_group_id: string; p_user_id: string }
+        Returns: undefined
+      }
+      send_student_group_message: {
+        Args: { p_group_id: string; p_body: string }
+        Returns: string
+      }
       save_student_listing: {
         Args: {
           p_bills_included: boolean

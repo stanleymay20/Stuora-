@@ -3,7 +3,7 @@
     "name": "Stuora",
     "slug": "stuora",
     "scheme": "stuora",
-    "version": "0.1.0",
+    "version": "0.1.7",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
     "plugins": [
@@ -14,17 +14,54 @@
           "cameraPermission": false,
           "microphonePermission": false
         }
+      ],
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#17152F",
+          "image": "./assets/generated-stuora/splash-icon.png",
+          "imageWidth": 220,
+          "resizeMode": "contain"
+        }
+      ],
+      [
+        "expo-file-system",
+        {
+          "supportsOpeningDocumentsInPlace": true,
+          "enableFileSharing": true
+        }
       ]
     ],
     "ios": {
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      },
       "supportsTablet": true,
-      "bundleIdentifier": "com.stuora.app"
+      "bundleIdentifier": "com.stuora.app",
+      "icon": "./assets/generated-stuora/icon.png",
+      "buildNumber": "2"
     },
     "android": {
-      "package": "com.stuora.app"
+      "package": "com.stuora.app",
+      "versionCode": 8,
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/generated-stuora/adaptive-foreground.png",
+        "backgroundColor": "#17152F"
+      }
     },
     "web": {
-      "bundler": "metro"
+      "bundler": "metro",
+      "favicon": "./assets/stuora-favicon.png",
+      "name": "Stuora",
+      "shortName": "Stuora",
+      "themeColor": "#17152F"
+    },
+    "icon": "./assets/generated-stuora/icon.png",
+    "owner": "stuora",
+    "extra": {
+      "eas": {
+        "projectId": "1ab07441-9b46-45a3-a5f6-2e33ea5bcf30"
+      }
     }
   }
 }

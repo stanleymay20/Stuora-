@@ -33,3 +33,27 @@ Browser coverage includes a real web file chooser contract: publish a persisted 
 ## Remaining commercial-GA qualifications
 
 Media support does not by itself make Stuora GA. Live email confirmation and account recovery, a genuine two-account cross-device create/discover/message flow, physical iOS and Android qualification, production/staging environment isolation, dependency vulnerability review, observability/alerts, abuse and moderation operations, legal/privacy release work, backup/restore qualification and the remaining product verticals still require controlled acceptance.
+
+## 2026-10-22 metadata and public-link privacy hardening
+
+**Source branch:** `feat/stuora-ai-business-foundation-20261018` / draft PR #23. Do not confuse this branch with the approved Vercel staging deployment or production.
+
+### Read-only live staging evidence
+- Dedicated staging project `uptjcspizukpjcoayhtn`: `listing-media` and `avatars` Storage buckets have `public=true`.
+- `storage.objects` has no listing-media object rows and `public.listing_media` has zero rows at inspection time; no legacy staging photos require migration.
+- Public bucket downloads bypass per-object RLS read authorization. A direct object URL may continue to work after the owning listing is closed even though listing_media metadata is no longer returned. Simply adjusting SELECT RLS cannot revoke public-bucket URLs. See Supabase Storage access model.
+- Existing Storage INSERT policy checks path ownership and category but does not require sanitized image bytes. A compromised or modified client can upload raw EXIF/XMP and metadata through the direct Storage API.
+
+### Client-side mitigation (not a trust boundary)
+- `src/listings/mediaSanitizer.ts` validates actual JPEG / PNG / WebP magic bytes and chunk structure; removes JPEG APP/COM metadata, PNG text/EXIF/ICC/XMP ancillary chunks and WebP metadata chunks. It rejects unsupported formats, malformed images, animated images, oversized images and EXIF-orientation-dependent JPEGs that would rotate after stripping.
+- `src/listings/ListingWorkspace.tsx` now uploads only sanitized new buffers, never the originally selected byte array. Users are clearly warned that listing photos are publicly retrievable by URL and can disclose information visibly present in the pixels.
+- The operation does **not** blur faces, crop visible personal details, strip metadata from older files, guarantee content is decodable, or prevent bypass via a direct Storage API request. The client sanitizer is defense-in-depth only.
+- The PNG/JPEG/WebP and real outgoing Storage request tests are under `tests/web/media-safety.spec.ts` and `tests/web/listings.spec.ts`.
+
+### Mandatory server-side GA follow-up
+1. Replace direct public-bucket upload with a **private, authenticated intake bucket** with strict owner and quota checks. Objects must not become public until a trusted server has decoded and **re-encoded pixels** with bounded dimensions/bytes, stripped metadata, scanned or moderated content, validated kind/ownership and stored an independently generated output name.
+2. Only the server-side trusted process may write the public delivery bucket. Disable direct user uploads/upserts to that bucket. Evaluate whether all media should instead be private with authorized downloads/signed URLs; if so, redesign anonymous listing browsing and preview caching before switching.
+3. Make lifecycle rules explicit: publishing, archive, report, removal, deletion, cancellation and failed uploads must revoke visibility and delete files consistently. A public CDN URL may remain cached and cannot be revoked immediately; do not promise instant revocation with the current architecture.
+4. Add image-privacy acceptance: upload EXIF GPS/JPEG, XMP/PNG, WebP metadata, invalid masquerading payloads, oversized/decompression-bomb images and simultaneous quota attempts; download **final server-delivered bytes** to verify metadata absence. Exercise two independent authenticated staging students and a signed-out client.
+5. Until these server-enforced checks pass, do not mark listing media privacy, account deletion or student onboarding as commercially GA-ready. Production and the approved preview hostname must remain unchanged.
+
