@@ -16,6 +16,9 @@ export function ModerationQueue() {
   const [reasons, setReasons] = useState<Record<string, string>>({});
   const [message, setMessage] = useState('');
   const [saving, setSaving] = useState<string | null>(null);
+  // State updates render asynchronously. This ref closes the same-tick window
+  // in which two rapid presses can otherwise submit the same decision twice.
+  const decisionLock = React.useRef(false);
   const load = useCallback(async () => {
     setState('loading');
     const { data, error } = await supabase.rpc('moderation_queue', { p_status: 'open', p_limit: 50 });
@@ -24,15 +27,22 @@ export function ModerationQueue() {
   }, []);
   useEffect(() => { void load(); }, [load]);
   const decide = async (item: Item, action: Action) => {
-    if (saving) return; // one decision at a time; a double tap must not send a second one
+    if (decisionLock.current) return;
     const reason = (reasons[item.id] ?? '').trim();
     if (reason.length < 10) { setMessage('Write a reason of at least 10 characters. The student will see it.'); return; }
+    decisionLock.current = true; // synchronous, before the first await or render
     setSaving(item.id);
-    const { error } = await supabase.rpc('moderate_report', { p_report: item.id, p_action: action, p_reason: reason });
-    setSaving(null);
-    if (error) { setMessage(error.message.length < 160 ? error.message : 'The decision could not be saved.'); return; }
-    setMessage(`${actionLabels[action]} recorded.`);
-    setItems(current => current.filter(i => i.id !== item.id));
+    try {
+      const { error } = await supabase.rpc('moderate_report', { p_report: item.id, p_action: action, p_reason: reason });
+      if (error) { setMessage(error.message.length < 160 ? error.message : 'The decision could not be saved.'); return; }
+      setMessage(`${actionLabels[action]} recorded.`);
+      setItems(current => current.filter(i => i.id !== item.id));
+    } catch {
+      setMessage('The decision could not be saved. Please retry.');
+    } finally {
+      decisionLock.current = false;
+      setSaving(null);
+    }
   };
   return (
     <View style={styles.card} testID="moderation-queue">
@@ -89,6 +99,9 @@ export function ActivityReviewQueue() {
   const [reasons, setReasons] = useState<Record<string, string>>({});
   const [message, setMessage] = useState('');
   const [saving, setSaving] = useState<string | null>(null);
+  // State updates render asynchronously. This ref closes the same-tick window
+  // in which two rapid presses can otherwise submit the same decision twice.
+  const decisionLock = React.useRef(false);
   const load = useCallback(async () => {
     setState('loading');
     const { data, error } = await supabase.rpc('list_pending_student_activities');
@@ -97,15 +110,22 @@ export function ActivityReviewQueue() {
   }, []);
   useEffect(() => { void load(); }, [load]);
   const decide = async (item: Activity, decision: 'approve' | 'reject') => {
-    if (saving) return; // one decision at a time; a double tap must not send a second one
+    if (decisionLock.current) return;
     const reason = (reasons[item.id] ?? '').trim();
     if (reason.length < 10) { setMessage('Write a reason of at least 10 characters. The student will see it.'); return; }
+    decisionLock.current = true; // synchronous, before the first await or render
     setSaving(item.id);
-    const { error } = await supabase.rpc('review_student_activity', { p_listing: item.id, p_decision: decision, p_reason: reason });
-    setSaving(null);
-    if (error) { setMessage(error.message.length < 160 ? error.message : 'The decision could not be saved.'); return; }
-    setMessage(decision === 'approve' ? 'Approved. It is now visible to students.' : 'Rejected. The student has been told why.');
-    setItems(current => current.filter(i => i.id !== item.id));
+    try {
+      const { error } = await supabase.rpc('review_student_activity', { p_listing: item.id, p_decision: decision, p_reason: reason });
+      if (error) { setMessage(error.message.length < 160 ? error.message : 'The decision could not be saved.'); return; }
+      setMessage(decision === 'approve' ? 'Approved. It is now visible to students.' : 'Rejected. The student has been told why.');
+      setItems(current => current.filter(i => i.id !== item.id));
+    } catch {
+      setMessage('The decision could not be saved. Please retry.');
+    } finally {
+      decisionLock.current = false;
+      setSaving(null);
+    }
   };
   return (
     <View style={styles.card} testID="activity-review-queue">
