@@ -13,43 +13,64 @@ const REFRESH_MARGIN_MS = 5 * 60 * 1000;
 
 type Cached = { url: string; expiresAt: number };
 const cache = new Map<string, Cached>();
-let pending: Map<string, ((url: string) => void)[]> | null = null;
+// Invalidate all signed responses from a previous auth session. A request can
+// finish AFTER sign-out, so clearing the Map alone is insufficient.
+let sessionEpoch = 0;
+type PhotoBatch = { epoch: number; callbacks: Map<string, ((url: string | null) => void)[]> };
+let pending: PhotoBatch | null = null;
 
 function publicUrl(path: string) {
   return supabase.storage.from(BUCKET).getPublicUrl(path).data.publicUrl;
 }
 
-async function flush(batch: Map<string, ((url: string) => void)[]>) {
-  const paths = [...batch.keys()];
+async function flush(batch: PhotoBatch) {
+  // An auth change may occur even before the queued signing request begins.
+  if (batch.epoch !== sessionEpoch) {
+    for (const resolvers of batch.callbacks.values()) for (const resolve of resolvers) resolve(null);
+    return;
+  }
+  const paths = [...batch.callbacks.keys()];
   let signed: { path: string | null; signedUrl: string | null; error: string | null }[] = [];
   try {
     const { data, error } = await supabase.storage.from(BUCKET).createSignedUrls(paths, TTL_SECONDS);
     if (!error && Array.isArray(data)) signed = data as typeof signed;
   } catch { /* offline or not signed in: fall back below */ }
+  // A late response from a previously authenticated viewer may never repopulate
+  // the cache or be displayed in a different viewer's session.
+  if (batch.epoch !== sessionEpoch) {
+    for (const resolvers of batch.callbacks.values()) for (const resolve of resolvers) resolve(null);
+    return;
+  }
   const byPath = new Map(signed.filter(s => s.path && s.signedUrl && !s.error).map(s => [s.path as string, s.signedUrl as string]));
-  for (const [path, resolvers] of batch) {
+  for (const [path, resolvers] of batch.callbacks) {
     const url = byPath.get(path);
     if (url) cache.set(path, { url, expiresAt: Date.now() + TTL_SECONDS * 1000 });
     for (const resolve of resolvers) resolve(url ?? publicUrl(path));
   }
 }
 
-export function resolveListingPhotoUrl(path: string): Promise<string> {
+export function resolveListingPhotoUrl(path: string): Promise<string | null> {
   const hit = cache.get(path);
   if (hit && hit.expiresAt - REFRESH_MARGIN_MS > Date.now()) return Promise.resolve(hit.url);
   return new Promise(resolve => {
     if (!pending) {
-      pending = new Map();
+      pending = { epoch: sessionEpoch, callbacks: new Map() };
       const batch = pending;
       // Collect every photo rendered in the same tick into one request.
-      setTimeout(() => { pending = null; void flush(batch); }, 0);
+      // An old timer must not clear a newer session's pending batch.
+      setTimeout(() => { if (pending === batch) pending = null; void flush(batch); }, 0);
     }
-    pending.set(path, [...(pending.get(path) ?? []), resolve]);
+    pending.callbacks.set(path, [...(pending.callbacks.get(path) ?? []), resolve]);
   });
 }
 
-/** Signed sessions change who may load a photo: forget URLs on sign-in/out. */
-export function clearListingPhotoUrls() { cache.clear(); }
+/** Called BEFORE rendering a changed authenticated viewer, not in a later
+ * React effect. Any old in-flight signed-URL response is invalidated. */
+export function clearListingPhotoUrls() {
+  sessionEpoch++;
+  cache.clear();
+  pending = null;
+}
 
 export function useListingPhotoUrl(path: string | null | undefined): string | null {
   const [url, setUrl] = useState<string | null>(() => {
