@@ -12,7 +12,8 @@ const migrationsDir = new URL('../supabase/migrations/', import.meta.url);
 const rollbackDir = new URL('../supabase/rollback/', import.meta.url);
 const files = readdirSync(migrationsDir).filter(f => f.endsWith('.sql')).sort();
 const STAGED = ['20261124100000_require_gisma_student_access', '20261124110000_student_activity_review',
-  '20261124120000_student_only_catalogue', '20261124121000_private_listing_media_bucket'];
+  '20261124120000_student_only_catalogue', '20261124121000_private_listing_media_bucket',
+  '20261124130000_student_access_audit_hardening'];
 
 async function database() {
   const db = new PGlite();
@@ -88,6 +89,7 @@ test('each staged migration has a rollback, and applying then rolling back resto
 test('rolling back only the private bucket keeps the student-only catalogue intact', async () => {
   const db = await database();
   for (const f of files) await db.exec(readFileSync(new URL(f, migrationsDir), 'utf8'));
+  // The private bucket is applied last, after the hardening migration that follows it in file order.
   await db.exec(readFileSync(new URL(`${STAGED[3]}.down.sql`, rollbackDir), 'utf8'));
   const { rows: bucket } = await db.query(`select public from storage.buckets where id='listing-media'`);
   assert.equal(bucket[0].public, true);

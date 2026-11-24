@@ -553,3 +553,40 @@ test('Student-only catalogue: listings, photos and group names need a signed-in 
   assert.equal(await n(B, `select id from public.student_groups`), 2, 'students see every group name');
   await db.close();
 });
+
+test('Audit hardening: ineligible owners cannot add photos or stay in the student catalogue', async () => {
+  const { db } = await harness(); await seed(db);
+  const { as, svc, listing } = actors(db);
+  const O = id(11);
+  // A legacy non-GISMA account with an active listing created before the rules.
+  await db.exec(`insert into auth.users (id, email) values ('${O}', 'legacy@example.com');
+    insert into public.profiles (id, display_name, city) values ('${O}', 'Legacy outsider', 'Köln');
+    insert into public.listings (id, owner_id, kind, status, title, city, price_cents)
+      values ('00000000-0000-4000-8000-0000000000f1', '${O}', 'marketplace', 'active', 'Legacy lamp', 'Köln', 900);
+    insert into public.marketplace_details (listing_id) values ('00000000-0000-4000-8000-0000000000f1');`);
+  const legacy = '00000000-0000-4000-8000-0000000000f1';
+  const room = await listing(A, 'housing', 'Student room');
+
+  // A-02: students see eligible owners' listings only; the owner still sees their own.
+  assert.equal((await as(B, `select id from public.listings where id='${room}'`)).rows.length, 1);
+  assert.equal((await as(B, `select id from public.listings where id='${legacy}'`)).rows.length, 0, 'ineligible owner hidden');
+  assert.equal((await as(B, `select listing_id from public.marketplace_details where listing_id='${legacy}'`)).rows.length, 0);
+  assert.equal((await as(O, `select id from public.listings where id='${legacy}'`)).rows.length, 1, 'owner keeps own row');
+  // A student whose status becomes rejected disappears from the catalogue too.
+  await db.exec(`update public.profiles set student_status='rejected' where id='${A}'`);
+  assert.equal((await as(B, `select id from public.listings where id='${room}'`)).rows.length, 0);
+  await db.exec(`update public.profiles set student_status='unverified' where id='${A}'`);
+
+  // A-01: photo admission refuses ineligible or suspended owners without charging shared budgets.
+  assert.equal((await svc(`select public.consume_listing_photo_attempt('${O}', '${legacy}') ok`)).rows[0].ok, false);
+  const { rows: g0 } = await db.query(`select count(*)::int n from private.listing_photo_attempt_windows where scope='global_minute'`);
+  assert.equal(g0[0].n, 0, 'refused outsider consumed no shared window');
+  await db.exec(`insert into public.account_suspensions(user_id, reason) values ('${D}', 'Suspended for testing purposes.')`);
+  assert.equal((await svc(`select public.consume_listing_photo_attempt('${D}', null) ok`)).rows[0].ok, false);
+  assert.equal((await svc(`select public.consume_listing_photo_attempt('${A}', '${room}') ok`)).rows[0].ok, true);
+
+  // A-03: participants have no UPDATE privilege that could move them onto another trip.
+  const { rows: grant } = await db.query(`select has_column_privilege('authenticated', 'public.trip_participants', 'trip_listing_id', 'UPDATE') ok`);
+  assert.equal(grant[0].ok, false);
+  await db.close();
+});
