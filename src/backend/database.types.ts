@@ -615,6 +615,33 @@ export type Database = {
           { foreignKeyName: "student_group_bans_banned_by_fkey"; columns: ["banned_by"]; isOneToOne: false; referencedRelation: "profiles"; referencedColumns: ["id"] },
         ]
       }
+      student_group_files: {
+        Row: {
+          id: string; group_id: string; uploader_id: string; original_name: string;
+          object_path: string; media_type: "application/pdf" | "image/webp";
+          size_bytes: number; status: "pending_review" | "approved" | "blocked";
+          inspection_method: string | null; inspected_at: string | null; created_at: string;
+          scan_sha256: string | null; scan_engine: string | null;
+        }
+        Insert: {
+          id?: string; group_id: string; uploader_id: string; original_name: string;
+          object_path: string; media_type: "application/pdf" | "image/webp";
+          size_bytes: number; status?: "pending_review" | "approved" | "blocked";
+          inspection_method?: string | null; inspected_at?: string | null; created_at?: string;
+          scan_sha256?: string | null; scan_engine?: string | null;
+        }
+        Update: {
+          id?: string; group_id?: string; uploader_id?: string; original_name?: string;
+          object_path?: string; media_type?: "application/pdf" | "image/webp";
+          size_bytes?: number; status?: "pending_review" | "approved" | "blocked";
+          inspection_method?: string | null; inspected_at?: string | null; created_at?: string;
+          scan_sha256?: string | null; scan_engine?: string | null;
+        }
+        Relationships: [
+          { foreignKeyName: "student_group_files_group_id_fkey"; columns: ["group_id"]; isOneToOne: false; referencedRelation: "student_groups"; referencedColumns: ["id"] },
+          { foreignKeyName: "student_group_files_uploader_id_fkey"; columns: ["uploader_id"]; isOneToOne: false; referencedRelation: "profiles"; referencedColumns: ["id"] },
+        ]
+      }
       student_group_members: {
         Row: { group_id: string; user_id: string; joined_at: string }
         Insert: { group_id: string; user_id: string; joined_at?: string }
@@ -779,6 +806,16 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      publish_student_activity: {
+        Args: { p_kind: 'trip' | 'job' | 'event'; p_title: string; p_city: string; p_description: string; p_details: Json }
+        Returns: string
+      }
+      student_activity_response: {
+        Args: { p_id: string; p_action: string; p_note?: string }
+        Returns: Json
+      }
+      close_student_activity: { Args: { p_id: string }; Returns: undefined }
+      delete_student_group_file: { Args: { p_file: string }; Returns: boolean }
       am_i_moderator: { Args: Record<string, never>; Returns: boolean }
       conversation_safety_state: {
         Args: { p_conversation: string }

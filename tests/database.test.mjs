@@ -13,7 +13,7 @@ async function database(inheritedGrants) {
   await db.exec(`
     create role anon; create role authenticated; create role service_role;
     create schema auth;
-    create table auth.users (id uuid primary key);
+    create table auth.users (id uuid primary key, email text, email_confirmed_at timestamptz);
     create function auth.uid() returns uuid language sql stable as
       $$ select nullif(current_setting('request.jwt.claim.sub', true), '')::uuid $$;
 
@@ -377,6 +377,29 @@ for (const inheritedGrants of [false, true]) {
         values ('${a}','event','active','Direct bypass event','Aachen',0)`, '42501');
       await deny(a, `insert into public.listings(owner_id,kind,status,title,city,price_cents)
         values ('${a}','trip','draft','Direct bypass trip','Aachen',0)`, '42501');
+
+      await db.exec(`update auth.users set email=id::text || '@gisma-student.com',email_confirmed_at=now() where id in ('${a}','${b}')`);
+      for (const [kind, detail] of [
+        ['event', {venue_name:'Campus Hall', starts_at:'2099-01-01T12:00Z', capacity:1}],
+        ['trip', {destination:'Potsdam', starts_at:'2099-01-01T12:00Z', capacity:2}],
+        ['job', {company_name:'Test company',compensation_text:'€18/hour',workplace_mode:'hybrid'}],
+      ]) {
+        const publish = `select public.publish_student_activity('${kind}','Student activity','Berlin','Test','${JSON.stringify(detail)}') id`;
+        await deny(c, publish, '42501');
+        const result = await as('authenticated', a, publish);
+        const activity = result.rows[0].id;
+        const response = action => `select public.student_activity_response('${activity}','${action}') result`;
+        const action = kind === 'job' ? 'apply' : 'join';
+        await deny(a, response(action),'42501');
+        const first = await as('authenticated', b, response(action));
+        assert.equal(first.rows[0].result[kind === 'job' ? 'applied' : 'joined'],true);
+        const duplicate = await as('authenticated', b, response(action));
+        assert.deepEqual(first.rows,duplicate.rows);
+        await as('authenticated', b, response(kind === 'job' ? 'withdraw' : 'leave'));
+        await deny(b, `select public.close_student_activity('${activity}')`, '42501');
+        await as('authenticated', a, `select public.close_student_activity('${activity}')`);
+        await deny(b,response(action),'42501');
+      }
 
       // A caller with a valid JWT must not bypass the publishing RPC by
       // inserting a public housing/marketplace parent without detail rows.

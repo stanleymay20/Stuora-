@@ -6,13 +6,13 @@ const app = JSON.parse(readFileSync('app.json', 'utf8')).expo;
 const eas = JSON.parse(readFileSync('eas.json', 'utf8'));
 const workflow = readFileSync('.eas/workflows/ios-testflight.yml', 'utf8');
 
-test('TestFlight candidate is the existing Stuora iOS app, version 0.1.6', () => {
+test('TestFlight candidate is the existing Stuora iOS app, version 0.1.7', () => {
   assert.equal(app.name, 'Stuora');
   assert.equal(app.owner, 'stuora');
   assert.equal(app.slug, 'stuora');
-  assert.equal(app.version, '0.1.6');
+  assert.equal(app.version, '0.1.7');
   assert.equal(app.ios.bundleIdentifier, 'com.stuora.app');
-  assert.equal(app.ios.buildNumber, '1');
+  assert.equal(app.ios.buildNumber, '2');
   assert.equal(app.extra?.eas?.projectId, '1ab07441-9b46-45a3-a5f6-2e33ea5bcf30');
 });
 

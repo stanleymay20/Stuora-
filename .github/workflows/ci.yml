@@ -2,7 +2,7 @@ name: Stuora CI
 
 on:
   push:
-    branches: [main, feat/mvp-shell, 'release/android-internal-*', 'release/ios-testflight-*']
+    branches: [main, feat/mvp-shell, 'release/android-internal-*', 'release/ios-testflight-*', 'feature/professor-three-section-ui-*', 'feature/private-group-files-*', 'feature/group-file-intake-*', 'feature/group-file-pdf-scan-*', 'feature/self-hosted-clamav-scanner-*', 'feature/clamav-staging-readiness-*']
   pull_request:
     # Also gate stacked PRs that target a feature branch (e.g. remediation PRs).
     branches: [main, 'feat/**']
@@ -41,6 +41,18 @@ jobs:
       - name: Test database authorization
         run: npm run test:database
 
+      - name: Reject private group-file access by nonmembers and revoked members
+        run: node --test tests/group-file-security.test.mjs
+
+      - name: Guard private attachment request headers, sizes and safe filenames
+        run: node --experimental-strip-types --test tests/group-file-transfer.test.mjs
+
+      - name: Verify server-only group-file upload admission, quarantine and bans
+        run: node --test tests/group-file-intake-security.test.mjs
+
+      - name: Verify private group file cleanup lease, retries and access denial
+        run: node --test tests/group-file-cleanup-security.test.mjs
+
   # Independent Deno runtime gate. Expo's TypeScript settings do not understand
   # Deno's npm:/jsr: module specifiers and cannot prove Edge Function readiness.
   trusted-media-edge:
@@ -60,6 +72,30 @@ jobs:
 
       - name: Test real WASM JPEG PNG WebP media codecs (local Deno runtime)
         run: deno test --allow-read --config supabase/functions/listing-photo-intake/deno.json supabase/functions/listing-photo-intake/processor.test.ts
+
+      - name: Typecheck fail-closed private group download gateway
+        run: deno check --config supabase/functions/deno.json supabase/functions/group-file-download/index.ts
+
+      - name: Test member-scoped download, ban, review and revocation
+        run: deno test --config supabase/functions/deno.json supabase/functions/group-file-download/core.test.ts
+
+      - name: Typecheck staging-only group photo/PDF intake
+        run: deno check --config supabase/functions/deno.json supabase/functions/group-file-intake/index.ts
+
+      - name: Test PDF quarantine preflight and trusted WebP filenames
+        run: deno test --config supabase/functions/deno.json supabase/functions/group-file-intake/preflight.test.ts
+
+      - name: Typecheck private group cleanup worker (disabled)
+        run: deno check --config supabase/functions/deno.json supabase/functions/group-file-cleanup/index.ts
+
+      - name: Test private object cleanup worker, retries and signed authentication
+        run: deno test --config supabase/functions/deno.json supabase/functions/group-file-cleanup/core.test.ts
+
+      - name: Typecheck staged PDF scanner worker (disabled)
+        run: deno check --config supabase/functions/deno.json supabase/functions/group-file-pdf-scan/index.ts
+
+      - name: Test real antivirus scan contract with forged results and quarantine failure paths
+        run: deno test --config supabase/functions/deno.json supabase/functions/group-file-pdf-scan/core.test.ts
 
       - name: Typecheck account deletion, AI assistant and external data Edge Functions
         shell: bash
@@ -131,6 +167,9 @@ jobs:
 
       - name: Refuse production builds with placeholder legal pages
         run: node --test tests/legal-config.test.mjs
+
+      - name: Test authenticated self-hosted PDF scanner and ClamAV wire protocol
+        run: node --test services/stuora-pdf-scanner/scanner.test.mjs
 
       - name: Test secret scanner
         run: node --test tests/secret-scan.test.mjs

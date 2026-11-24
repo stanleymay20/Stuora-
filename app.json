@@ -3,7 +3,7 @@
     "name": "Stuora",
     "slug": "stuora",
     "scheme": "stuora",
-    "version": "0.1.6",
+    "version": "0.1.7",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
     "plugins": [
@@ -23,17 +23,27 @@
           "imageWidth": 220,
           "resizeMode": "contain"
         }
+      ],
+      [
+        "expo-file-system",
+        {
+          "supportsOpeningDocumentsInPlace": true,
+          "enableFileSharing": true
+        }
       ]
     ],
     "ios": {
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      },
       "supportsTablet": true,
       "bundleIdentifier": "com.stuora.app",
       "icon": "./assets/generated-stuora/icon.png",
-      "buildNumber": "1"
+      "buildNumber": "2"
     },
     "android": {
       "package": "com.stuora.app",
-      "versionCode": 7,
+      "versionCode": 8,
       "adaptiveIcon": {
         "foregroundImage": "./assets/generated-stuora/adaptive-foreground.png",
         "backgroundColor": "#17152F"

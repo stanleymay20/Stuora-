@@ -162,10 +162,12 @@ test('compact homepage listing previews keep their real first-post actions disco
   await expect(page.getByText('Sign in and complete your profile to publish a listing.')).toBeVisible();
 });
 
-test('community category tiles disclose that posting remains gated', async ({ page }) => {
+test('community categories open browsing and Trips offers the train planner', async ({ page }) => {
   await backend(page);
   await page.goto('/');
-  await expect(page.getByText('Posting soon', { exact: true })).toHaveCount(3);
+  await page.getByRole('button', { name: 'Browse Trips', exact: true }).click();
+  await expect(page.getByRole('link', { name: /Plan a journey with Deutsche Bahn/ })).toBeVisible();
+  await page.getByRole('button', { name: /^(Open )?Home$/ }).click();
   await expect(page.getByRole('button', { name: 'Browse Housing', exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Browse Marketplace', exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Browse Jobs', exact: true }).click();
@@ -174,7 +176,7 @@ test('community category tiles disclose that posting remains gated', async ({ pa
   await expect(page.getByRole('button', { name: 'Refresh listings' })).toBeVisible();
 });
 
-test('real Trips/Jobs/Events catalog queries active persisted rows and keeps participation disabled', async ({ page }) => {
+test('real Trips/Jobs/Events catalog queries active persisted rows and offers sign-in for participation', async ({ page }) => {
   await backend(page);
   let observed: string[] = [];
   const cityFilters: string[] = [];
@@ -215,7 +217,7 @@ test('real Trips/Jobs/Events catalog queries active persisted rows and keeps par
       await expect.poll(() => cityFilters.some(value => value.includes('Berlin'))).toBe(true);
     }
     await page.getByRole('button', {name: `View ${expected}`}).click();
-    await expect(page.getByText('Publishing, joining, and applying are not enabled until the reviewed safety migration is qualified.')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Sign in to participate' })).toBeVisible();
     await expect(page.getByRole('button', {name:back})).toBeVisible();
     await page.goto('/');
   }
@@ -412,4 +414,29 @@ test('wide desktop homepage uses the available canvas without hiding controls be
   await launcher.click();
   await expect(page.getByText('Connected search beta · Read-only')).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+});
+
+
+test('professor three-section discovery keeps all seven categories in clear spaces', async ({ page }) => {
+  await backend(page);
+  await page.goto('/');
+  const sections = page.getByTestId('three-discovery-sections');
+  await expect(sections.locator('[data-testid^="section-"]')).toHaveCount(3);
+  const groups = page.getByTestId('section-uni');
+  const campus = page.getByTestId('section-life');
+  const marketplace = page.getByTestId('section-business');
+  await expect(groups.getByRole('button', { name: 'Browse Groups' })).toBeVisible();
+  for (const category of ['People', 'Events', 'Trips'])
+    await expect(campus.getByRole('button', { name: `Browse ${category}` })).toBeVisible();
+  for (const category of ['Marketplace', 'Housing', 'Jobs'])
+    await expect(marketplace.getByRole('button', { name: `Browse ${category}` })).toBeVisible();
+
+  // Every category retains its existing route and the category-specific content.
+  await campus.getByRole('button', { name: 'Browse Events' }).click();
+  await expect(page.getByText('STUORA / EVENTS', { exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Open Life section' })).toBeVisible();
+  await page.getByRole('button', { name: 'Open Business section' }).click();
+  await expect(page.getByText('STUORA / MARKETPLACE', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Open Uni section' }).click();
+  await expect(page.getByText('STUORA / GROUPS', { exact: true })).toBeVisible();
 });
