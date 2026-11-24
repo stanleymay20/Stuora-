@@ -33,9 +33,9 @@ test('Stuora native splash is configured with SDK-matched plugin and current ico
  const lock=JSON.parse(readFileSync('package-lock.json','utf8'));
  const plugin=app.plugins.find(x=>Array.isArray(x)&&x[0]==='expo-splash-screen');
  assert.ok(plugin,'splash plugin must be present');
- assert.equal(pkg.dependencies['expo-splash-screen'],'~57.0.11');
- assert.equal(lock.packages[''].dependencies['expo-splash-screen'],'~57.0.11');
- assert.equal(lock.packages['node_modules/expo-splash-screen'].version,'57.0.11');
+ assert.equal(pkg.dependencies['expo-splash-screen'],'~57.0.12');
+ assert.equal(lock.packages[''].dependencies['expo-splash-screen'],'~57.0.12');
+ assert.equal(lock.packages['node_modules/expo-splash-screen'].version,'57.0.12');
  assert.equal(plugin[1].image,'./assets/generated-stuora/splash-icon.png');
  assert.equal(plugin[1].backgroundColor,'#17152F');
  assert.equal(app.userInterfaceStyle,'light');
