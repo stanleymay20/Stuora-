@@ -8,10 +8,22 @@ import { stuoraAuthError } from './authCopy';
 import AccountDataControls from './AccountDataControls';
 import { LegalLinks, type LegalDocument } from '../legal/LegalPage';
 import { ActivityReviewQueue, ModerationNotices, ModerationQueue } from '../moderation/ModerationQueue';
+import { catalogueAccess } from './studentAccess';
 
 const authRedirectUrl = () => Platform.OS === 'web' && typeof window !== 'undefined'
   ? window.location.origin
   : 'stuora://auth-callback';
+
+// The server grants student access from a confirmed @gisma-student.com email
+// (private.is_gisma_student_account). There is no separate student-number check,
+// so never show "unverified" to a student who already has full access.
+function studentAccessLabel(session: Parameters<typeof catalogueAccess>[0], status: string | null | undefined) {
+  if (status === 'rejected') return 'Student access removed by Stuora';
+  if (!session?.user.email_confirmed_at) return 'Email not confirmed. Confirm it to use Stuora.';
+  return catalogueAccess(session) === 'student'
+    ? 'GISMA email confirmed · Student access active'
+    : 'Not a GISMA student email · Student features are unavailable';
+}
 
 export default function AccountPanel({ onLegal }: { onLegal?: (doc: LegalDocument) => void } = {}) {
   const { session, initializing, profile, profileLoading, recoveryMode, error, reloadProfile, finishRecovery } = useAuth();
@@ -218,7 +230,7 @@ export default function AccountPanel({ onLegal }: { onLegal?: (doc: LegalDocumen
       <View style={styles.passportAvatar}><Text style={styles.passportInitial}>{profile.display_name.charAt(0).toUpperCase()}</Text></View>
       <View style={styles.passportInfo}>
         <Text style={styles.passportName}>{profile.display_name}</Text>
-        <Text style={styles.passportMeta}>{profile.city} · Verification: {profile.student_status}</Text>
+        <Text style={styles.passportMeta}>{profile.city} · {studentAccessLabel(session, profile.student_status)}</Text>
         {profile.bio ? <Text style={styles.passportBio}>{profile.bio}</Text> : null}
       </View>
     </View> : null}
@@ -251,7 +263,7 @@ export default function AccountPanel({ onLegal }: { onLegal?: (doc: LegalDocumen
       </>}
     </> : <>
       <Text style={styles.description}>{session.user.email}</Text>
-      <Text style={styles.trust}>{session.user.email_confirmed_at ? 'Email confirmed' : 'Email not confirmed'} · Student status: {profile?.student_status ?? 'unverified'}</Text>
+      <Text style={styles.trust}>{studentAccessLabel(session, profile?.student_status)}</Text>
       {legacyDiscovery ? (
         <View style={styles.banner} testID="legacy-discovery-banner">
           <Text style={styles.bannerText}>Your profile was set to appear in the student directory before Stuora asked for your confirmation. It is hidden until you choose.</Text>

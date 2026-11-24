@@ -12,7 +12,9 @@ test('profile creation, editing, privacy, reload persistence and logout', async 
   await page.getByLabel('Bio', { exact: true }).fill('New to university');
   await page.getByRole('button', { name: 'Create profile', exact: true }).click();
   await expect(page.getByText('Your profile has been saved.')).toBeVisible();
-  await expect(page.getByText(/Student status: unverified/)).toBeVisible();
+  // Access comes from the confirmed GISMA email; never show a misleading 'unverified' status.
+  await expect(page.getByText('GISMA email confirmed · Student access active', { exact: true })).toBeVisible();
+  await expect(page.getByText(/unverified/)).toHaveCount(0);
   await page.getByLabel('Bio', { exact: true }).fill('Looking for flatmates');
   await page.getByRole('switch', { name: 'Profile discoverable' }).click();
   await page.getByRole('button', { name: 'Save profile', exact: true }).click();

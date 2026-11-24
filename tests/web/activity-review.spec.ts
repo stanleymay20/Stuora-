@@ -63,3 +63,29 @@ test('students never see the activity review queue or load pending submissions',
   await expect(page.getByTestId('activity-review-queue')).toHaveCount(0);
   expect(queueReads).toBe(0);
 });
+
+test('a double tap sends one moderator decision, not two', async ({ page }) => {
+  await asStudent(page, 'moderator@stuora-staff.example');
+  await backend(page);
+  let calls = 0;
+  let release: () => void = () => {};
+  const held = new Promise<void>(resolve => { release = resolve; });
+  await page.route('**/rest/v1/rpc/am_i_moderator', route => route.fulfill({ json: true }));
+  await page.route('**/rest/v1/rpc/moderation_queue', route => route.fulfill({ json: [] }));
+  await page.route('**/rest/v1/rpc/list_pending_student_activities', route => route.fulfill({ json: [pending[0]] }));
+  await page.route('**/rest/v1/rpc/review_student_activity', async route => {
+    calls++;
+    await held;
+    return route.fulfill({ status: 204, body: '' });
+  });
+  await page.goto('/');
+  await page.getByText('You', { exact: true }).click();
+  await page.getByLabel('Reason for decision on Barista shifts').fill('Employer details confirmed.');
+  const approve = page.getByRole('button', { name: 'Approve Barista shifts' });
+  await approve.click();
+  await approve.click({ force: true });
+  await page.getByRole('button', { name: 'Reject Barista shifts' }).click({ force: true });
+  release();
+  await expect(page.getByText('Approved. It is now visible to students.')).toBeVisible();
+  expect(calls).toBe(1);
+});
