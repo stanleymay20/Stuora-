@@ -12,13 +12,21 @@
 --   3. private.require_community_student reuses it (same rule as before).
 --   4. BEFORE INSERT/UPDATE guard triggers on student-writable tables, so RLS
 --      writes and SECURITY DEFINER RPCs are both covered.
---   5. Existing non-GISMA profiles are removed from the student directory.
---   6. public.hook_require_gisma_signup for Supabase Auth's Before User Created
+--   5. Signed-in non-GISMA accounts can no longer read other students' private
+--      data (directory, messages, group content and files, participants and
+--      applicants) through memberships they held before.
+--   6. Existing non-GISMA profiles are removed from the student directory.
+--   7. public.hook_require_gisma_signup for Supabase Auth's Before User Created
 --      hook. Enabling the hook is a separate dashboard step; see the review doc.
 --
 -- Deliberately still allowed for any signed-in account: deleting own content,
 -- leaving groups and conversations, blocking/unblocking, archiving own
--- listings, hiding own profile, data export and account deletion.
+-- published listings (status only), hiding own profile, reading their own
+-- rows, data export and account deletion.
+-- Unchanged on purpose: the public catalogue that signed-out visitors can
+-- already browse (active listings and details, listing photo metadata and the
+-- public listing-media bucket, group names, verified benefits). Making that
+-- student-only is a separate product decision.
 -- Writes with no JWT (service role, migrations, moderation workers) are
 -- unaffected, matching private.reject_suspended_actor.
 begin;
@@ -88,9 +96,19 @@ begin
   elsif private.is_gisma_student_account(actor) then
     return new;
   elsif tg_table_name = 'listings' and tg_op = 'UPDATE' then
-    -- Nested: PL/pgSQL may resolve new.status even when an AND would short-circuit.
-    if new.status = 'closed'::public.listing_status then
-      return new;  -- archiving (by the owner or a moderator) is always allowed
+    -- Nested IFs: PL/pgSQL may resolve new.<column> even when an AND would short-circuit.
+    -- Moderators change other students' listings only through SECURITY DEFINER
+    -- moderation functions (RLS limits direct updates to the owner), and staff
+    -- moderators need not hold a GISMA address.
+    if old.owner_id <> actor and private.is_moderator(actor) then
+      return new;
+    end if;
+    -- The owner may archive a published listing and change nothing else.
+    if old.status in ('active'::public.listing_status, 'reserved'::public.listing_status)
+       and new.status = 'closed'::public.listing_status then
+      if (to_jsonb(new) - 'status' - 'updated_at') = (to_jsonb(old) - 'status' - 'updated_at') then
+        return new;
+      end if;
     end if;
   end if;
 
@@ -147,7 +165,51 @@ create trigger a_student_guard before insert or update on public.benefit_redempt
 -- Not guarded on purpose: user_blocks (protective), moderation_notices
 -- (acknowledging notices), account_suspensions and moderators (staff only).
 
--- 5. Remove non-students from the student directory --------------------------
+-- 5. Student-only reads --------------------------------------------------------
+-- RESTRICTIVE policies are ANDed with the existing permissive ones, so they can
+-- only remove rows. Each keeps the caller's own rows. The no-argument helper is
+-- the only new function granted to clients, so nobody can probe another uid.
+create function private.current_user_is_gisma_student() returns boolean
+language sql stable security definer set search_path = '' as $$
+  select private.is_gisma_student_account((select auth.uid()));
+$$;
+revoke all on function private.current_user_is_gisma_student() from public, anon;
+grant execute on function private.current_user_is_gisma_student() to authenticated;
+
+create policy a_student_only_read on public.profiles as restrictive for select to authenticated
+  using (id = (select auth.uid()) or (select private.current_user_is_gisma_student()));
+create policy a_student_only_read on public.messages as restrictive for select to authenticated
+  using (sender_id = (select auth.uid()) or (select private.current_user_is_gisma_student()));
+create policy a_student_only_read on public.student_group_messages as restrictive for select to authenticated
+  using (author_id = (select auth.uid()) or (select private.current_user_is_gisma_student()));
+create policy a_student_only_read on public.student_group_members as restrictive for select to authenticated
+  using (user_id = (select auth.uid()) or (select private.current_user_is_gisma_student()));
+create policy a_student_only_read on public.student_group_files as restrictive for select to authenticated
+  using (uploader_id = (select auth.uid()) or (select private.current_user_is_gisma_student()));
+create policy a_student_only_read on public.job_applications as restrictive for select to authenticated
+  using (applicant_id = (select auth.uid()) or (select private.current_user_is_gisma_student()));
+create policy a_student_only_read on public.trip_participants as restrictive for select to authenticated
+  using (user_id = (select auth.uid()) or (select private.current_user_is_gisma_student()));
+create policy a_student_only_read on public.event_participants as restrictive for select to authenticated
+  using (user_id = (select auth.uid()) or (select private.current_user_is_gisma_student()));
+
+-- Private group files are streamed by the group-file-download Edge Function,
+-- which authorises through this function: add the same rule there.
+create or replace function public.can_read_student_group_files(p_group uuid) returns boolean
+language sql stable security definer set search_path = '' as $$
+  select (select auth.uid()) is not null
+     and private.is_gisma_student_account((select auth.uid()))
+     and exists (
+       select 1 from public.student_group_members m
+       where m.group_id = p_group and m.user_id = (select auth.uid())
+     )
+     and not exists (
+       select 1 from public.student_group_bans b
+       where b.group_id = p_group and b.user_id = (select auth.uid())
+     )
+$$;
+
+-- 6. Remove non-students from the student directory --------------------------
 -- No JWT here, so the guard above does not fire; stamp_discovery_consent
 -- clears the consent timestamp. The guard then stops them re-enabling it.
 update public.profiles p
@@ -155,7 +217,7 @@ update public.profiles p
  where p.is_discoverable
    and not private.has_gisma_student_email(p.id);
 
--- 6. Signup gate for Supabase Auth's Before User Created hook ----------------
+-- 7. Signup gate for Supabase Auth's Before User Created hook ----------------
 -- Contract: https://supabase.com/docs/guides/auth/auth-hooks/before-user-created-hook
 create function public.hook_require_gisma_signup(event jsonb) returns jsonb
 language plpgsql stable set search_path = '' as $$

@@ -326,6 +326,8 @@ export type Database = {
           kind: Database["public"]["Enums"]["listing_kind"]
           owner_id: string
           price_cents: number | null
+          review_status: string
+          reviewed_at: string | null
           status: Database["public"]["Enums"]["listing_status"]
           title: string
           updated_at: string

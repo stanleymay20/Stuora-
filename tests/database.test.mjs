@@ -68,6 +68,8 @@ async function database(inheritedGrants) {
     insert into public.housing_details (listing_id, housing_type, rent_cents) values ('${house}', 'room', 62000);
     insert into public.marketplace_details (listing_id) values ('${draft}');
     insert into public.trip_details (listing_id, destination, starts_at, capacity) values ('${trip}', 'Prague', now(), 2);
+    -- Trusted (no-JWT) seed: these community posts have already passed moderator review.
+    update public.listings set review_status = 'approved', reviewed_at = now() where id in ('${job}', '${trip}');
     insert into public.conversations (id, creator_id) values ('${ab}', '${a}'), ('${bc}', '${b}');
     insert into public.conversation_members (conversation_id, user_id) values
       ('${ab}', '${a}'), ('${ab}', '${b}'), ('${bc}', '${b}'), ('${bc}', '${c}');
@@ -393,6 +395,20 @@ for (const inheritedGrants of [false, true]) {
         const activity = result.rows[0].id;
         const response = action => `select public.student_activity_response('${activity}','${action}') result`;
         const action = kind === 'job' ? 'apply' : 'join';
+        const review = decision => `select public.review_student_activity('${activity}','${decision}','Checked the organiser details.')`;
+        // Submitted, not published: only the author sees it, and nobody can act on it.
+        const { rows: own } = await as('authenticated', a, `select review_status from public.listings where id='${activity}'`);
+        assert.equal(own[0].review_status, 'pending');
+        await count('authenticated', b, `select id from public.listings where id='${activity}'`, 0);
+        await count('anon', null, `select id from public.listings where id='${activity}'`, 0);
+        await deny(b, response(action), '42501');
+        // Students cannot review, not even their own submission.
+        await deny(a, review('approve'), '42501');
+        await deny(b, review('approve'), '42501');
+        // A Stuora moderator (staff, not a GISMA student) approves it.
+        await db.exec(`insert into public.moderators(user_id) values ('${c}') on conflict do nothing`);
+        await as('authenticated', c, review('approve'));
+        await count('authenticated', b, `select id from public.listings where id='${activity}'`, 1);
         await deny(a, response(action),'42501');
         const first = await as('authenticated', b, response(action));
         assert.equal(first.rows[0].result[kind === 'job' ? 'applied' : 'joined'],true);

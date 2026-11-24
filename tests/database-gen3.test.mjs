@@ -332,6 +332,16 @@ test('GISMA-only: non-GISMA accounts cannot use core student features; protectiv
   const before = actors(db);
   await before.as(O, `select public.set_profile_discovery(true)`);
   await before.as(A, `select public.set_profile_discovery(true)`);
+  // Before the migration the outsider joined a group and messaged a student.
+  const l = await before.listing(A, 'housing', 'Room near campus');
+  const g = (await before.as(A, "select public.create_student_group('Study circle','', 'Köln','Study') id")).rows[0].id;
+  await before.as(O, `insert into public.student_group_members(group_id,user_id) values ('${g}','${O}')`);
+  await before.as(B, `insert into public.student_group_members(group_id,user_id) values ('${g}','${B}')`);
+  await before.as(O, `select public.send_student_group_message('${g}','outsider hello')`);
+  await before.as(A, `select public.send_student_group_message('${g}','members only')`);
+  const conv = (await before.as(O, `select public.start_listing_conversation('${l}') id`)).rows[0].id;
+  await before.as(O, `insert into public.messages(conversation_id,sender_id,body) values ('${conv}','${O}','is it free?')`);
+  await before.as(A, `insert into public.messages(conversation_id,sender_id,body) values ('${conv}','${A}','private reply')`);
   await db.exec(`select set_config('request.jwt.claim.sub', '', false)`);
   await rest();
   const { as, svc, deny, listing } = actors(db);
@@ -340,12 +350,27 @@ test('GISMA-only: non-GISMA accounts cannot use core student features; protectiv
   assert.equal((await as(B, `select id from public.profiles where id='${O}'`)).rows.length, 0, 'outsider hidden');
   assert.equal((await as(B, `select id from public.profiles where id='${A}'`)).rows.length, 1, 'student still listed');
 
+  // Reads: the outsider keeps only its own rows from earlier memberships.
+  const rows = async sql => (await as(O, sql)).rows;
+  assert.deepEqual((await rows(`select id from public.profiles`)).map(r => r.id), [O], 'directory closed, own profile kept');
+  assert.deepEqual((await rows(`select body from public.messages where conversation_id='${conv}'`)).map(r => r.body), ['is it free?']);
+  assert.deepEqual((await rows(`select body from public.student_group_messages where group_id='${g}'`)).map(r => r.body), ['outsider hello']);
+  assert.deepEqual((await rows(`select user_id from public.student_group_members where group_id='${g}'`)).map(r => r.user_id), [O]);
+  assert.equal((await rows(`select public.can_read_student_group_files('${g}') ok`))[0].ok, false, 'private group files closed');
+  assert.equal((await as(B, `select public.can_read_student_group_files('${g}') ok`)).rows[0].ok, true, 'members unaffected');
+  assert.equal((await as(B, `select body from public.student_group_messages where group_id='${g}'`)).rows.length, 2);
+  assert.equal((await as(A, `select body from public.messages where conversation_id='${conv}'`)).rows.length, 2,
+    'the student still sees the whole thread');
+  // The public catalogue is unchanged: the same rows a signed-out visitor sees.
+  assert.equal((await rows(`select id from public.listings where id='${l}'`)).length, 1);
+  assert.equal((await as(null, `select id from public.listings where id='${l}'`)).rows.length, 1);
+
   // Every student write path refuses the outsider.
-  const l = await listing(A, 'housing', 'Room near campus');
-  const g = (await as(A, "select public.create_student_group('Study circle','', 'Köln','Study') id")).rows[0].id;
   await deny(O, `select public.save_student_listing(null,'housing','Room','', 'Köln', 40000,'room',false,false,'good')`);
   await deny(O, `insert into public.listings(owner_id,kind,status,title,city,price_cents) values ('${O}','marketplace','draft','Lamp','Köln',100)`);
-  await deny(O, `select public.start_listing_conversation('${l}')`);
+  const fresh = await listing(B, 'marketplace', 'Desk lamp', 1500);
+  await deny(O, `select public.start_listing_conversation('${fresh}')`);
+  await deny(O, `insert into public.messages(conversation_id,sender_id,body) values ('${conv}','${O}','still there?')`);
   await deny(O, `select public.create_student_group('Outsider group','', 'Köln','Study')`);
   await deny(O, `insert into public.student_group_members(group_id,user_id) values ('${g}','${O}')`);
   await deny(O, `select public.report_content('listing', '${l}', 'spam', 'Outsider report')`);
@@ -363,6 +388,7 @@ test('GISMA-only: non-GISMA accounts cannot use core student features; protectiv
   await as(O, `update public.profiles set bio='leaving soon' where id='${O}'`);
   assert.ok((await as(O, `select public.export_my_data() d`)).rows[0].d.account);
   await as(O, `insert into public.user_blocks(blocker_id, blocked_id) values ('${O}', '${A}')`);
+  await as(O, `delete from public.student_group_members where group_id='${g}' and user_id='${O}'`);
 
   // Unconfirmed GISMA address is not enough.
   await db.exec(`insert into auth.users (id, email, email_confirmed_at) values ('${U}', 'u@gisma-student.com', null)`);
@@ -374,7 +400,17 @@ test('GISMA-only: non-GISMA accounts cannot use core student features; protectiv
   // An owner who leaves GISMA can archive but not edit or publish.
   await db.exec(`update auth.users set email='alice@example.com' where id='${A}'`);
   await deny(A, `select public.save_student_listing('${l}','housing','Edited','', 'Köln', 1,'room',false,false,'good')`);
+  // Archiving may change the status only, and only from a published state.
+  await deny(A, `update public.listings set status='closed', title='Changed while closing' where id='${l}'`);
+  await deny(A, `update public.listings set status='closed', price_cents=1 where id='${l}'`);
+  await deny(A, `update public.listings set status='reserved' where id='${l}'`);
+  await db.exec(`select set_config('request.jwt.claim.sub', '', false);
+    insert into public.listings(id, owner_id, kind, status, title, city, price_cents)
+    values ('00000000-0000-4000-8000-0000000000d1', '${A}', 'marketplace', 'draft', 'Old draft', 'Köln', 100)`);
+  await deny(A, `update public.listings set status='closed' where id='00000000-0000-4000-8000-0000000000d1'`);
   await as(A, `update public.listings set status='closed' where id='${l}' and owner_id='${A}'`);
+  const { rows: archived } = await db.query(`select title, price_cents from public.listings where id='${l}'`);
+  assert.deepEqual(archived[0], { title: 'Room near campus', price_cents: 50000 }, 'nothing else changed');
   assert.equal((await db.query(`select status from public.listings where id='${l}'`)).rows[0].status, 'closed');
 
   // Suspension keeps its own error and the harassment-reporting path (checked by the suspension guard).
@@ -397,5 +433,75 @@ test('GISMA-only signup hook accepts only exact @gisma-student.com addresses and
     .then(r => r.rows[0].ok);
   assert.equal(await priv('supabase_auth_admin'), true);
   for (const role of ['anon', 'authenticated']) assert.equal(await priv(role), false, role);
+  await db.close();
+});
+
+test('Activity review: Jobs, Trips and Events publish only after a Stuora moderator approves them', async () => {
+  const { db } = await harness(); await seed(db);
+  const { as, deny } = actors(db);
+  await db.exec(`insert into public.moderators(user_id) values ('${M}')`);
+  const publish = (user, kind, detail) => as(user,
+    `select public.publish_student_activity('${kind}','Student ${kind}','Köln','Details','${JSON.stringify(detail)}') id`);
+  const ev = (await publish(A, 'event', { venue_name: 'Campus Hall', starts_at: '2099-01-01T12:00Z', capacity: 5 })).rows[0].id;
+  const job = (await publish(A, 'job', { company_name: 'Café Uni', compensation_text: '€14/hour', workplace_mode: 'onsite' })).rows[0].id;
+  const visible = async (user, sql) => (await as(user, sql)).rows.length;
+
+  // Pending: the author sees it with its status; other students and visitors do not.
+  assert.equal((await as(A, `select review_status from public.listings where id='${ev}'`)).rows[0].review_status, 'pending');
+  assert.equal(await visible(B, `select id from public.listings where id='${ev}'`), 0);
+  assert.equal(await visible(null, `select id from public.listings where id='${ev}'`), 0);
+  assert.equal(await visible(B, `select listing_id from public.event_details where listing_id='${ev}'`), 0, 'details follow the post');
+  // Nobody can act on it yet, through the RPCs or directly.
+  await assert.rejects(as(B, `select public.student_activity_response('${ev}','join')`), e => /awaiting Stuora review|unavailable/i.test(e.message));
+  await deny(B, `select public.student_activity_response('${job}','apply','Hello')`);
+  await assert.rejects(as(B, `select public.listing_participation('${ev}','join')`));
+  await assert.rejects(db.query(`insert into public.event_participants(event_listing_id, user_id) values ('${ev}', '${B}')`),
+    e => /awaiting Stuora review/.test(e.message), 'even trusted inserts need approval');
+  await assert.rejects(as(B, `select public.start_listing_conversation('${job}')`));
+
+  // Students cannot approve anything, including by writing the column.
+  await deny(A, `update public.listings set review_status='approved' where id='${ev}'`);
+  await deny(A, `select public.review_student_activity('${ev}','approve','I promise it is real.')`);
+  await deny(B, `select public.list_pending_student_activities()`);
+  // Moderators review: the queue includes details; reasons are required; own posts are excluded.
+  const queue = (await as(M, `select id, kind, details from public.list_pending_student_activities()`)).rows;
+  assert.deepEqual(queue.map(r => r.id).sort(), [ev, job].sort());
+  assert.equal(queue.find(r => r.id === job).details.company_name, 'Café Uni');
+  await deny(M, `select public.review_student_activity('${ev}','approve','ok')`, '22023');
+  await as(M, `select public.review_student_activity('${ev}','approve','Venue and date checked.')`);
+  await as(M, `select public.review_student_activity('${job}','reject','Cannot confirm the employer.')`);
+  await deny(M, `select public.review_student_activity('${ev}','approve','Approving a second time.')`, '22023');
+  const notices = (await as(A, `select kind, message from public.moderation_notices where kind='activity_review'`)).rows;
+  assert.equal(notices.length, 2);
+  assert.ok(notices.some(n => /not approved. Reason: Cannot confirm the employer./.test(n.message)));
+
+  // Approved: discoverable and actionable. Rejected: still hidden and closed to applications.
+  assert.equal(await visible(B, `select id from public.listings where id='${ev}'`), 1);
+  assert.equal(await visible(null, `select listing_id from public.event_details where listing_id='${ev}'`), 1);
+  assert.equal((await as(B, `select public.student_activity_response('${ev}','join') r`)).rows[0].r.joined, true);
+  assert.equal(await visible(B, `select id from public.listings where id='${job}'`), 0);
+  await deny(B, `select public.student_activity_response('${job}','apply','Hello')`);
+  assert.equal((await as(A, `select review_status from public.listings where id='${job}'`)).rows[0].review_status, 'rejected');
+  // Listings are readable table-wide, so the reviewer and note live only in the private audit table.
+  await deny(null, `select reviewed_by from public.listings`, '42703');
+  await deny(null, `select * from private.activity_reviews`);
+  const audit = (await db.query(`select decision, reviewed_by from private.activity_reviews where listing_id='${job}'`)).rows;
+  assert.deepEqual(audit, [{ decision: 'rejected', reviewed_by: M }]);
+
+  // Editing an approved post (inside a server function, as the author) sends it back for review.
+  await db.exec(`select set_config('request.jwt.claim.sub', '${A}', false)`);
+  await db.query(`update public.event_details set venue_name='Different hall' where listing_id='${ev}'`);
+  await db.exec(`select set_config('request.jwt.claim.sub', '', false)`);
+  assert.equal((await as(A, `select review_status from public.listings where id='${ev}'`)).rows[0].review_status, 'pending');
+  assert.equal(await visible(C, `select id from public.listings where id='${ev}'`), 0);
+  await assert.rejects(as(C, `select public.student_activity_response('${ev}','join')`));
+
+  // Housing and Marketplace need no review and stay published immediately.
+  const room = (await as(A, `select public.save_student_listing(null,'housing','Room','', 'Köln', 40000,'room',false,false,'good') id`)).rows[0].id;
+  assert.equal((await as(B, `select review_status from public.listings where id='${room}'`)).rows[0].review_status, 'not_required');
+  // A staff moderator without a GISMA address can still remove a student's listing.
+  const r = (await as(B, `select public.report_content('listing', '${room}', 'fraud', 'Asks for a deposit first') id`)).rows[0].id;
+  await as(M, `select public.moderate_report('${r}', 'remove_content', 'Deposit scams are not allowed.')`);
+  assert.equal((await db.query(`select status from public.listings where id='${room}'`)).rows[0].status, 'closed');
   await db.close();
 });
