@@ -47,9 +47,15 @@ Deno.serve(async req => {
   try {
     if (req.method !== "POST") throw new HttpError(405, "METHOD", "Unsupported method");
     const token = bearer(req);
-    const users = createClient(url, anonKey, { auth: { persistSession: false, autoRefreshToken: false } });
+    const users = createClient(url, anonKey, {
+      global: { headers: { Authorization: req.headers.get("Authorization")! } },
+      auth: { persistSession: false, autoRefreshToken: false },
+    });
     const { data: { user }, error } = await users.auth.getUser(token);
     if (error || !user) throw new HttpError(401, "AUTH", "Invalid user session");
+    const { error: accessError } = await users.rpc("require_external_student");
+    if (accessError?.code === "42501") throw new HttpError(403, "STUDENT_REQUIRED", "A confirmed GISMA student account is required");
+    if (accessError) throw new HttpError(503, "UNAVAILABLE", "Student access could not be checked");
     const body = await readJson(req, 1024);
     const deps: ExternalDeps = {
       async cacheGet(provider, key) {
