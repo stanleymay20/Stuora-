@@ -211,8 +211,9 @@ jobs:
       - name: Test desktop and mobile web account flows
         run: npm run test:web
 
-      - name: Verify external feed browser flows for the internal candidate
-        if: startsWith(github.ref, 'refs/heads/release/android-internal-')
+      # Jobs/Events external-feed journeys run on every PR (mocked function responses):
+      # without this the spec is skipped everywhere except internal release branches.
+      - name: Verify external Jobs and Events browser flows (mocked external-data)
         env:
           EXPO_PUBLIC_STUORA_EXTERNAL_FEEDS: enabled
         run: |
