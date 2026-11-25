@@ -12,10 +12,10 @@ licensing/credentials blocker, not a code defect, and no code change can or shou
 
 | System | Status | Evidence |
 |---|---|---|
-| External Jobs API | **Disabled** | `external-data` v19 ACTIVE; deployed source identical to the repo. The function's own boot log (24 Nov 2026 08:11 UTC) reports `feeds: ["ticketmaster"]`, so `kind: "jobs"` returns `503 FEATURE_DISABLED` by design. `private.external_cache` holds no Adzuna or BA entries. |
+| External Jobs API | **Disabled** | Staging now runs `external-data` **v20** (this PR's code, deployed 25 Nov 2026 with your approval, JWT verification kept on). No request has reached v20 since the deploy, so its live behaviour is **unverified** (see C). Before that, v19 was ACTIVE and its deployed source matched the repo. The function's own boot log (24 Nov 2026 08:11 UTC) reports `feeds: ["ticketmaster"]`, so `kind: "jobs"` returns `503 FEATURE_DISABLED` by design. `private.external_cache` holds no Adzuna or BA entries. |
 | Adzuna | **Blocked** (licence) | Provider is absent at boot: at least one of `ADZUNA_APP_ID`, `ADZUNA_APP_KEY`, `ADZUNA_COMMERCIAL_LICENSE=confirmed` is unset (values not read). Adzuna's API terms allow commercial use only for a 14-day trial; any revenue- or lead-generating product needs a signed licence agreement. |
 | Bundesagentur | **Blocked** (permission) | `BA_JOBSUCHE_ENABLED` is not `true`. The BA publishes no API terms; the community docs (bundesAPI) state there is no official API and give no licence. Do not enable without written BA permission. |
-| Student Jobs | **Working** (DB, simulated) | Rollback-only staging run of `tests/hosted/stuora-jobs-lifecycle-staging-rollback.sql`: 38 checks, 37 passed first time; the one miss was a wrong expectation (a duplicate direct insert is refused by the unique constraint, `23505`, not `42501`) and the assertion was corrected. Two real defects found and fixed in a draft migration (J-DB-1, J-DB-2). Staging has 0 job listings, 1 confirmed GISMA student, 0 moderators. |
+| Student Jobs | **Working** (DB, simulated; J-DB fixes live on staging) | Rollback-only staging run of `tests/hosted/stuora-jobs-lifecycle-staging-rollback.sql`: 38 checks, 37 passed first time; the one miss was a wrong expectation (a duplicate direct insert is refused by the unique constraint, `23505`, not `42501`) and the assertion was corrected. Two real defects found and fixed in a draft migration (J-DB-1, J-DB-2). Staging has 0 job listings, 1 confirmed GISMA student, 0 moderators. |
 | Jobs search | **Partial** | Request validation, quotas, caching, outage handling, dedupe and concurrency verified with **mocked** provider responses (Deno) and **mocked** function replies (Playwright). No live search possible while providers are disabled. |
 | Android Jobs | **Unverified** | No device run. |
 | iOS Jobs | **Unverified** | No device run. |
@@ -41,7 +41,26 @@ Not changed (documented risks):
 - **Delete-and-reapply.** A student can delete their own withdrawn application and apply again (rate-limited, 20/hour). Kept because deletion is the erasure path; product decision.
 - **Over-quota partial cache.** A student over quota gets `429` even when some providers are cached. Minor.
 
-## C. Live API results
+## C. Staging changes and live results (updated 25 Nov 2026, evening)
+
+Changes made on **staging only**, with your approval:
+- Migration `20261125090000` was applied as `20261125143442 job_application_integrity`. Checked on staging: the trigger exists; the new Job notice text is in place; `authenticated` can still call `review_student_activity`; `anon` cannot; the trigger function can't be called by clients.
+- `external-data` v20 deployed (`verify_jwt` stays on). Supabase built it without errors.
+
+Rollback-only re-test against the live schema (simulated users, run tag `9b5a1b13`): **8/8 passed**:
+- apply works; withdraw through the RPC works, and repeating it changes nothing;
+- a direct `withdrawn_at = null` write is refused (`42501`);
+- resubmitting through the RPC is refused (`22023`), and the application stays withdrawn;
+- the Job rejection notice gives the corrected-job step, and the author can close the rejected job.
+
+Residue check afterwards: 0 QA users, 0 job listings, 0 applications, 0 moderators, 0 QA notices, 0 activity reviews; 2 users in total, as before.
+
+**v20 live response: NOT VERIFIED.**
+- This workspace can't reach `*.supabase.co`. Claude in Chrome wasn't connected (the request came from mobile). The staging database has no HTTP extension, and I didn't install one.
+- The function logs show no v20 calls or startup since the deploy.
+- An authorised check needs a signed-in staging student to open Jobs in the staging preview. Given the configuration, the expected reply is `503 FEATURE_DISABLED` for Jobs. If that student is not a confirmed GISMA account, the reply is `403 STUDENT_REQUIRED` instead.
+
+## C2. Live API results (morning audit)
 
 | Check | Context | Outcome |
 |---|---|---|
@@ -59,9 +78,16 @@ No vacancy counts, titles or URLs can be reported because no live provider call 
 - Playwright full suite (desktop + mobile-web): **198 passed, 12 skipped** (feed specs skip without the flag); external-feed spec with feeds enabled: **8/8**.
 - Staging, rollback-only: Jobs lifecycle 38 checks; J-DB migration dry run 6/6; staging verified unchanged afterwards.
 
+## D2. CI on PR #46
+
+- **Defect J-CI-2:** the `pull_request` filter in `ci.yml` did not match `feature/**`. PR #46 targets `feature/stuora-moderator-double-submit-20261124`, so Stuora CI had never run on it. Fixed by adding `feature/**`.
+- **First full run:** run [45672782953](https://github.com/stanleymay20/Stuora-/actions/runs/45672782953) on `222f22ec33c55bf6cf9eb500295c8772a0db5007`. All four jobs passed: dependency-audit, rls-authorization, trusted-media-edge and verify, with all 31 verify steps green. That includes "Verify external Jobs and Events browser flows (mocked external-data)", which had not run on a PR before.
+- The commit that adds this report section is the head of PR #46. Its own CI run is linked in the PR conversation.
+
 ## E. External blockers (not code)
 
 1. **Licensed job data.** Adzuna licence agreement, or written BA permission, or another provider whose terms allow display in a student product (e.g. Arbeitnow's free public API asks for attribution — needs its terms reviewed and a new adapter, which is new scope requiring approval).
-2. **Deploying** the patched `external-data` and **applying** `20261125090000` to staging both need your explicit approval.
-3. **A staging moderator** and **two real GISMA test students** for UI-level moderation and application acceptance.
-4. **Physical Android and iOS runs** of the Jobs journey.
+2. ~~Deploy/apply on staging~~ done with approval. **Production** (`mljmifovcthvtuquvyzf`) is untouched and still needs separate approval.
+3. **An authorised live call to v20**: a signed-in staging student has to open Jobs (on desktop Chrome with the extension, or the staging app).
+4. **A staging moderator** and **two real GISMA test students** for UI-level moderation and application acceptance.
+5. **Physical Android and iOS runs** of the Jobs journey.
