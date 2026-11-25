@@ -5,7 +5,9 @@ on:
     branches: [main, feat/mvp-shell, 'release/android-internal-*', 'release/ios-testflight-*', 'feature/professor-three-section-ui-*', 'feature/private-group-files-*', 'feature/group-file-intake-*', 'feature/group-file-pdf-scan-*', 'feature/self-hosted-clamav-scanner-*', 'feature/clamav-staging-readiness-*']
   pull_request:
     # Also gate stacked PRs that target a feature branch (e.g. remediation PRs).
-    branches: [main, 'feat/**', 'claude/stuora-0.1.7-integration', 'claude/audit-0.1.7-fixes']
+    # 'feature/**' covers PRs stacked on feature branches (e.g. #46 on
+    # feature/stuora-moderator-double-submit-*), which previously ran no CI at all.
+    branches: [main, 'feat/**', 'feature/**', 'claude/stuora-0.1.7-integration', 'claude/audit-0.1.7-fixes']
 
 jobs:
   dependency-audit:
@@ -211,8 +213,9 @@ jobs:
       - name: Test desktop and mobile web account flows
         run: npm run test:web
 
-      - name: Verify external feed browser flows for the internal candidate
-        if: startsWith(github.ref, 'refs/heads/release/android-internal-')
+      # Jobs/Events external-feed journeys run on every PR (mocked function responses):
+      # without this the spec is skipped everywhere except internal release branches.
+      - name: Verify external Jobs and Events browser flows (mocked external-data)
         env:
           EXPO_PUBLIC_STUORA_EXTERNAL_FEEDS: enabled
         run: |

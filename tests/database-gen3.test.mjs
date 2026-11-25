@@ -590,3 +590,37 @@ test('Audit hardening: ineligible owners cannot add photos or stay in the studen
   assert.equal(grant[0].ok, false);
   await db.close();
 });
+
+test('Jobs audit J-DB-1/J-DB-2: withdrawal is final for every client write; job rejections give a truthful next step', async () => {
+  const { db } = await harness(); await seed(db);
+  const { as, deny } = actors(db);
+  await db.exec(`insert into public.moderators(user_id) values ('${M}')`);
+  const post = async title => (await as(A, `select public.publish_student_activity('job','${title}','Berlin','Details',
+    '{"company_name":"Muster GmbH","compensation_text":"EUR 15/hour","workplace_mode":"hybrid"}') id`)).rows[0].id;
+  const job = await post('Werkstudent Data Science'), bad = await post('Praktikum unpaid');
+  await as(M, `select public.review_student_activity('${job}','approve','Employer and pay checked.')`);
+  await as(M, `select public.review_student_activity('${bad}','reject','Pay below the legal minimum.')`);
+
+  // Apply once (duplicate presses keep one row), withdraw, and stay withdrawn.
+  await as(B, `select public.student_activity_response('${job}','apply','I study Data Science.')`);
+  await as(B, `select public.student_activity_response('${job}','apply','Duplicate press.')`);
+  assert.equal((await db.query(`select count(*)::int n from public.job_applications where job_listing_id='${job}'`)).rows[0].n, 1);
+  const withdrawn = (await as(B, `select public.student_activity_response('${job}','withdraw','') r`)).rows[0].r;
+  assert.equal(withdrawn.withdrawn, true);
+  assert.equal((await as(B, `select public.student_activity_response('${job}','withdraw','') r`)).rows[0].r.withdrawn, true, 'idempotent');
+  await deny(B, `update public.job_applications set withdrawn_at = null where job_listing_id='${job}'`);
+  await deny(B, `select public.student_activity_response('${job}','apply','Again')`, '22023');
+  assert.equal((await as(B, `select public.student_activity_response('${job}','state','') r`)).rows[0].r.withdrawn, true);
+  // Other students never see applications; the author does.
+  assert.equal((await as(C, `select id from public.job_applications`)).rows.length, 0);
+  assert.equal((await as(A, `select id from public.job_applications where job_listing_id='${job}'`)).rows.length, 1);
+
+  // Jobs cannot be edited by clients, so the rejection must not promise an edit.
+  await deny(A, `update public.listings set title='Edited' where id='${bad}'`);
+  const notice = (await as(A, `select message from public.moderation_notices where message like '%not approved%'`)).rows[0].message;
+  assert.match(notice, /post a corrected job/);
+  assert.doesNotMatch(notice, /You can edit it/);
+  await as(A, `select public.close_student_activity('${bad}')`);
+  await deny(C, `select public.student_activity_response('${bad}','apply','Hi')`);
+  await db.close();
+});

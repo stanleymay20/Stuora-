@@ -14,12 +14,18 @@ export interface ExternalDeps {
   feeds: FeedProvider[];
   cityLookup: ((query: string, fetcher: typeof fetch) => Promise<CityCandidate[]>) | null;
   fetcher: typeof fetch;
+  /** Identical provider fetches already in flight in this isolate (provider|key). */
+  inflight?: Map<string, Promise<Opportunity[]>>;
 }
 export type SourceStatus = Attribution & { status: "ok" | "error" };
 export type FeedReply = { items: Opportunity[]; sources: SourceStatus[] };
 export type CityReply = { candidates: CityCandidate[]; attribution: Attribution };
 
 const fold = (v: string) => v.normalize("NFKC").trim().replace(/\s+/g, " ").toLowerCase();
+const sharedInflight = new Map<string, Promise<Opportunity[]>>();
+/** Same vacancy re-listed by two providers: same title, employer and place. */
+const vacancyKey = (o: Opportunity) =>
+  [o.title, o.subtitle, o.location].map(v => fold(v).replace(/\s*\((?:m|w|d|f|x|div)(?:\s*\/\s*(?:m|w|d|f|x|div))*\)\s*/g, " ").replace(/[^\p{L}\p{N}]+/gu, " ").trim()).join("|");
 
 function cleanCity(value: unknown): string {
   if (typeof value !== "string" || !isPlausibleCity(value)) throw new HttpError(400, "CITY", "Choose a real city first");
@@ -71,9 +77,22 @@ export async function loadFeed(deps: ExternalDeps, kind: unknown, rawCity: unkno
   await Promise.all(providers.map(async (provider, i) => {
     let rows = cached[i] as Opportunity[] | null;
     if (!Array.isArray(rows)) {
+      const inflight = deps.inflight ?? sharedInflight;
+      const flightKey = `${provider.id}|${key}`;
+      let pending = inflight.get(flightKey);
+      if (!pending) {
+        pending = (async () => {
+          const fresh = await provider.fetch(city, query, deps.fetcher);
+          // A cache write failure must not throw away vacancies we already have.
+          try { await deps.cachePut(provider.id, key, fresh, provider.ttlSeconds); }
+          catch (err) { console.warn(JSON.stringify({ event: "cache_put_failed", provider: provider.id, reason: failureReason(err) })); }
+          return fresh;
+        })();
+        inflight.set(flightKey, pending);
+        pending.then(() => inflight.delete(flightKey), () => inflight.delete(flightKey));
+      }
       try {
-        rows = await provider.fetch(city, query, deps.fetcher);
-        await deps.cachePut(provider.id, key, rows, provider.ttlSeconds);
+        rows = await pending;
       } catch (err) {
         console.warn(JSON.stringify({ event: "provider_failed", provider: provider.id, reason: failureReason(err) }));
         sources.push({ ...provider.attribution, status: "error" });
@@ -83,12 +102,19 @@ export async function loadFeed(deps: ExternalDeps, kind: unknown, rawCity: unkno
     sources.push({ ...provider.attribution, status: "ok" });
     items.push(...rows);
   }));
-  // Upcoming events first; newest jobs first; stable de-duplication.
-  const seen = new Set<string>();
-  const unique = items.filter(item => !seen.has(item.id) && seen.add(item.id));
-  unique.sort((a, b) => kind === "events"
+  // Upcoming events first; newest jobs first; stable de-duplication by id and,
+  // for jobs, by vacancy (the same ad syndicated to Adzuna and the BA).
+  // Providers finish in any order, so tie-break by id for a stable result.
+  items.sort((a, b) => (kind === "events"
     ? String(a.startsAt ?? "9999").localeCompare(String(b.startsAt ?? "9999"))
-    : String(b.postedAt ?? "").localeCompare(String(a.postedAt ?? "")));
+    : String(b.postedAt ?? "").localeCompare(String(a.postedAt ?? ""))) || a.id.localeCompare(b.id));
+  const seen = new Set<string>();
+  const unique = items.filter(item => {
+    const keys = kind === "jobs" ? [item.id, vacancyKey(item)] : [item.id];
+    if (keys.some(k => seen.has(k))) return false;
+    keys.forEach(k => seen.add(k));
+    return true;
+  });
   sources.sort((a, b) => a.id.localeCompare(b.id));
   return { items: unique.slice(0, 40), sources };
 }

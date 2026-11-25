@@ -171,7 +171,7 @@ export default function CommunityCatalog({ category, search: searchInput, prefer
       {plannerError ? <Text accessibilityRole="alert">The journey planner could not open. Try again.</Text> : null}
     </View> : null}
     {features.externalFeeds && category !== 'Trips'
-      ? <ExternalFeed kind={category === 'Jobs' ? 'jobs' : 'events'} city={city.trim() || preferredCity} search={search} /> : null}
+      ? <ExternalFeed kind={category === 'Jobs' ? 'jobs' : 'events'} city={city.trim() || preferredCity} search={search} refreshKey={revision} /> : null}
     <View style={styles.info}>
       <Text style={styles.sectionTitle}>Live community {category.toLowerCase()}</Text>
       <ActivityComposer category={category} city={cityInput || preferredCity} onSignIn={onSignIn} onPublished={() => setRevision(v => v + 1)} />

@@ -165,3 +165,120 @@ Deno.test("a Nominatim 403 trips the breaker; later lookups go straight to Photo
   const out = await cityLookupChain({ STUORA_NOMINATIM_CONTACT: "ops@stuora.example" }, broken)("Köln", fetcher);
   assert.equal(out[0].name, "Köln");
 });
+
+// ---- Jobs API audit (25 Nov 2026). All provider responses below are MOCKS shaped
+// like the documented Adzuna /search and BA /pc/v4/jobs replies; no live API is called.
+const jobsEnv = { ADZUNA_APP_ID: "a", ADZUNA_APP_KEY: "b", ADZUNA_COMMERCIAL_LICENSE: "confirmed", BA_JOBSUCHE_ENABLED: "true" };
+
+Deno.test("jobs: requests ask providers for current ads only, newest first", async () => {
+  const calls: Call[] = [];
+  const fetcher = fakeFetch({ "api.adzuna.com": { results: [] }, "rest.arbeitsagentur.de": { stellenangebote: [] } }, calls);
+  const { d } = deps({ feeds: [adzunaProvider(jobsEnv)!, bundesagenturProvider(jobsEnv)!], fetcher });
+  const reply = await loadFeed(d, "jobs", "Berlin", "Werkstudent");
+  const adz = new URL(calls.find(c => c.url.includes("adzuna"))!.url).searchParams;
+  assert.equal(adz.get("where"), "Berlin");
+  assert.equal(adz.get("what"), "Werkstudent");
+  assert.equal(adz.get("max_days_old"), "30");
+  assert.equal(adz.get("sort_by"), "date");
+  const ba = new URL(calls.find(c => c.url.includes("arbeitsagentur"))!.url).searchParams;
+  assert.equal(ba.get("wo"), "Berlin");
+  assert.equal(ba.get("veroeffentlichtseit"), "30");
+  // Empty but successful: both sources "ok" and no items — not an outage.
+  assert.deepEqual(reply.sources.map(s => s.status), ["ok", "ok"]);
+  assert.equal(reply.items.length, 0);
+});
+
+Deno.test("jobs: the same vacancy from Adzuna and the BA is shown once", async () => {
+  const adz = { results: [
+    { id: 1, title: "Werkstudent Data Science (m/w/d)", redirect_url: "https://www.adzuna.de/land/ad/1",
+      company: { display_name: "Muster GmbH" }, location: { display_name: "Berlin" }, created: "2026-11-20T08:00:00Z" },
+    { id: 2, title: "Working Student Marketing", redirect_url: "https://www.adzuna.de/land/ad/2",
+      company: { display_name: "Other AG" }, location: { display_name: "Berlin" }, created: "2026-11-19T08:00:00Z" },
+  ] };
+  const ba = { stellenangebote: [
+    { refnr: "10000-1000000001-S", titel: "Werkstudent Data Science (w/m/d)", arbeitgeber: "Muster GmbH",
+      arbeitsort: { ort: "Berlin" }, aktuelleVeroeffentlichungsdatum: "2026-11-21" },
+  ] };
+  const fetcher = fakeFetch({ "api.adzuna.com": adz, "rest.arbeitsagentur.de": ba }, []);
+  const { d } = deps({ feeds: [adzunaProvider(jobsEnv)!, bundesagenturProvider(jobsEnv)!], fetcher });
+  const reply = await loadFeed(d, "jobs", "Berlin", "Werkstudent");
+  assert.deepEqual(reply.items.map(i => i.id), ["bundesagentur:10000-1000000001-S", "adzuna:2"],
+    "newest copy kept, duplicate dropped, distinct vacancy kept");
+});
+
+Deno.test("jobs: concurrent identical searches share one provider call", async () => {
+  let providerCalls = 0;
+  let release!: () => void;
+  const gate = new Promise<void>(r => { release = r; });
+  const fetcher = (async () => {
+    providerCalls++;
+    await gate;
+    return new Response(JSON.stringify({ results: [] }), { status: 200 });
+  }) as unknown as typeof fetch;
+  const inflight = new Map();
+  const shared = { feeds: [adzunaProvider(jobsEnv)!], fetcher, inflight };
+  const students = Array.from({ length: 5 }, () => deps(shared).d);
+  const replies = Promise.all(students.map(d => loadFeed(d, "jobs", "Berlin", "Data Science")));
+  await new Promise(r => setTimeout(r, 0));
+  release();
+  const done = await replies;
+  assert.equal(providerCalls, 1);
+  assert.ok(done.every(r => r.sources[0].status === "ok"));
+  assert.equal(inflight.size, 0, "finished flights are forgotten");
+});
+
+Deno.test("jobs: a failed cache write keeps the vacancies; a provider timeout is an outage", async () => {
+  const fetcher = fakeFetch({ "api.adzuna.com": ADZ }, []);
+  const { d } = deps({ feeds: [adzunaProvider(jobsEnv)!], fetcher, inflight: new Map(),
+    cachePut: async () => { throw new Error("db down"); } });
+  const ok = await loadFeed(d, "jobs", "Köln", "");
+  assert.equal(ok.sources[0].status, "ok");
+  assert.equal(ok.items.length, 1);
+  const slow = (async (_u: string, init: RequestInit) => new Promise((_, reject) =>
+    init.signal!.addEventListener("abort", () => reject(new DOMException("aborted", "AbortError"))))) as unknown as typeof fetch;
+  const timed = deps({ feeds: [adzunaProvider(jobsEnv, 20)!], fetcher: slow, inflight: new Map() });
+  const out = await loadFeed(timed.d, "jobs", "Köln", "");
+  assert.deepEqual(out.sources.map(s => s.status), ["error"]);
+  assert.equal(timed.puts.length, 0, "outages are never cached as empty results");
+});
+
+Deno.test("jobs: provider 401/429 and malformed bodies are outages, not empty results", async () => {
+  for (const status of [401, 429, 503]) {
+    const fetcher = (async () => new Response("{}", { status })) as unknown as typeof fetch;
+    const { d, puts } = deps({ feeds: [adzunaProvider(jobsEnv)!], fetcher, inflight: new Map() });
+    const r = await loadFeed(d, "jobs", "Berlin", "");
+    assert.equal(r.sources[0].status, "error", `HTTP ${status}`);
+    assert.equal(puts.length, 0);
+  }
+  const html = (async () => new Response("<html>maintenance</html>", { status: 200 })) as unknown as typeof fetch;
+  const { d } = deps({ feeds: [bundesagenturProvider(jobsEnv)!], fetcher: html, inflight: new Map() });
+  assert.equal((await loadFeed(d, "jobs", "Berlin", "")).sources[0].status, "error");
+});
+
+Deno.test("jobs: request validation for the audit matrix", async () => {
+  const fetcher = fakeFetch({ "api.adzuna.com": { results: [] } }, []);
+  const { d } = deps({ feeds: [adzunaProvider(jobsEnv)!], fetcher, inflight: new Map() });
+  await assert.rejects(loadFeed(d, "internships", "Berlin", ""), { code: "KIND" });
+  await assert.rejects(loadFeed(d, "jobs", undefined, ""), { code: "CITY" });
+  await assert.rejects(loadFeed(d, "jobs", "", ""), { code: "CITY" });
+  await assert.rejects(loadFeed(d, "jobs", "Berlin", "x".repeat(61)), { code: "QUERY" });
+  for (const bad of ["'; drop table listings;--", "<img src=x onerror=1>", "a\u0000b", "{\"$ne\":1}"])
+    await assert.rejects(loadFeed(d, "jobs", "Berlin", bad), { code: "QUERY" }, bad);
+  for (const city of ["Berlin", "Potsdam", "Brandenburg an der Havel"])
+    for (const q of ["Werkstudent", "Data Science", "Artificial Intelligence", "Internship", "Teilzeit",
+      "Business Analyst", "Software Engineering", "Working Student"])
+      await loadFeed(d, "jobs", city, q);
+  const quotaless = deps({ feeds: [adzunaProvider(jobsEnv)!], fetcher, inflight: new Map(), consumeQuota: async () => false });
+  await assert.rejects(loadFeed(quotaless.d, "jobs", "Berlin", "Neu"), { code: "RATE_LIMIT" });
+});
+
+Deno.test("jobs: BA accepts the v6 referenznummer and never links to employer URLs", async () => {
+  const ba = { stellenangebote: [
+    { referenznummer: "12345-0000000001-S", titel: "Praktikum Data", arbeitgeber: "Amt", arbeitsort: { ort: "Potsdam" },
+      externeUrl: "https://phish.example/x" },
+  ] };
+  const fetcher = fakeFetch({ "rest.arbeitsagentur.de": ba }, []);
+  const { d } = deps({ feeds: [bundesagenturProvider(jobsEnv)!], fetcher, inflight: new Map() });
+  const r = await loadFeed(d, "jobs", "Potsdam", "Internship");
+  assert.deepEqual(r.items.map(i => i.url), ["https://www.arbeitsagentur.de/jobsuche/jobdetail/12345-0000000001-S"]);
+});

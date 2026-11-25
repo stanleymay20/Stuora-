@@ -8,7 +8,7 @@ import { externalFeedOutcome, type FeedKind } from '../backend/externalFeedReply
 type RequestState = { phase: 'loading' | 'disabled' } | { phase: 'error'; message: string } | { phase: 'ready'; reply: FeedReply };
 
 /** Third-party jobs/events, fetched and cached server-side. */
-export default function ExternalFeed({ kind, city, search }: { kind: FeedKind; city: string; search: string }) {
+export default function ExternalFeed({ kind, city, search, refreshKey = 0 }: { kind: FeedKind; city: string; search: string; refreshKey?: number }) {
   const { session } = useAuth();
   const cityName = city.trim();
   const query = search.trim().slice(0, 60);
@@ -18,12 +18,12 @@ export default function ExternalFeed({ kind, city, search }: { kind: FeedKind; c
       <Text style={styles.muted}>These come from the providers named on each entry, not from Stuora students. Opening one takes you to the provider’s site.</Text>
       {!session ? <Text style={styles.muted}>Sign in to see external {kind}.</Text>
         : !isPlausibleCity(cityName) ? <Text style={styles.muted}>Choose a city to see external {kind}.</Text>
-        : <ExternalFeedRequest key={JSON.stringify([session.user.id, kind, cityName, query])} kind={kind} city={cityName} query={query} />}
+        : <ExternalFeedRequest key={JSON.stringify([session.user.id, kind, cityName, query])} kind={kind} city={cityName} query={query} refreshKey={refreshKey} />}
     </View>
   );
 }
 
-function ExternalFeedRequest({ kind, city, query }: { kind: FeedKind; city: string; query: string }) {
+function ExternalFeedRequest({ kind, city, query, refreshKey }: { kind: FeedKind; city: string; query: string; refreshKey: number }) {
   const [revision, setRevision] = useState(0);
   const [state, setState] = useState<RequestState>({ phase: 'loading' });
   const [linkError, setLinkError] = useState(false);
@@ -42,7 +42,7 @@ function ExternalFeedRequest({ kind, city, query }: { kind: FeedKind; city: stri
       setState({ phase: 'error', message: error instanceof ServiceError ? error.message : 'External listings are unavailable right now.' });
     });
     return () => controller.abort();
-  }, [kind, city, query, revision]);
+  }, [kind, city, query, revision, refreshKey]);
 
   const retry = () => setRevision(n => n + 1);
   const openProvider = async (url: string) => {
@@ -59,7 +59,7 @@ function ExternalFeedRequest({ kind, city, query }: { kind: FeedKind; city: stri
       {outcome === 'unavailable' ? <Text accessibilityRole="alert" style={styles.error}>External {kind} couldn’t be checked. Try again shortly.</Text> : null}
       {outcome === 'partial' ? <Text accessibilityRole="alert" style={styles.error}>Some external sources are unavailable. Results may be incomplete.</Text> : null}
       {outcome === 'empty' ? <Text style={styles.muted}>No external {kind} found for {city}.</Text> : null}
-      {state.phase === 'error' || state.phase === 'disabled' || outcome === 'unavailable' || outcome === 'partial' ? (
+      {state.phase === 'error' || outcome === 'unavailable' || outcome === 'partial' ? (
         <Pressable accessibilityRole="button" onPress={retry} style={styles.retry}>
           <Text style={styles.itemSource}>Retry external {kind}</Text>
         </Pressable>

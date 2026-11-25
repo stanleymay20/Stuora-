@@ -86,7 +86,8 @@ export function adzunaProvider(env: Env, timeoutMs = 5000): FeedProvider | null 
     async fetch(city, query, fetcher) {
       const params = new URLSearchParams({
         app_id: appId, app_key: appKey, results_per_page: "20", what: query || "werkstudent", where: city,
-        "content-type": "application/json",
+        // Student-relevant, current ads only: newest first, nothing older than 30 days.
+        max_days_old: "30", sort_by: "date", "content-type": "application/json",
       });
       const res = await fetchWithTimeout(fetcher, `https://api.adzuna.com/v1/api/jobs/${country}/search/1?${params}`, {
         headers: { Accept: "application/json" },
@@ -119,7 +120,9 @@ export function bundesagenturProvider(env: Env, timeoutMs = 5000): FeedProvider 
     id: "bundesagentur", kind: "jobs", ttlSeconds: 3600,
     attribution: { id: "bundesagentur", label: "Quelle: Bundesagentur für Arbeit", url: "https://www.arbeitsagentur.de/jobsuche/" },
     async fetch(city, query, fetcher) {
-      const params = new URLSearchParams({ was: query || "Werkstudent", wo: city, umkreis: "25", size: "20", page: "1" });
+      const params = new URLSearchParams({
+        was: query || "Werkstudent", wo: city, umkreis: "25", size: "20", page: "1", veroeffentlichtseit: "30",
+      });
       const res = await fetchWithTimeout(fetcher,
         `https://rest.arbeitsagentur.de/jobboerse/jobsuche-service/pc/v4/jobs?${params}`, {
           headers: { Accept: "application/json", "X-API-Key": "jobboerse-jobsuche" },
@@ -128,7 +131,9 @@ export function bundesagenturProvider(env: Env, timeoutMs = 5000): FeedProvider 
       const data = await res.json() as { stellenangebote?: unknown[] };
       return (data.stellenangebote ?? []).slice(0, 20).flatMap((raw): Opportunity[] => {
         const j = raw as Record<string, any>;
-        const ref = typeof j.refnr === "string" && /^[A-Za-z0-9-]{4,64}$/.test(j.refnr) ? j.refnr : null;
+        // v4 names it refnr; the newer /pc/v6 shape names it referenznummer.
+        const rawRef = j.refnr ?? j.referenznummer;
+        const ref = typeof rawRef === "string" && /^[A-Za-z0-9-]{4,64}$/.test(rawRef) ? rawRef : null;
         const title = cleanText(j.titel ?? j.beruf, 140);
         if (!ref || !title) return [];
         // Always the official BA detail page: employer-supplied externeUrl values are unvetted.
