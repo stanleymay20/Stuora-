@@ -13,7 +13,7 @@ const rollbackDir = new URL('../supabase/rollback/', import.meta.url);
 const files = readdirSync(migrationsDir).filter(f => f.endsWith('.sql')).sort();
 const STAGED = ['20261124100000_require_gisma_student_access', '20261124110000_student_activity_review',
   '20261124120000_student_only_catalogue', '20261124121000_private_listing_media_bucket',
-  '20261124130000_student_access_audit_hardening', '20261125090000_job_application_integrity'];
+  '20261124130000_student_access_audit_hardening', '20261125090000_job_application_integrity', '20261126090000_gismate_location_engine'];
 
 async function database() {
   const db = new PGlite();

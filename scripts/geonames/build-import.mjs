@@ -8,14 +8,16 @@
 //   admin1CodesASCII.txt, admin2Codes.txt (same directory on the server)
 //   DE.zip (kept only to record its checksum)
 //
-// Output: manifest.json (version, source files, SHA-256, licence, row counts)
-// and SQL chunks 0000-begin.sql … NNNN-rows.sql … 9999-activate.sql, each
-// under ~1.4 MB, to be run IN ORDER against the target database. Nothing here
-// connects to a database. Same inputs → byte-identical outputs.
+// Output (nothing here connects to a database; same inputs → identical bytes):
+//   places.tsv, names.tsv  plain data, loaded by private.geo_load_tsv() or psql \copy
+//   begin.sql              registers the dataset version (inactive)
+//   activate.sql           activates it only if every row arrived
+//   manifest.json          version, source files + SHA-256, licence, counts, output hashes
+// Loading steps: docs/GISMATE_LOCATION_ENGINE.md.
 //
 // Data: GeoNames (https://www.geonames.org/), Creative Commons Attribution 4.0.
 import { createHash } from 'node:crypto';
-import { mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 export const LICENCE = 'CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/)';
@@ -25,7 +27,6 @@ const COUNTRY = { DE: 'Germany' };
 // Populated places a student can live or study in. Excluded: PPLX (section of
 // a place), PPLH (historical), PPLQ (abandoned), PPLW (destroyed), PPLCH.
 export const KEEP_CODES = new Set(['PPL', 'PPLA', 'PPLA2', 'PPLA3', 'PPLA4', 'PPLA5', 'PPLC', 'PPLF', 'PPLG', 'PPLL', 'PPLR', 'PPLS']);
-const CHUNK_BYTES = 1_400_000;
 
 /** Same folding as private.geo_fold() in SQL; keep the two in step (tested). */
 export function fold(value, transliterate = false) {
@@ -45,7 +46,7 @@ const sql = v => v === null || v === undefined ? 'null' : `'${String(v).replace(
 
 export function buildRows(deTxt, admin1Txt, admin2Txt) {
   const admin1 = new Map(), admin2 = new Map();
-  for (const line of admin1Txt.split('\n')) { const c = line.split('\t'); if (c.length >= 2 && c[0].startsWith('DE.')) admin1.set(c[0], c[1]); }
+  for (const line of admin1Txt.split('\n')) { const c = line.split('\t'); if (c.length >= 2 && c[0].startsWith('DE.')) admin1.set(c[0], c[1].replace(/^Land /, '')); }
   for (const line of admin2Txt.split('\n')) { const c = line.split('\t'); if (c.length >= 2 && c[0].startsWith('DE.')) admin2.set(c[0], c[1]); }
   const places = [], names = [];
   for (const line of deTxt.split('\n')) {
@@ -74,25 +75,15 @@ export function buildRows(deTxt, admin1Txt, admin2Txt) {
   return { places, names };
 }
 
-export function buildChunks(version, places, names) {
-  const v = sql(version);
-  const statements = [];
-  for (let i = 0; i < places.length; i += 400) {
-    statements.push('insert into private.geo_places (dataset_version, geonameid, name, ascii_name, admin1_name, admin2_name, country_code, country_name, latitude, longitude, population, feature_code) values\n' +
-      places.slice(i, i + 400).map(p => `(${v},${p.id},${sql(p.name)},${sql(p.ascii)},${sql(p.admin1)},${sql(p.admin2)},${sql(p.countryCode)},${sql(p.countryName)},${p.lat},${p.lon},${p.population},${sql(p.featureCode)})`).join(',\n') + ';');
-  }
-  for (let i = 0; i < names.length; i += 1500) {
-    statements.push('insert into private.geo_place_names (dataset_version, geonameid, name_key, is_primary) values\n' +
-      names.slice(i, i + 1500).map(n => `(${v},${n.id},${sql(n.key)},${n.primary})`).join(',\n') + ';');
-  }
-  const chunks = [];
-  let current = '';
-  for (const s of statements) {
-    if (current && current.length + s.length > CHUNK_BYTES) { chunks.push(current); current = ''; }
-    current += s + '\n';
-  }
-  if (current) chunks.push(current);
-  return chunks;
+const cell = v => v === null || v === undefined ? '' : String(v);
+
+/** Tab-separated, newline-terminated; GeoNames names never contain tabs or newlines. */
+export function buildTsv(places, names) {
+  for (const p of places) for (const v of [p.name, p.ascii, p.admin1, p.admin2]) if (/[\t\n\r]/.test(cell(v))) throw new Error(`control character in ${p.id}`);
+  const placesTsv = places.map(p => [p.id, p.name, cell(p.ascii), cell(p.admin1), cell(p.admin2), p.countryCode, p.countryName,
+    p.lat, p.lon, p.population, p.featureCode].join('\t') + '\n').join('');
+  const namesTsv = names.map(n => `${n.id}\t${n.key}\t${n.primary ? 't' : 'f'}\n`).join('');
+  return { placesTsv, namesTsv };
 }
 
 function sha256(buf) { return createHash('sha256').update(buf).digest('hex'); }
@@ -117,20 +108,18 @@ function main() {
     version, source: SOURCE, licence: LICENCE, attribution: ATTRIBUTION, country: 'DE',
     featureCodes: [...KEEP_CODES].sort(), files, places: places.length, names: names.length,
   };
+  const { placesTsv, namesTsv } = buildTsv(places, names);
   const v = sql(version);
+  writeFileSync(join(outDir, 'places.tsv'), placesTsv);
+  writeFileSync(join(outDir, 'names.tsv'), namesTsv);
+  manifest.outputs = { 'places.tsv': sha256(Buffer.from(placesTsv)), 'names.tsv': sha256(Buffer.from(namesTsv)) };
   const begin = `-- ${version}: register the dataset (inactive) and clear any half-loaded copy.\n` +
-    `delete from private.geo_place_names where dataset_version = ${v};\ndelete from private.geo_places where dataset_version = ${v};\n` +
-    `delete from private.geo_datasets where version = ${v};\n` +
-    `insert into private.geo_datasets (version, source, licence, attribution, manifest, expected_places, expected_names) values (${v}, ${sql(SOURCE)}, ${sql(LICENCE)}, ${sql(ATTRIBUTION)}, ${sql(JSON.stringify(manifest))}::jsonb, ${places.length}, ${names.length});\n`;
-  const chunks = buildChunks(version, places, names);
-  const activate = `-- Activate only if every row arrived; otherwise this raises and nothing changes.\nselect private.geo_activate_dataset(${v});\n`;
-  writeFileSync(join(outDir, '0000-begin.sql'), begin);
-  chunks.forEach((c, i) => writeFileSync(join(outDir, `${String(i + 1).padStart(4, '0')}-rows.sql`), c));
-  writeFileSync(join(outDir, '9999-activate.sql'), activate);
-  manifest.chunks = readdirSync(outDir).filter(f => f.endsWith('.sql')).sort()
-    .map(f => ({ file: f, sha256: sha256(readFileSync(join(outDir, f))) }));
+    `delete from private.geo_datasets where version = ${v} and not active;\n` +
+    `insert into private.geo_datasets (version, source, licence, attribution, manifest, expected_places, expected_names) values (${v}, ${sql(SOURCE)}, ${sql(LICENCE)}, ${sql(ATTRIBUTION)}, ${sql(JSON.stringify({ ...manifest }))}::jsonb, ${places.length}, ${names.length});\n`;
+  writeFileSync(join(outDir, 'begin.sql'), begin);
+  writeFileSync(join(outDir, 'activate.sql'), `-- Activates only if every row arrived; otherwise raises and nothing changes.\nselect private.geo_activate_dataset(${v});\n`);
   writeFileSync(join(outDir, 'manifest.json'), JSON.stringify(manifest, null, 2) + '\n');
-  console.log(JSON.stringify({ version, places: places.length, names: names.length, chunks: chunks.length }));
+  console.log(JSON.stringify({ version, places: places.length, names: names.length, outputs: manifest.outputs }));
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) main();

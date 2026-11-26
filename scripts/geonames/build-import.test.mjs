@@ -2,7 +2,7 @@
 // GeoNames column layout (19 tab-separated columns); they are not the live dump.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildChunks, buildRows, fold } from './build-import.mjs';
+import { buildRows, buildTsv, fold } from './build-import.mjs';
 
 const row = (...c) => c.join('\t');
 export const FIXTURE_DE = [
@@ -47,9 +47,13 @@ test('keeps populated places only, with regions, alternates and both folds', () 
   assert.equal(names.find(n => n.id === 2867714 && n.key === 'munich').primary, false);
 });
 
-test('chunks are deterministic and escape quotes', () => {
-  const { places, names } = buildRows(FIXTURE_DE.replace('Halberstadt\tHalberstadt', "Halber'stadt\tHalberstadt"), FIXTURE_ADMIN1, FIXTURE_ADMIN2);
-  const a = buildChunks('geonames-de-test0001', places, names), b = buildChunks('geonames-de-test0001', places, names);
-  assert.deepEqual(a, b);
-  assert.ok(a.join('').includes("'Halber''stadt'"));
+test('TSV output is deterministic and rejects control characters', () => {
+  const { places, names } = buildRows(FIXTURE_DE, FIXTURE_ADMIN1, FIXTURE_ADMIN2);
+  assert.deepEqual(buildTsv(places, names), buildTsv(places, names));
+  const { placesTsv, namesTsv } = buildTsv(places, names);
+  assert.equal(placesTsv.split('\n').length - 1, places.length);
+  assert.equal(namesTsv.split('\n').length - 1, names.length);
+  assert.ok(placesTsv.includes('2867714\tMünchen\tMuenchen\tBavaria\tUpper Bavaria\tDE\tGermany\t48.13743\t11.57549\t1260391\tPPLA\n'));
+  assert.ok(placesTsv.includes('\tBerlin\t'), 'leading "Land " dropped from the state name');
+  assert.throws(() => buildTsv([{ ...places[0], name: 'a\tb' }], []), /control character/);
 });

@@ -624,3 +624,80 @@ test('Jobs audit J-DB-1/J-DB-2: withdrawal is final for every client write; job 
   await deny(C, `select public.student_activity_response('${bad}','apply','Hi')`);
   await db.close();
 });
+
+test('Location engine: GeoNames search, umlauts, partials, ambiguity, versioned activation, service-only access', async () => {
+  const { buildRows, buildTsv, fold } = await import('../scripts/geonames/build-import.mjs');
+  const { createHash } = await import('node:crypto');
+  const hex = t => createHash('sha256').update(Buffer.from(t)).digest('hex');
+  const { FIXTURE_DE, FIXTURE_ADMIN1, FIXTURE_ADMIN2 } = await import('../scripts/geonames/build-import.test.mjs');
+  const { db } = await harness();
+  // SQL and JS folding must agree, or imported keys would never match queries.
+  for (const s of ['München', 'Frankfurt (Oder)', 'Gießen', 'Brandenburg an der Havel', 'Łódź', 'Halle  (Saale)'])
+    for (const t of [false, true])
+      assert.equal((await db.query('select private.geo_fold($1, $2) k', [s, t])).rows[0].k, fold(s, t), `${s}/${t}`);
+
+  const load = async (version, de, { tamper = false } = {}) => {
+    const { places, names } = buildRows(de, FIXTURE_ADMIN1, FIXTURE_ADMIN2);
+    const { placesTsv, namesTsv } = buildTsv(places, names);
+    const manifest = { outputs: { 'places.tsv': hex(placesTsv), 'names.tsv': hex(namesTsv) } };
+    await db.query(`insert into private.geo_datasets (version, source, licence, attribution, manifest, expected_places, expected_names)
+      values ($1, 'fixture', 'CC BY 4.0', 'City data © GeoNames', $2, $3, $4)`, [version, JSON.stringify(manifest), places.length, names.length]);
+    if (tamper) await assert.rejects(db.query(`select private.geo_load_tsv($1, 'places.tsv', $2)`, [version, placesTsv.replace('Berlin', 'Berlinx')]), /Checksum mismatch/);
+    assert.equal((await db.query(`select private.geo_load_tsv($1, 'places.tsv', $2) n`, [version, placesTsv])).rows[0].n, places.length);
+    assert.equal((await db.query(`select private.geo_load_tsv($1, 'names.tsv', $2) n`, [version, namesTsv])).rows[0].n, names.length);
+    return { places, names };
+  };
+  const search = async q => (await db.query('select public.geo_city_search($1) r', [q])).rows[0].r;
+  assert.deepEqual(await search('Berlin'), [], 'nothing active yet');
+
+  const v1 = await load('geonames-de-fixture01', FIXTURE_DE, { tamper: true });
+  // An incomplete load refuses to activate.
+  await db.exec(`delete from private.geo_place_names where dataset_version = 'geonames-de-fixture01' and name_key = 'munich'`);
+  await assert.rejects(db.query(`select private.geo_activate_dataset('geonames-de-fixture01')`), /incomplete/);
+  await db.exec(`insert into private.geo_place_names values ('geonames-de-fixture01', 2867714, 'munich', false)`);
+  await db.query(`select private.geo_activate_dataset('geonames-de-fixture01')`);
+  assert.ok(v1.places.length === 9);
+  await assert.rejects(db.query(`select private.geo_load_tsv('geonames-de-fixture01', 'names.tsv', '')`), /already active/);
+
+  const first = async q => (await search(q))[0];
+  assert.equal((await first('Berlin')).name, 'Berlin');
+  assert.equal((await first('Berlin')).region, 'Berlin');
+  assert.equal((await first('Potsdam')).region, 'Brandenburg');
+  assert.equal((await first('Brandenburg an der Havel')).name, 'Brandenburg an der Havel');
+  assert.equal((await first('Halberstadt')).region, 'Saxony-Anhalt');
+  for (const q of ['München', 'Munchen', 'Muenchen', 'Munich', 'münchen', 'MUNICH', 'Mün']) assert.equal((await first(q)).name, 'München', q);
+  assert.equal((await first('Frankfurt am Main')).name, 'Frankfurt am Main');
+  assert.equal((await first('Frankfurt (Oder)')).name, 'Frankfurt (Oder)');
+  assert.equal((await first('frankfurt oder')).name, 'Frankfurt (Oder)');
+  assert.deepEqual((await search('Frankfurt')).map(c => c.name), ['Frankfurt am Main', 'Frankfurt (Oder)'], 'ambiguous: both, larger first');
+  assert.equal((await first('Pots')).name, 'Potsdam', 'partial');
+  const neustadt = await search('Neustadt');
+  assert.equal(neustadt.length, 2);
+  assert.notEqual(neustadt[0].region, neustadt[1].region, 'same-named places are told apart');
+  assert.match(neustadt[0].region, /Bavaria · Upper/);
+  const munich = await first('Munich');
+  assert.deepEqual(Object.keys(munich).sort(), ['country', 'countryCode', 'district', 'geonameId', 'latitude', 'longitude', 'name', 'population', 'region']);
+  assert.equal(munich.countryCode, 'DE');
+  assert.equal(Number(munich.latitude), 48.13743);
+  assert.deepEqual(await search('Mitte'), [], 'PPLX sections excluded');
+  assert.deepEqual(await search('x'), [], 'one letter is not a search');
+  assert.deepEqual(await search("'; drop table x; --"), []);
+  assert.equal((await search('B')).length, 0);
+  assert.ok((await db.query(`select public.geo_city_search('B', 500) r`)).rows[0].r.length <= 10);
+
+  // A new version replaces the old one atomically; the old one stays for rollback.
+  await load('geonames-de-fixture02', FIXTURE_DE.replace('Halberstadt\tHalberstadt\t', 'Halberstadt\tHalberstadt\tHalberstadt (Harz)'));
+  await db.query(`select private.geo_activate_dataset('geonames-de-fixture02')`);
+  const versions = (await db.query('select version, active from private.geo_datasets order by version')).rows;
+  assert.deepEqual(versions, [{ version: 'geonames-de-fixture01', active: false }, { version: 'geonames-de-fixture02', active: true }]);
+  assert.equal((await first('Halberstadt Harz')).name, 'Halberstadt');
+
+  // Clients reach nothing directly: only service_role may search.
+  const asRole = async (role, sql) => { await db.exec(`set role ${role}`); try { return await db.query(sql); } finally { await db.exec('reset role'); } };
+  for (const role of ['anon', 'authenticated']) {
+    await assert.rejects(asRole(role, `select public.geo_city_search('Berlin')`), /permission denied/);
+    await assert.rejects(asRole(role, 'select * from private.geo_places limit 1'), /permission denied/);
+  }
+  assert.equal((await asRole('service_role', `select public.geo_city_search('Berlin') r`)).rows[0].r[0].name, 'Berlin');
+  await db.close();
+});
