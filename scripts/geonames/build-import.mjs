@@ -1,14 +1,16 @@
 #!/usr/bin/env node
 // Gismate Location Engine: build a versioned GeoNames import.
 //
-//   node scripts/geonames/build-import.mjs <input-dir> <output-dir> [version]
+//   node scripts/geonames/build-import.mjs <input-dir> <output-dir> [version] [countries]
 //
-// <input-dir> must hold the OFFICIAL GeoNames dump files, unmodified:
-//   DE.txt (unzipped from https://download.geonames.org/export/dump/DE.zip)
-//   admin1CodesASCII.txt, admin2Codes.txt (same directory on the server)
-//   DE.zip (kept only to record its checksum)
-//   alternateNames-DE.txt (from alternatenames/DE.zip): per-language names,
-//     used so places show their German name ("München", not "Munich")
+// countries: comma-separated ISO codes, default DE,AT,CH (Germany, Austria,
+// Switzerland). <input-dir> must hold the OFFICIAL GeoNames dump files, unmodified,
+// for each country CC:
+//   CC.txt (unzipped from https://download.geonames.org/export/dump/CC.zip)
+//   CC.zip (kept only to record its checksum)
+//   alternateNames-CC.txt (from alternatenames/CC.zip): per-language names,
+//     used so places show their German name ("München", "Wien", not "Munich", "Vienna")
+// and once: admin1CodesASCII.txt, admin2Codes.txt (same directory on the server).
 //
 // Output (nothing here connects to a database; same inputs → identical bytes):
 //   places.tsv, names.tsv  plain data, loaded by private.geo_load_tsv() or psql \copy
@@ -25,7 +27,7 @@ import { join } from 'node:path';
 export const LICENCE = 'CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/)';
 export const ATTRIBUTION = 'City data © GeoNames (geonames.org), CC BY 4.0';
 const SOURCE = 'https://download.geonames.org/export/dump/';
-const COUNTRY = { DE: 'Germany' };
+export const COUNTRY = { DE: 'Germany', AT: 'Austria', CH: 'Switzerland' };
 // Populated places a student can live or study in. Excluded: PPLX (section of
 // a place), PPLH (historical), PPLQ (abandoned), PPLW (destroyed), PPLCH.
 export const KEEP_CODES = new Set(['PPL', 'PPLA', 'PPLA2', 'PPLA3', 'PPLA4', 'PPLA5', 'PPLC', 'PPLF', 'PPLG', 'PPLL', 'PPLR', 'PPLS']);
@@ -66,13 +68,14 @@ export function germanNames(altTxt) {
   return { display: new Map([...best].map(([id, v]) => [id, v.name])), all };
 }
 
-export function buildRows(deTxt, admin1Txt, admin2Txt, altTxt = '') {
+/** `placesTxt` / `altTxt`: one or more countries' dump files, concatenated. */
+export function buildRows(placesTxt, admin1Txt, admin2Txt, altTxt = '') {
   const german = germanNames(altTxt);
   const admin1 = new Map(), admin2 = new Map();
-  for (const line of admin1Txt.split('\n')) { const c = line.split('\t'); if (c.length >= 2 && c[0].startsWith('DE.')) admin1.set(c[0], c[1].replace(/^(Land|State of) /, '')); }
-  for (const line of admin2Txt.split('\n')) { const c = line.split('\t'); if (c.length >= 2 && c[0].startsWith('DE.')) admin2.set(c[0], c[1]); }
+  for (const line of admin1Txt.split('\n')) { const c = line.split('\t'); if (c.length >= 2 && COUNTRY[c[0].slice(0, 2)] && c[0][2] === '.') admin1.set(c[0], c[1].replace(/^(Land|State of|Canton of) /, '')); }
+  for (const line of admin2Txt.split('\n')) { const c = line.split('\t'); if (c.length >= 2 && COUNTRY[c[0].slice(0, 2)] && c[0][2] === '.') admin2.set(c[0], c[1]); }
   const places = [], names = [];
-  for (const line of deTxt.split('\n')) {
+  for (const line of placesTxt.split('\n')) {
     const c = line.split('\t');
     if (c.length < 19 || c[6] !== 'P' || !KEEP_CODES.has(c[7]) || !COUNTRY[c[8]]) continue;
     const id = Number(c[0]);
@@ -115,26 +118,33 @@ export function buildTsv(places, names) {
 function sha256(buf) { return createHash('sha256').update(buf).digest('hex'); }
 
 function main() {
-  const [inDir, outDir, versionArg] = process.argv.slice(2);
-  if (!inDir || !outDir) { console.error('usage: build-import.mjs <input-dir> <output-dir> [version]'); process.exit(2); }
+  const [inDir, outDir, versionArg, countriesArg] = process.argv.slice(2);
+  if (!inDir || !outDir) { console.error('usage: build-import.mjs <input-dir> <output-dir> [version] [countries]'); process.exit(2); }
+  const countries = (countriesArg || 'DE,AT,CH').split(',').map(c => c.trim().toUpperCase());
+  for (const c of countries) if (!COUNTRY[c]) throw new Error(`unsupported country ${c}`);
   const files = {};
-  const urls = { 'DE.zip': `${SOURCE}DE.zip`, 'DE.txt': `${SOURCE}DE.zip (unzipped)`, 'admin1CodesASCII.txt': `${SOURCE}admin1CodesASCII.txt`,
-    'admin2Codes.txt': `${SOURCE}admin2Codes.txt`, 'alternateNames-DE.txt': `${SOURCE}alternatenames/DE.zip (unzipped DE.txt)` };
+  const urls = { 'admin1CodesASCII.txt': `${SOURCE}admin1CodesASCII.txt`, 'admin2Codes.txt': `${SOURCE}admin2Codes.txt` };
+  for (const c of countries) Object.assign(urls, { [`${c}.zip`]: `${SOURCE}${c}.zip`, [`${c}.txt`]: `${SOURCE}${c}.zip (unzipped)`,
+    [`alternateNames-${c}.txt`]: `${SOURCE}alternatenames/${c}.zip (unzipped ${c}.txt)` });
   for (const name of Object.keys(urls)) {
     const buf = readFileSync(join(inDir, name));
     files[name] = { url: urls[name], bytes: buf.length, sha256: sha256(buf) };
   }
   // Version = dataset content, not the clock: same inputs give the same version.
-  const version = versionArg || `geonames-de-${createHash('sha256').update(files['DE.txt'].sha256 + files['alternateNames-DE.txt'].sha256 + files['admin1CodesASCII.txt'].sha256 + files['admin2Codes.txt'].sha256).digest('hex').slice(0, 12)}`;
+  const inputs = Object.keys(files).filter(n => !n.endsWith('.zip')).sort().map(n => files[n].sha256).join('');
+  const prefix = countries.length === 1 ? `geonames-${countries[0].toLowerCase()}` : 'geonames-dach';
+  const version = versionArg || `${prefix}-${createHash('sha256').update(countries.join(',') + inputs).digest('hex').slice(0, 12)}`;
   if (!/^[a-z0-9-]{8,64}$/.test(version)) throw new Error('version must be 8-64 of [a-z0-9-]');
-  const { places, names } = buildRows(readFileSync(join(inDir, 'DE.txt'), 'utf8'),
-    readFileSync(join(inDir, 'admin1CodesASCII.txt'), 'utf8'), readFileSync(join(inDir, 'admin2Codes.txt'), 'utf8'),
-    readFileSync(join(inDir, 'alternateNames-DE.txt'), 'utf8'));
-  if (places.length < 10_000) throw new Error(`only ${places.length} places: refusing a truncated dataset`);
+  const read = n => readFileSync(join(inDir, n), 'utf8');
+  const joinFiles = names => names.map(n => { const t = read(n); return t.endsWith('\n') ? t : t + '\n'; }).join('');
+  const { places, names } = buildRows(joinFiles(countries.map(c => `${c}.txt`)), read('admin1CodesASCII.txt'), read('admin2Codes.txt'),
+    joinFiles(countries.map(c => `alternateNames-${c}.txt`)));
+  const perCountry = Object.fromEntries(countries.map(c => [c, places.filter(p => p.countryCode === c).length]));
+  for (const [c, n] of Object.entries(perCountry)) if (n < 1_000) throw new Error(`only ${n} places for ${c}: refusing a truncated dataset`);
   rmSync(outDir, { recursive: true, force: true });
   mkdirSync(outDir, { recursive: true });
   const manifest = {
-    version, source: SOURCE, licence: LICENCE, attribution: ATTRIBUTION, country: 'DE',
+    version, source: SOURCE, licence: LICENCE, attribution: ATTRIBUTION, countries, placesPerCountry: perCountry,
     featureCodes: [...KEEP_CODES].sort(), files, places: places.length, names: names.length,
   };
   const { placesTsv, namesTsv } = buildTsv(places, names);
@@ -148,7 +158,7 @@ function main() {
   writeFileSync(join(outDir, 'begin.sql'), begin);
   writeFileSync(join(outDir, 'activate.sql'), `-- Activates only if every row arrived; otherwise raises and nothing changes.\nselect private.geo_activate_dataset(${v});\n`);
   writeFileSync(join(outDir, 'manifest.json'), JSON.stringify(manifest, null, 2) + '\n');
-  console.log(JSON.stringify({ version, places: places.length, names: names.length, outputs: manifest.outputs }));
+  console.log(JSON.stringify({ version, places: places.length, perCountry, names: names.length, outputs: manifest.outputs }));
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) main();
