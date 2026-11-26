@@ -65,14 +65,27 @@ function ExternalFeedRequest({ kind, city, query, refreshKey }: { kind: FeedKind
         </Pressable>
       ) : null}
       {linkError ? <Text accessibilityRole="alert" style={styles.error}>The provider’s website couldn’t be opened.</Text> : null}
-      {reply?.items.map(item => (
-        <Pressable key={item.id} accessibilityRole="link" accessibilityLabel={`${item.title}, from ${item.source}, opens external site`}
-          onPress={() => void openProvider(item.url)} style={({ pressed }) => [styles.item, pressed && styles.pressed]}>
-          <Text style={styles.itemTitle}>{item.title}</Text>
-          <Text style={styles.itemMeta}>{[item.subtitle, item.location, item.startsAt ? new Date(item.startsAt).toLocaleString() : null].filter(Boolean).join(' · ')}</Text>
-          <Text style={styles.itemSource}>Source: {reply.sources.find(src => src.id === item.source)?.label ?? item.source} ↗</Text>
-        </Pressable>
-      ))}
+      {reply?.items.map(item => {
+        const source = reply.sources.find(src => src.id === item.source);
+        return (
+          <View key={item.id} style={styles.item}>
+            <Pressable accessibilityRole="link" accessibilityLabel={`${item.title}, from ${item.source}, opens external site`}
+              onPress={() => void openProvider(item.url)} style={({ pressed }) => [styles.itemLink, pressed && styles.pressed]}>
+              <Text style={styles.itemTitle}>{item.title}</Text>
+              <Text style={styles.itemMeta}>{[item.subtitle, item.location, item.startsAt ? new Date(item.startsAt).toLocaleString() : null].filter(Boolean).join(' · ')}</Text>
+              <Text style={styles.itemSource}>Source: {source?.label ?? item.source} ↗</Text>
+            </Pressable>
+            {item.source === 'adzuna' && source ? (
+              // Adzuna API terms: every displayed advert carries "Adzuna", at least
+              // 116 × 23 px, linked to Adzuna's local site (the validated source URL).
+              <Pressable accessibilityRole="link" accessibilityLabel="Adzuna, opens adzuna website" testID="adzuna-advert-label"
+                onPress={() => void openProvider(source.url)} style={styles.adzunaLabel}>
+                <Text style={styles.adzunaText}>Adzuna</Text>
+              </Pressable>
+            ) : null}
+          </View>
+        );
+      })}
       {reply?.sources.length ? (
         <View style={styles.attribution}>
           {reply.sources.map(src => (
@@ -91,7 +104,12 @@ const styles = StyleSheet.create({
   title: { fontSize: 16, fontWeight: '900', color: '#11162F' },
   muted: { fontSize: 12, color: '#555C72', lineHeight: 18 },
   error: { fontSize: 12, color: '#A3123A' },
-  item: { borderTopWidth: 1, borderTopColor: '#E9EAF1', paddingTop: 10, gap: 3, minHeight: 44 },
+  item: { borderTopWidth: 1, borderTopColor: '#E9EAF1', paddingTop: 10, gap: 6 },
+  itemLink: { gap: 3, minHeight: 44 },
+  // Adzuna's minimum is 116 × 23 px; 44 high also meets the touch-target size.
+  adzunaLabel: { alignSelf: 'flex-start', minWidth: 116, minHeight: 44, paddingHorizontal: 12, justifyContent: 'center', alignItems: 'center',
+    borderRadius: 6, borderWidth: 1, borderColor: '#2E7D32', backgroundColor: '#FFFFFF' },
+  adzunaText: { fontSize: 16, lineHeight: 23, fontWeight: '800', color: '#1B5E20', textDecorationLine: 'underline' },
   pressed: { opacity: 0.7 },
   retry: { minHeight: 44, justifyContent: 'center', alignSelf: 'flex-start' },
   itemTitle: { fontSize: 14, fontWeight: '800', color: '#11162F' },

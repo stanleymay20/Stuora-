@@ -69,6 +69,13 @@ test('external jobs: vacancies are attributed, link out, flag partial outages an
   await expect(link).toBeVisible();
   await expect(page.getByText('Muster GmbH · Berlin')).toBeVisible();
   await expect(page.getByText('Source: Jobs by Adzuna ↗')).toBeVisible();
+  // Adzuna API terms: each advert labelled "Adzuna", >= 116 x 23 px, linked to the local site.
+  const label = page.getByTestId('adzuna-advert-label');
+  await expect(label).toHaveCount(1);
+  await expect(label).toHaveText('Adzuna');
+  const box = await label.boundingBox();
+  expect(box!.width).toBeGreaterThanOrEqual(116);
+  expect(box!.height).toBeGreaterThanOrEqual(23);
   await expect(page.getByText('Quelle: Bundesagentur für Arbeit (unavailable)')).toBeVisible();
   await expect(page.getByText('Some external sources are unavailable.', { exact: false })).toBeVisible();
   expect(bodies.at(-1)).toMatchObject({ action: 'feed', kind: 'jobs', city: 'Berlin' });
@@ -77,6 +84,9 @@ test('external jobs: vacancies are attributed, link out, flag partial outages an
   const opened = page.context().waitForEvent('request', r => r.url() === vacancy.url);
   await link.click();
   expect((await opened).url()).toBe(vacancy.url);
+  const toAdzuna = page.context().waitForEvent('request', r => r.url().startsWith('https://www.adzuna.de'));
+  await label.click();
+  expect(new URL((await toAdzuna).url()).hostname).toBe('www.adzuna.de');
   const before = bodies.length;
   await page.getByRole('button', { name: 'Refresh listings' }).click();
   await expect.poll(() => bodies.length).toBeGreaterThan(before);
