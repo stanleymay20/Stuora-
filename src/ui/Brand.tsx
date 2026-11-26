@@ -26,7 +26,7 @@ const paths: Record<string, string> = {
   close: 'M5 5L19 19M19 5L5 19',
   send: 'M3 11L21 3L13 21L10 14L3 11ZM10 14L21 3',
 };
-export function Icon({ name, size = 22, color = '#747B91' }: { name: string; size?: number; color?: string }) {
+export function Icon({ name, size = 22, color = '#555C72' }: { name: string; size?: number; color?: string }) {
   const key = name.toLowerCase();
   return <Svg width={size} height={size} viewBox="0 0 24 24" aria-hidden>
     <G fill="none" stroke={color} strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round">

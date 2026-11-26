@@ -1,6 +1,6 @@
 {
   "name": "stuora",
-  "version": "0.1.0",
+  "version": "0.1.7",
   "private": true,
   "main": "index.ts",
   "engines": {
@@ -12,8 +12,8 @@
     "ios": "expo start --ios",
     "web": "expo start --web",
     "typecheck": "tsc --noEmit",
-    "export:web": "expo export --platform web --output-dir dist",
-    "test:database": "node --test tests/database.test.mjs",
+    "export:web": "expo export --platform web --output-dir dist --clear",
+    "test:database": "node --test tests/database.test.mjs tests/database-gen3.test.mjs tests/staging-rollback.test.mjs",
     "test:web": "playwright test",
     "check:environment": "node scripts/check-environment.mjs",
     "prestart": "npm run check:environment",
@@ -23,14 +23,18 @@
     "preexport:web": "npm run check:environment -- production"
   },
   "dependencies": {
-    "@expo/metro-runtime": "~57.0.17",
+    "@expo/metro-runtime": "~57.0.19",
     "@react-native-async-storage/async-storage": "2.2.0",
     "@supabase/supabase-js": "2.117.3",
-    "expo": "~57.0.30",
-    "expo-image-picker": "~57.0.20",
+    "expo": "~57.0.34",
+    "expo-crypto": "57.0.4",
+    "expo-file-system": "57.0.7",
+    "expo-image-picker": "~57.0.22",
+    "expo-splash-screen": "~57.0.12",
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "react-native": "0.86.3",
+    "react-native-safe-area-context": "~5.7.0",
     "react-native-svg": "15.15.4",
     "react-native-url-polyfill": "4.0.0",
     "react-native-web": "~0.21.0"

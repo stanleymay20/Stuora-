@@ -1,0 +1,39 @@
+# LOCAL STAGING ONLY — not publicly accessible.
+# A reviewed private HTTPS reverse proxy must be attached deliberately.
+# Never publish ClamAV TCP/3310 or the scanner's HTTP/8787 directly.
+services:
+  clamd:
+    image: clamav/clamav:stable
+    restart: unless-stopped
+    mem_limit: 4g
+    volumes:
+      - clamav-signatures:/var/lib/clamav
+    networks: [private-scanner, signature-updates]
+    # The second outbound-only bridge allows FreshClam to refresh signatures.
+    # No ports are published to the host.
+  pdf-scanner:
+    build: .
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp:rw,nosuid,noexec,size=16m
+    environment:
+      SCANNER_AUTH_TOKEN: ${SCANNER_AUTH_TOKEN:?Set a unique secret in a private operator environment}
+      CLAMD_HOST: clamd
+      CLAMD_PORT: "3310"
+      PORT: "8787"
+      BIND_HOST: "0.0.0.0"
+    expose: ["8787"]
+    networks: [private-scanner]
+    depends_on:
+      clamd:
+        condition: service_healthy
+networks:
+  private-scanner:
+    internal: true
+  signature-updates:
+    # ClamAV needs outbound access for signature updates; this bridge has
+    # no published inbound port and is not attached to the scanner service.
+    driver: bridge
+volumes:
+  clamav-signatures:

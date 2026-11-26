@@ -10,3 +10,4 @@ web-build/
 supabase/.temp/
 test-results/
 playwright-report/
+assets/generated-stuora/

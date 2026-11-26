@@ -1,17 +1,18 @@
 import { Buffer } from 'node:buffer';
 import { expect, test, type Page } from '@playwright/test';
 const userId = '00000000-0000-0000-0000-000000000001';
-export function session(email = 'alice@example.invalid') {
+export function session(email = 'alice@gisma-student.com', id = userId) {
   const now = Math.floor(Date.now() / 1000);
-  const user = { id: userId, email, aud: 'authenticated', app_metadata: { provider: 'email' }, user_metadata: {}, created_at: new Date().toISOString(), email_confirmed_at: new Date().toISOString() };
-  const jwt = [Buffer.from('{"alg":"HS256"}').toString('base64url'), Buffer.from(JSON.stringify({ sub: userId, exp: now + 3600, iat: now, role: 'authenticated' })).toString('base64url'), 'test-signature'].join('.');
+  const user = { id, email, aud: 'authenticated', app_metadata: { provider: 'email' }, user_metadata: {}, created_at: new Date().toISOString(), email_confirmed_at: new Date().toISOString() };
+  const jwt = [Buffer.from('{"alg":"HS256"}').toString('base64url'), Buffer.from(JSON.stringify({ sub: id, exp: now + 3600, iat: now, role: 'authenticated' })).toString('base64url'), 'test-signature'].join('.');
   return { access_token: jwt, refresh_token: 'test-refresh-token', token_type: 'bearer', expires_in: 3600, expires_at: now + 3600, user };
 }
-export async function backend(page: Page, failProfile = false) {
+export async function backend(page: Page, failProfile = false, resendStatus = 200) {
   let profile: Record<string, unknown> | null = null;
   let writes = 0;
   let reads = 0;
   let recoveries = 0;
+  let confirmationsResent = 0;
   let passwordUpdates = 0;
   await page.route('https://stuora-test.invalid/**', async route => {
     const req = route.request();
@@ -19,6 +20,17 @@ export async function backend(page: Page, failProfile = false) {
     if (url.pathname.endsWith('/listings') && req.method() === 'GET') return route.fulfill({ json: [] });
     if (url.pathname.endsWith('/student_benefits') && req.method() === 'GET') return route.fulfill({ json: [] });
     if (url.pathname.endsWith('/signup')) return route.fulfill({ json: { user: session().user, session: null } });
+    if (url.pathname.endsWith('/resend')) {
+      confirmationsResent++;
+      expect(req.method()).toBe('POST');
+      expect(req.postDataJSON()?.email).toBeTruthy();
+      expect(req.postDataJSON()?.type).toBe('signup');
+      expect(url.searchParams.get('redirect_to')).toBeTruthy();
+      if (resendStatus !== 200) {
+        return route.fulfill({ status: resendStatus, json: { error_code: 'over_email_send_rate_limit', msg: 'Email rate limit exceeded' } });
+      }
+      return route.fulfill({ json: {} });
+    }
     if (url.pathname.endsWith('/recover')) {
       recoveries++;
       expect(req.postDataJSON()?.email).toBeTruthy();
@@ -37,6 +49,15 @@ export async function backend(page: Page, failProfile = false) {
       return route.fulfill({ json: session() });
     }
     if (url.pathname.endsWith('/logout')) return route.fulfill({ status: 204 });
+    if (url.pathname.endsWith('/rpc/am_i_moderator')) return route.fulfill({ json: false });
+    if (url.pathname.endsWith('/moderation_notices')) return route.fulfill({ json: [] });
+    if (url.pathname.endsWith('/rpc/set_profile_discovery')) {
+      writes++;
+      const on = req.postDataJSON()?.p_discoverable === true;
+      const stamp = on ? new Date().toISOString() : null;
+      profile = { ...profile, is_discoverable: on, discoverable_consented_at: stamp };
+      return route.fulfill({ json: stamp });
+    }
     if (url.pathname.endsWith('/profiles')) {
       if (req.method() === 'GET') {
         reads++;
@@ -48,13 +69,19 @@ export async function backend(page: Page, failProfile = false) {
       // Contract: callers may never send trust or authorization flags.
       expect(values).not.toHaveProperty('student_status');
       expect(values).not.toHaveProperty('account_kind');
-      if (req.method() === 'PATCH') expect(url.searchParams.get('id')).toBe(`eq.${userId}`);
+      if (req.method() === 'PATCH') {
+        expect(url.searchParams.get('id')).toBe(`eq.${userId}`);
+        // Gen-3 R-04: discovery is only changed through set_profile_discovery.
+        expect(values).not.toHaveProperty('is_discoverable');
+        expect(values).not.toHaveProperty('discoverable_consented_at');
+      }
+      if (req.method() === 'POST') values.discoverable_consented_at = values.is_discoverable ? new Date().toISOString() : null;
       profile = { ...profile, id: userId, ...values, student_status: 'unverified', account_kind: 'student', avatar_path: null, created_at: new Date().toISOString(), updated_at: new Date().toISOString() };
       return route.fulfill({ json: profile, contentType: 'application/vnd.pgrst.object+json' });
     }
     return route.fulfill({ status: 404, json: { message: `Unexpected endpoint in test: ${url.pathname}` } });
   });
-  return { writes: () => writes, recoveries: () => recoveries, passwordUpdates: () => passwordUpdates };
+  return { writes: () => writes, recoveries: () => recoveries, confirmationsResent: () => confirmationsResent, passwordUpdates: () => passwordUpdates };
 }
 export async function account(page: Page) {
   await page.goto('/');
@@ -62,7 +89,18 @@ export async function account(page: Page) {
   await expect(page.getByText('Welcome to Stuora', { exact: true })).toBeVisible();
 }
 export async function signin(page: Page, password = 'correct-password') {
-  await page.getByLabel('Email', { exact: true }).fill('alice@example.invalid');
+  await page.getByLabel('Email', { exact: true }).fill('alice@gisma-student.com');
   await page.getByLabel('Password', { exact: true }).fill(password);
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
+}
+/**
+ * Student listings, photos and groups are visible only to signed-in GISMA
+ * students. Start the page with a stored, confirmed student session (the same
+ * shape supabase-js persists), so browsing tests exercise the student view.
+ */
+export async function asStudent(page: Page, email = 'alice@gisma-student.com', id?: string) {
+  const stored = session(email, id);
+  await page.addInitScript(value => {
+    localStorage.setItem('sb-stuora-test-auth-token', value);
+  }, JSON.stringify(stored));
 }
