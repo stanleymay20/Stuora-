@@ -64,7 +64,7 @@ begin
     v := replace(replace(replace(v, 'ä', 'ae'), 'ö', 'oe'), 'ü', 'ue');
   end if;
   v := replace(replace(replace(replace(replace(replace(v, 'ß', 'ss'), 'æ', 'ae'), 'œ', 'oe'), 'ø', 'o'), 'ł', 'l'), 'đ', 'd');
-  v := regexp_replace(normalize(v, NFD), '[̀-ͯ]', '', 'g');
+  v := regexp_replace(normalize(v, NFD), '[\u0300-\u036f]', '', 'g');
   return btrim(regexp_replace(v, '[^a-z0-9]+', ' ', 'g'));
 end $$;
 
