@@ -106,4 +106,15 @@ update. No account was created and no key was added.
 - Germany only. Non-German cities fall back to OpenStreetMap, which currently
   refuses Supabase traffic, so they return no candidates.
 - Students can still save a typed city without checking it; the check is advisory.
-- Feeds use the saved city name; Ticketmaster matches by city name, not coordinates.
+- Not-yet-expired feed cache entries (30 min) keep the previous behaviour after a deploy.
+- Prefix matches stop the OpenStreetMap fallback: "Wien" returns German places
+  starting with "Wien" rather than Vienna (OpenStreetMap is refusing us anyway).
+
+## Feeds use the city's position
+
+Ticketmaster names cities in its own language ("Munich", "Cologne"). Live on
+26 Nov 2026, "München" returned 0 events while "Munich" returned 11. Feeds now
+resolve the saved city through `geo_city_search` and ask Ticketmaster for events
+within 10 km of its coordinates (`geoPoint` geohash, `radius=10`, `unit=km`).
+Cities GeoNames does not know, or a failed lookup, still search by name. Adzuna
+and the Bundesagentur still receive the city name (both are disabled).
