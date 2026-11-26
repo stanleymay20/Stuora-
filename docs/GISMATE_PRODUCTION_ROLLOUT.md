@@ -66,6 +66,7 @@ set -eu
 git fetch origin geonames-data
 git worktree add --detach /tmp/geo 60e0338905670e437c9d0ebe8326e11cd3274ac0
 cd /tmp/geo/geonames-dach-12ec671b485f
+python3 -c 'import psycopg' 2>/dev/null || python3 -m pip install --user "psycopg[binary]>=3.1"
 python3 - <<'PY'
 import hashlib
 import os
