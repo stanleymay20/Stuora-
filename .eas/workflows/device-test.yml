@@ -1,0 +1,47 @@
+name: Stuora 0.1.7 device-test candidate (staging)
+
+# Manual only. Builds the reviewed commit against STAGING for the device test
+# script (docs/DEVICE_TEST_SCRIPT.md):
+#   Android: an installable APK shared by EAS link/QR code (internal distribution,
+#            not Google Play). Uninstall a Play-installed Stuora first: the
+#            signatures differ.
+#   iOS:     the signed store build, uploaded to internal TestFlight groups only.
+# No public release, no external testers, no Beta App Review.
+on:
+  workflow_dispatch: {}
+
+jobs:
+  build_android:
+    name: Build Android test APK (staging)
+    type: build
+    params:
+      platform: android
+      profile: device-test-android
+    hooks:
+      after_install_node_modules:
+        - name: Validate staging backend, origin and publishable key without printing values
+          run: npm run check:environment
+
+  build_ios:
+    name: Build signed iOS candidate (staging)
+    type: build
+    params:
+      platform: ios
+      profile: testflight
+    hooks:
+      after_install_node_modules:
+        - name: Validate staging backend, origin and publishable key without printing values
+          run: npm run check:environment
+
+  submit_ios:
+    name: Upload candidate for internal TestFlight testing
+    needs: [build_ios]
+    type: testflight
+    # Expo defaults non-build jobs to the production environment; keep the
+    # upload job on the same staging (preview) variables as the build.
+    environment: preview
+    params:
+      build_id: ${{ needs.build_ios.outputs.build_id }}
+      profile: testflight
+      submit_beta_review: false
+      changelog: "Stuora 0.1.7 staging device test: sign-in and recovery, GeoNames city search (Germany, Austria, Switzerland), events by city, listings, messaging. Follow docs/DEVICE_TEST_SCRIPT.md."

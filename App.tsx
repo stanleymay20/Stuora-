@@ -17,7 +17,7 @@ import { EditorialImage } from './src/ui/EditorialImage';
 import LegalPage, { LegalLinks, type LegalDocument } from './src/legal/LegalPage';
 import { isPlausibleCity } from './src/ai/botCore';
 import { features } from './src/backend/features';
-import { lookupCity, type CityCandidate, ServiceError } from './src/backend/externalData';
+import { cityAttribution, lookupCity, type CityCandidate, ServiceError } from './src/backend/externalData';
 import {
   Platform,
   Image,
@@ -228,6 +228,7 @@ export default function App({ onOpenSavings }: { onOpenSavings: () => void }) {
     });
   };
   const [cityCandidates, setCityCandidates] = useState<CityCandidate[] | null>(null);
+  const [citySource, setCitySource] = useState(() => cityAttribution(null));
   const [cityChecking, setCityChecking] = useState(false);
   const saveCity = () => {
     const city = cityDraft.trim().replace(/\s+/g, ' ');
@@ -245,6 +246,7 @@ export default function App({ onOpenSavings }: { onOpenSavings: () => void }) {
     try {
       const reply = await lookupCity(city);
       setCityCandidates(reply.candidates);
+      setCitySource(cityAttribution(reply.attribution));
       if (!reply.candidates.length) setCityError('No matching city found. Check the spelling or save it anyway.');
     } catch (error) {
       setCityError(error instanceof ServiceError && error.code === 'AUTH' ? 'Sign in to check a city name.' : error instanceof ServiceError ? error.message : 'City check is unavailable right now.');
@@ -532,14 +534,14 @@ export default function App({ onOpenSavings }: { onOpenSavings: () => void }) {
             {cityCandidates?.length ? (
               <View style={styles.cityCandidates}>
                 {cityCandidates.map(c => (
-                  <Pressable key={`${c.name}|${c.region}|${c.countryCode}`} accessibilityRole="button" accessibilityLabel={`Use ${c.name}, ${c.region || c.country}`}
+                  <Pressable key={`${c.geonameId ?? ''}|${c.name}|${c.region}|${c.countryCode}`} accessibilityRole="button" accessibilityLabel={`Use ${c.name}, ${c.region || c.country}`}
                     onPress={() => setSelectedCity(c.name)} style={styles.cityCandidate}>
                     <Text style={styles.cityCandidateName}>{c.name}</Text>
                     <Text style={styles.cityCandidateMeta}>{[c.region, c.country].filter(Boolean).join(', ')}</Text>
                   </Pressable>
                 ))}
-                <Pressable accessibilityRole="link" onPress={() => void Linking.openURL('https://www.openstreetmap.org/copyright')}>
-                  <Text style={styles.cityAttribution}>City data © OpenStreetMap contributors</Text>
+                <Pressable accessibilityRole="link" onPress={() => void Linking.openURL(citySource.url)}>
+                  <Text style={styles.cityAttribution}>{citySource.label}</Text>
                 </Pressable>
               </View>
             ) : null}

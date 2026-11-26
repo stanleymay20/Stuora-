@@ -7,7 +7,7 @@ import { createClient } from "npm:@supabase/supabase-js@2.117.3";
 import { allowedOrigins, bearer, corsHeaders, HttpError, json, preflight, readJson } from "../_shared/http.ts";
 import { type ExternalDeps, loadFeed, lookupCity } from "./core.ts";
 import {
-  adzunaProvider, bundesagenturProvider, cityLookupChain, type FeedProvider, ticketmasterProvider,
+  adzunaProvider, bundesagenturProvider, cityLookupChain, type FeedProvider, geonamesLookup, placeResolver, ticketmasterProvider,
 } from "./providers.ts";
 
 const env = Deno.env.toObject();
@@ -32,6 +32,12 @@ const cityLookup = cityLookupChain(env, {
     await admin.rpc("external_cache_put", { p_provider: "nominatim", p_key: BREAKER_KEY, p_payload: { refused: true }, p_ttl_seconds: 3600 });
   },
 });
+// Gismate Location Engine: GeoNames rows in this project's database. If the
+// dataset is missing the RPC errors and lookups fall back to OpenStreetMap.
+const localCityLookup = geonamesLookup(async query => await admin.rpc("geo_city_search", { p_query: query, p_limit: 8 }));
+// Feeds: the saved city's best GeoNames match, so providers can search by position.
+const placeLookup = geonamesLookup(async query => await admin.rpc("geo_city_search", { p_query: query, p_limit: 1 }));
+const resolvePlace = placeResolver(placeLookup);
 console.log(JSON.stringify({ event: "external_config", feeds: feeds.map(f => f.id), cityLookup: cityLookup !== null, origins: origins.size }));
 
 async function rpcBoolean(name: string, args: Record<string, unknown> = {}): Promise<boolean> {
@@ -67,7 +73,7 @@ Deno.serve(async req => {
       },
       consumeQuota: () => rpcBoolean("consume_external_data_request", { p_student: user.id }),
       acquireNominatimSlot: () => rpcBoolean("acquire_nominatim_slot"),
-      feeds, cityLookup, fetcher: fetch,
+      feeds, cityLookup, localCityLookup, resolvePlace, fetcher: fetch,
     };
     if (body.action === "city") return json(200, await lookupCity(deps, body.query), cors);
     if (body.action === "feed") return json(200, await loadFeed(deps, body.kind, body.city, body.query), cors);

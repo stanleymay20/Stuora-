@@ -1,0 +1,93 @@
+// Importer unit tests. The rows below are a hand-written FIXTURE in the official
+// GeoNames column layout (19 tab-separated columns); they are not the live dump.
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { buildRows, buildTsv, COUNTRY, fold } from './build-import.mjs';
+
+const row = (...c) => c.join('\t');
+export const FIXTURE_DE = [
+  row(2950159, 'Berlin', 'Berlin', 'Berlin,Berlijn,Berlín,Берлин', '52.52437', '13.41053', 'P', 'PPLC', 'DE', '', '16', '00', '11000', '11000000', '3426354', '', '74', 'Europe/Berlin', '2024-01-01'),
+  row(2852458, 'Potsdam', 'Potsdam', 'Potsdam,Поцдам', '52.39886', '13.06566', 'P', 'PPLA', 'DE', '', '11', '00', '12054', '12054000', '182112', '', '35', 'Europe/Berlin', '2024-01-01'),
+  row(2945024, 'Brandenburg an der Havel', 'Brandenburg an der Havel', 'Brandenburg,Brandenburg/Havel', '52.41667', '12.55', 'P', 'PPLA3', 'DE', '', '11', '00', '12051', '12051000', '72040', '', '33', 'Europe/Berlin', '2024-01-01'),
+  row(2911522, 'Halberstadt', 'Halberstadt', '', '51.89562', '11.05622', 'P', 'PPLA3', 'DE', '', '14', '15085', '15085', '15085135', '40440', '', '120', 'Europe/Berlin', '2024-01-01'),
+  row(2867714, 'Munich', 'Munich', 'Monaco di Baviera,Munchen,Muenchen,München,Мюнхен', '48.13743', '11.57549', 'P', 'PPLA', 'DE', '', '02', '091', '09162', '09162000', '1260391', '', '524', 'Europe/Berlin', '2024-01-01'),
+  row(2925533, 'Frankfurt am Main', 'Frankfurt am Main', 'Francfort,Frankfurt,Frankfurt/Main', '50.11552', '8.68417', 'P', 'PPLA2', 'DE', '', '05', '064', '06412', '06412000', '650000', '', '100', 'Europe/Berlin', '2024-01-01'),
+  row(2925535, 'Frankfurt (Oder)', 'Frankfurt (Oder)', 'Frankfurt,Frankfurt an der Oder,Frankfurt/Oder', '52.34714', '14.55062', 'P', 'PPLA3', 'DE', '', '11', '00', '12053', '12053000', '58537', '', '30', 'Europe/Berlin', '2024-01-01'),
+  row(2864435, 'Neustadt', 'Neustadt', '', '50.1', '10.9', 'P', 'PPL', 'DE', '', '02', '094', '09473', '', '1200', '', '300', 'Europe/Berlin', '2024-01-01'),
+  row(2864436, 'Neustadt', 'Neustadt', '', '49.4', '11.6', 'P', 'PPL', 'DE', '', '02', '093', '09373', '', '900', '', '400', 'Europe/Berlin', '2024-01-01'),
+  row(2867713, 'München', 'Munchen', '', '48.69668', '13.46314', 'P', 'PPL', 'DE', '', '02', '092', '09275', '', '0', '', '400', 'Europe/Berlin', '2024-01-01'),
+  row(6545310, 'Mitte', 'Mitte', '', '52.52', '13.4', 'P', 'PPLX', 'DE', '', '16', '00', '11000', '11000000', '0', '', '40', 'Europe/Berlin', '2024-01-01'),
+  row(2950158, 'Berlin', 'Berlin', '', '52.5', '13.4', 'A', 'ADM1', 'DE', '', '16', '', '', '', '3426354', '', '74', 'Europe/Berlin', '2024-01-01'),
+].join('\n');
+// Austria and Switzerland (same layout), as in AT.txt / CH.txt.
+export const FIXTURE_AT_CH = [
+  row(2761369, 'Vienna', 'Vienna', 'Bec,Viden,Vienne,Wien', '48.20849', '16.37208', 'P', 'PPLC', 'AT', '', '09', '900', '', '', '1691468', '', '193', 'Europe/Vienna', '2024-01-01'),
+  row(2766824, 'Salzburg', 'Salzburg', 'Salisburgo', '47.79941', '13.04399', 'P', 'PPLA', 'AT', '', '05', '501', '', '', '145871', '', '424', 'Europe/Vienna', '2024-01-01'),
+  row(2657896, 'Zürich', 'Zurich', 'Zurich,Zurigo', '47.36667', '8.55', 'P', 'PPLA', 'CH', '', 'ZH', '112', '261', '', '341730', '', '429', 'Europe/Zurich', '2024-01-01'),
+  row(2660646, 'Genève', 'Geneve', 'Geneva,Genf,Ginevra', '46.20222', '6.14569', 'P', 'PPLA', 'CH', '', 'GE', '2500', '6621', '', '183981', '', '375', 'Europe/Zurich', '2024-01-01'),
+].join('\n');
+// alternateNameId, geonameid, isolanguage, name, isPreferredName, isShortName, isColloquial, isHistoric, from, to
+export const FIXTURE_ALT = [
+  row(1, 2867714, 'de', 'München', '1', '', '', '', '', ''),
+  row(2, 2867714, 'de', 'Minga', '', '', '1', '', '', ''),
+  row(3, 2867714, 'en', 'Munich', '1', '', '', '', '', ''),
+  row(4, 2925533, 'de', 'Frankfurt', '', '1', '', '', '', ''),
+  row(5, 2925533, 'de', 'Frankfurt am Main', '1', '', '', '', '', ''),
+  row(6, 2852458, 'de', 'Potsdam', '', '', '', '1', '', ''),
+  row(7, 2761369, 'de', 'Wien', '1', '', '', '', '', ''),
+  row(8, 2660646, 'de', 'Genf', '1', '', '', '', '', ''),
+].join('\n');
+export const FIXTURE_ADMIN1 = ['AT.09\tVienna\tVienna\t2761367', 'AT.05\tSalzburg\tSalzburg\t2766823', 'CH.ZH\tZurich\tZurich\t2657895', 'CH.GE\tGeneva\tGeneva\t2660645', 'FR.11\tÎle-de-France\tIle-de-France\t3012874', 'DE.16\tState of Berlin\tLand Berlin\t2950157', 'DE.11\tBrandenburg\tBrandenburg\t2945356',
+  'DE.14\tSaxony-Anhalt\tSaxony-Anhalt\t2842565', 'DE.02\tBavaria\tBavaria\t2951839', 'DE.05\tHesse\tHesse\t2905330'].join('\n');
+export const FIXTURE_ADMIN2 = ['DE.11.00\tBrandenburg\tBrandenburg\t1', 'DE.14.15085\tLandkreis Harz\tLandkreis Harz\t2',
+  'DE.02.091\tUpper Bavaria\tUpper Bavaria\t3', 'DE.05.064\tRegierungsbezirk Darmstadt\tRegierungsbezirk Darmstadt\t4',
+  'DE.02.092\tLower Bavaria\tLower Bavaria\t7', 'DE.02.094\tUpper Franconia\tUpper Franconia\t5', 'DE.02.093\tUpper Palatinate\tUpper Palatinate\t6'].join('\n');
+
+test('fold handles umlauts both ways, ß, accents and punctuation', () => {
+  assert.equal(fold('München'), 'munchen');
+  assert.equal(fold('München', true), 'muenchen');
+  assert.equal(fold('Gießen'), 'giessen');
+  assert.equal(fold('Frankfurt (Oder)'), 'frankfurt oder');
+  assert.equal(fold('  Halle   (Saale) '), 'halle saale');
+  assert.equal(fold('Düsseldorf', true), 'duesseldorf');
+});
+
+test('keeps populated places only, with regions, alternates and both folds', () => {
+  const { places, names } = buildRows(FIXTURE_DE, FIXTURE_ADMIN1, FIXTURE_ADMIN2, FIXTURE_ALT);
+  assert.deepEqual(places.map(p => p.name).sort(), ['Berlin', 'Brandenburg an der Havel', 'Frankfurt (Oder)', 'Frankfurt am Main',
+    'Halberstadt', 'München', 'München', 'Neustadt', 'Neustadt', 'Potsdam']);
+  assert.equal(places.find(p => p.id === 2925533).name, 'Frankfurt am Main', 'preferred non-short German name, not "Frankfurt"');
+  assert.equal(places.find(p => p.id === 2950159).admin1, 'Berlin', '"State of" dropped');
+  const munich = places.find(p => p.id === 2867714);
+  assert.equal(munich.admin1, 'Bavaria');
+  assert.equal(munich.admin2, 'Upper Bavaria');
+  const keys = names.filter(n => n.id === 2867714).map(n => n.key);
+  for (const k of ['munchen', 'muenchen', 'munich', 'monaco di baviera']) assert.ok(keys.includes(k), k);
+  assert.ok(!keys.includes('minga'), 'colloquial names dropped');
+  assert.ok(!keys.some(k => /[^a-z0-9 ]/.test(k)), 'Cyrillic alternates dropped');
+  assert.equal(names.find(n => n.id === 2867714 && n.key === 'munchen').primary, true);
+  assert.equal(names.find(n => n.id === 2867714 && n.key === 'monaco di baviera').primary, false);
+});
+
+test('TSV output is deterministic and rejects control characters', () => {
+  const { places, names } = buildRows(FIXTURE_DE, FIXTURE_ADMIN1, FIXTURE_ADMIN2, FIXTURE_ALT);
+  assert.deepEqual(buildTsv(places, names), buildTsv(places, names));
+  const { placesTsv, namesTsv } = buildTsv(places, names);
+  assert.equal(placesTsv.split('\n').length - 1, places.length);
+  assert.equal(namesTsv.split('\n').length - 1, names.length);
+  assert.ok(placesTsv.includes('2867714\tMünchen\tMunich\tBavaria\tUpper Bavaria\tDE\tGermany\t48.13743\t11.57549\t1260391\tPPLA\n'));
+  assert.ok(placesTsv.includes('\tBerlin\t'), 'leading "Land " dropped from the state name');
+  assert.throws(() => buildTsv([{ ...places[0], name: 'a\tb' }], []), /control character/);
+});
+
+test('Austria and Switzerland: German display names, own regions, other countries ignored', () => {
+  assert.deepEqual(Object.keys(COUNTRY).sort(), ['AT', 'CH', 'DE']);
+  const france = row(2988507, 'Paris', 'Paris', '', '48.85341', '2.3488', 'P', 'PPLC', 'FR', '', '11', '75', '751', '75056', '2138551', '', '42', 'Europe/Paris', '2024-01-01');
+  const { places, names } = buildRows(`${FIXTURE_DE}\n${FIXTURE_AT_CH}\n${france}`, FIXTURE_ADMIN1, FIXTURE_ADMIN2, FIXTURE_ALT);
+  const vienna = places.find(p => p.id === 2761369);
+  assert.deepEqual([vienna.name, vienna.admin1, vienna.countryCode, vienna.countryName], ['Wien', 'Vienna', 'AT', 'Austria']);
+  assert.equal(places.find(p => p.id === 2660646).name, 'Genf', 'German name shown');
+  for (const k of ['geneve', 'geneva', 'genf']) assert.ok(names.some(n => n.id === 2660646 && n.key === k), k);
+  assert.equal(places.find(p => p.id === 2657896).admin1, 'Zurich');
+  assert.ok(!places.some(p => p.countryCode === 'FR'), 'only DE, AT and CH');
+});

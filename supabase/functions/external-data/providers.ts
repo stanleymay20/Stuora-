@@ -15,15 +15,39 @@ export type Opportunity = {
   url: string;
 };
 export type ProviderId = "ticketmaster" | "adzuna" | "bundesagentur";
-export type Attribution = { id: ProviderId | "nominatim"; label: string; url: string };
-export type CityCandidate = { name: string; region: string; country: string; countryCode: string };
+export type Attribution = { id: ProviderId | "nominatim" | "geonames"; label: string; url: string };
+/** The first four fields are what every app version renders; the rest are optional extras. */
+export type CityCandidate = {
+  name: string; region: string; country: string; countryCode: string;
+  district?: string; latitude?: number; longitude?: number; population?: number; geonameId?: number;
+  /** True when the typed name matched this place exactly (not only as a prefix). */
+  exact?: boolean;
+};
+
+/** Where the student's city is, when the Location Engine knows it. */
+export type PlacePoint = { latitude: number; longitude: number; countryCode?: string };
 
 export interface FeedProvider {
   readonly id: ProviderId;
   readonly kind: "jobs" | "events";
   readonly attribution: Attribution;
   readonly ttlSeconds: number;
-  fetch(city: string, query: string, fetcher: typeof fetch): Promise<Opportunity[]>;
+  fetch(city: string, query: string, fetcher: typeof fetch, place?: PlacePoint | null): Promise<Opportunity[]>;
+}
+
+/** Standard geohash (base32), used by Ticketmaster's geoPoint filter. */
+export function geohash(latitude: number, longitude: number, precision = 9): string {
+  const base32 = "0123456789bcdefghjkmnpqrstuvwxyz";
+  let lat: [number, number] = [-90, 90], lon: [number, number] = [-180, 180];
+  let hash = "", bit = 0, ch = 0, even = true;
+  while (hash.length < precision) {
+    const range = even ? lon : lat, value = even ? longitude : latitude;
+    const mid = (range[0] + range[1]) / 2;
+    if (value >= mid) { ch = (ch << 1) | 1; range[0] = mid; } else { ch <<= 1; range[1] = mid; }
+    even = !even;
+    if (++bit === 5) { hash += base32[ch]; bit = 0; ch = 0; }
+  }
+  return hash;
 }
 
 type Env = Record<string, string | undefined>;
@@ -42,11 +66,20 @@ export function ticketmasterProvider(env: Env, timeoutMs = 5000): FeedProvider |
   return {
     id: "ticketmaster", kind: "events", ttlSeconds: 1800,
     attribution: { id: "ticketmaster", label: "Event data from Ticketmaster", url: "https://www.ticketmaster.com" },
-    async fetch(city, query, fetcher) {
+    async fetch(city, query, fetcher, place) {
       const params = new URLSearchParams({
-        apikey: key, city, countryCode: country, size: "20", sort: "date,asc",
+        apikey: key, countryCode: place?.countryCode ?? country, size: "20", sort: "date,asc",
         startDateTime: new Date().toISOString().replace(/\.\d{3}Z$/, "Z"),
       });
+      // Ticketmaster names cities in its own language ("Munich", not "München"),
+      // so a known place is searched by position: within 10 km of its centre.
+      if (place) {
+        params.set("geoPoint", geohash(place.latitude, place.longitude));
+        params.set("radius", "10");
+        params.set("unit", "km");
+      } else {
+        params.set("city", city);
+      }
       if (query) params.set("keyword", query);
       const res = await fetchWithTimeout(fetcher, `https://app.ticketmaster.com/discovery/v2/events.json?${params}`, {
         headers: { Accept: "application/json" },
@@ -59,9 +92,13 @@ export function ticketmasterProvider(env: Env, timeoutMs = 5000): FeedProvider |
         const title = cleanText(e.name, 140);
         if (!url || !title || typeof e.id !== "string") return [];
         const venue = e._embedded?.venues?.[0] ?? {};
+        // Ticketmaster may omit a venue name, or send `place` instead of a venue
+        // (Discovery v2 docs); fall back rather than show a blank venue line.
+        const place = e.place ?? {};
         return [{
           id: `ticketmaster:${cleanText(e.id, 64)}`, source: "ticketmaster", title,
-          subtitle: cleanText(venue.name, 120), location: cleanText(venue.city?.name, 80) || city,
+          subtitle: cleanText(venue.name, 120) || cleanText(place.name, 120) || cleanText(venue.address?.line1, 120) || cleanText(place.address?.line1, 120),
+          location: cleanText(venue.city?.name, 80) || cleanText(place.city?.name, 80) || city,
           startsAt: iso(e.dates?.start?.dateTime) ?? (typeof e.dates?.start?.localDate === "string" ? cleanText(e.dates.start.localDate, 10) : null),
           postedAt: null, url,
         }];
@@ -145,6 +182,33 @@ export function bundesagenturProvider(env: Env, timeoutMs = 5000): FeedProvider 
         }];
       });
     },
+  };
+}
+
+export const GEONAMES_ATTRIBUTION: Attribution = {
+  id: "geonames", label: "City data © GeoNames (CC BY 4.0)", url: "https://www.geonames.org/",
+};
+
+/**
+ * Gismate Location Engine: GeoNames data in our own database, searched by
+ * public.geo_city_search (service_role only). `search` is that RPC call. Rows
+ * are re-validated here so a bad row can never reach a student.
+ */
+export function geonamesLookup(search: (query: string) => Promise<{ data: unknown; error: unknown }>) {
+  return async (query: string): Promise<CityCandidate[]> => {
+    const { data, error } = await search(query);
+    if (error || !Array.isArray(data)) throw new Error("geonames 503");
+    return data.slice(0, 10).flatMap((raw): CityCandidate[] => {
+      const r = raw as Record<string, unknown>;
+      const name = cleanText(r.name, 120), countryCode = typeof r.countryCode === "string" && /^[A-Z]{2}$/.test(r.countryCode) ? r.countryCode : "";
+      const lat = Number(r.latitude), lon = Number(r.longitude), id = Number(r.geonameId);
+      if (!name || !countryCode || !Number.isFinite(lat) || !Number.isFinite(lon) || !Number.isInteger(id)) return [];
+      return [{
+        name, region: cleanText(r.region, 160), district: cleanText(r.district, 120), country: cleanText(r.country, 80), countryCode,
+        latitude: lat, longitude: lon, population: Number.isFinite(Number(r.population)) ? Number(r.population) : 0, geonameId: id,
+        exact: r.exact === true,
+      }];
+    });
   };
 }
 
@@ -237,5 +301,18 @@ export function cityLookupChain(env: Env, breaker?: NominatimBreaker) {
       }
     }
     return photon(query, fetcher);
+  };
+}
+
+/**
+ * Position of a saved feed city, only when the Location Engine matched its name
+ * exactly. A prefix-only match ("Paris" → "Parisberg") returns null, so the feed
+ * searches by name instead of around the wrong town.
+ */
+export function placeResolver(lookup: (query: string) => Promise<CityCandidate[]>) {
+  return async (city: string): Promise<PlacePoint | null> => {
+    const [best] = await lookup(city);
+    if (!best?.exact || best.latitude === undefined || best.longitude === undefined) return null;
+    return { latitude: best.latitude, longitude: best.longitude, countryCode: best.countryCode };
   };
 }

@@ -282,3 +282,132 @@ Deno.test("jobs: BA accepts the v6 referenznummer and never links to employer UR
   const r = await loadFeed(d, "jobs", "Potsdam", "Internship");
   assert.deepEqual(r.items.map(i => i.url), ["https://www.arbeitsagentur.de/jobsuche/jobdetail/12345-0000000001-S"]);
 });
+
+// ---- Gismate Location Engine (26 Nov 2026). RPC replies below are MOCKS in the
+// shape public.geo_city_search returns; the database search itself is tested in PGlite.
+import { geonamesLookup, GEONAMES_ATTRIBUTION } from "./providers.ts";
+const geoRow = (name: string, region: string, extra: Record<string, unknown> = {}) =>
+  ({ name, region, district: "", country: "Germany", countryCode: "DE", latitude: 52.4, longitude: 13.06, population: 1, geonameId: 1, ...extra });
+
+Deno.test("city: GeoNames answers first, is quota-limited and never touches OpenStreetMap", async () => {
+  const calls: Call[] = [];
+  const queries: string[] = [];
+  const local = geonamesLookup(async q => { queries.push(q); return { data: [geoRow("Potsdam", "Brandenburg")], error: null }; });
+  const { d, counts } = deps({ localCityLookup: local, cityLookup: async () => { throw new Error("must not be called"); }, fetcher: fakeFetch({}, calls) });
+  const reply = await lookupCity(d, "  Potsdam ");
+  assert.deepEqual(reply.candidates.map(c => [c.name, c.region, c.countryCode]), [["Potsdam", "Brandenburg", "DE"]]);
+  assert.deepEqual(reply.attribution, GEONAMES_ATTRIBUTION);
+  assert.deepEqual(queries, ["Potsdam"]);
+  assert.deepEqual(counts(), { quota: 1, slots: 0 });
+  assert.equal(calls.length, 0);
+  const capped = deps({ localCityLookup: local, consumeQuota: async () => false });
+  await assert.rejects(lookupCity(capped.d, "Potsdam"), { code: "RATE_LIMIT" });
+  await assert.rejects(lookupCity(d, "near campus"), { code: "CITY" }, "validation still runs first");
+});
+
+Deno.test("city: no local match falls back to OpenStreetMap; OSM outage gives an honest empty answer", async () => {
+  const empty = geonamesLookup(async () => ({ data: [], error: null }));
+  const osm = async () => [{ name: "Wien", region: "Wien", country: "Austria", countryCode: "AT" }];
+  const a = deps({ localCityLookup: empty, cityLookup: osm });
+  const r1 = await lookupCity(a.d, "Wien");
+  assert.equal(r1.candidates[0].name, "Wien");
+  assert.equal(r1.attribution.id, "nominatim");
+  assert.deepEqual(a.counts(), { quota: 1, slots: 1 }, "one quota unit, not two");
+  const down = deps({ localCityLookup: empty, cityLookup: async () => { throw new Error("photon 403"); } });
+  const r2 = await lookupCity(down.d, "Atlantis");
+  assert.deepEqual(r2, { candidates: [], attribution: GEONAMES_ATTRIBUTION });
+  const busy = deps({ localCityLookup: empty, cityLookup: osm, acquireNominatimSlot: async () => false });
+  assert.deepEqual((await lookupCity(busy.d, "Wien")).candidates, []);
+});
+
+Deno.test("city: a failing local engine falls back to OSM, and both failing is an outage", async () => {
+  const broken = geonamesLookup(async () => ({ data: null, error: { message: "relation does not exist" } }));
+  const osm = async () => [{ name: "Berlin", region: "Berlin", country: "Germany", countryCode: "DE" }];
+  assert.equal((await lookupCity(deps({ localCityLookup: broken, cityLookup: osm }).d, "Berlin")).attribution.id, "nominatim");
+  await assert.rejects(lookupCity(deps({ localCityLookup: broken, cityLookup: async () => { throw new Error("nominatim 403"); } }).d, "Berlin"), { code: "PROVIDER" });
+  await assert.rejects(lookupCity(deps({ localCityLookup: broken }).d, "Berlin"), { code: "PROVIDER" });
+});
+
+Deno.test("city: GeoNames rows are re-validated and keep the fields old apps render", async () => {
+  const local = geonamesLookup(async () => ({ data: [
+    geoRow("Frankfurt am Main", "Hesse", { geonameId: 2925533, latitude: "50.11552", longitude: "8.68417", population: 650000 }),
+    geoRow("<b>Frankfurt</b> (Oder)", "Brandenburg", { geonameId: 2925535 }),
+    geoRow("", "x"), geoRow("Bad", "x", { countryCode: "germany" }), geoRow("NoCoords", "x", { latitude: "n/a" }),
+  ], error: null }));
+  const out = await local("Frankfurt");
+  assert.deepEqual(out.map(c => c.name), ["Frankfurt am Main", "Frankfurt (Oder)"]);
+  assert.equal(out[0].latitude, 50.11552);
+  for (const c of out) for (const k of ["name", "region", "country", "countryCode"]) assert.equal(typeof (c as Record<string, unknown>)[k], "string");
+});
+
+Deno.test("events: a missing venue name falls back to place name, then the street address", async () => {
+  const ev = (id: string, extra: Record<string, unknown>) => ({ id, name: `Event ${id}`, url: `https://www.ticketmaster.de/event/${id}`,
+    dates: { start: { dateTime: "2030-01-02T19:00:00Z" } }, ...extra });
+  const body = { _embedded: { events: [
+    ev("a", { _embedded: { venues: [{ name: "Uber Arena", city: { name: "Berlin" } }] } }),
+    ev("b", { _embedded: { venues: [{ address: { line1: "Potsdamer Platz 1" }, city: { name: "Berlin" } }] } }),
+    ev("c", { place: { name: "Tempelhofer Feld", city: { name: "Berlin" } } }),
+    ev("d", { _embedded: { venues: [{ city: { name: "Berlin" } }] } }),
+  ] } };
+  const tm = ticketmasterProvider({ TICKETMASTER_API_KEY: "k" })!;
+  const rows = await tm.fetch("Berlin", "", fakeFetch({ "app.ticketmaster.com": body }, []));
+  assert.deepEqual(rows.map(r => [r.subtitle, r.location]), [["Uber Arena", "Berlin"], ["Potsdamer Platz 1", "Berlin"], ["Tempelhofer Feld", "Berlin"], ["", "Berlin"]]);
+});
+
+import { geohash } from "./providers.ts";
+Deno.test("geohash matches the published reference values", () => {
+  assert.equal(geohash(57.64911, 10.40744, 11), "u4pruydqqvj");
+  assert.equal(geohash(48.13743, 11.57549, 5), "u281z");
+  assert.equal(geohash(52.52437, 13.41053, 6), "u33dc1");
+});
+
+Deno.test("events: a known city is searched by position, so München finds Ticketmaster's 'Munich'", async () => {
+  const calls: Call[] = [];
+  const resolved: string[] = [];
+  const { d } = deps({ feeds: [ticketmasterProvider({ TICKETMASTER_API_KEY: "k" })!], inflight: new Map(),
+    fetcher: fakeFetch({ "app.ticketmaster.com": { _embedded: { events: [] } } }, calls),
+    resolvePlace: async (city: string) => { resolved.push(city); return { latitude: 48.13743, longitude: 11.57549 }; } });
+  await loadFeed(d, "events", "München", "");
+  const p = new URL(calls[0].url).searchParams;
+  assert.deepEqual(resolved, ["München"]);
+  assert.equal(p.get("geoPoint"), geohash(48.13743, 11.57549));
+  assert.equal(p.get("radius"), "10");
+  assert.equal(p.get("unit"), "km");
+  assert.equal(p.get("city"), null, "no name filter when searching by position");
+});
+
+Deno.test("events: unknown city or a failing lookup falls back to the city name; cache hits resolve nothing", async () => {
+  for (const resolvePlace of [async () => null, async () => { throw new Error("geonames 503"); }]) {
+    const calls: Call[] = [];
+    const { d } = deps({ feeds: [ticketmasterProvider({ TICKETMASTER_API_KEY: "k" })!], inflight: new Map(),
+      fetcher: fakeFetch({ "app.ticketmaster.com": { _embedded: { events: [] } } }, calls), resolvePlace });
+    const r = await loadFeed(d, "events", "Wien", "");
+    assert.equal(new URL(calls[0].url).searchParams.get("city"), "Wien");
+    assert.equal(r.sources[0].status, "ok");
+  }
+  let resolvedCalls = 0;
+  const cachedDeps = deps({ feeds: [ticketmasterProvider({ TICKETMASTER_API_KEY: "k" })!], cacheGet: async () => [],
+    resolvePlace: async () => { resolvedCalls++; return null; } });
+  await loadFeed(cachedDeps.d, "events", "Berlin", "");
+  assert.equal(resolvedCalls, 0);
+});
+
+// ---- Review fixes (26 Nov 2026): positions only for exact matches; country follows the place.
+import { placeResolver } from "./providers.ts";
+Deno.test("feeds: only an exact Location Engine match gives a position", async () => {
+  const rows = (exact: unknown, cc = "DE") => geonamesLookup(async () => ({ data: [geoRow("Parisberg", "x", { exact, countryCode: cc, latitude: 50, longitude: 9 })], error: null }));
+  assert.equal(await placeResolver(rows(false))("Paris"), null, "prefix-only match is not a position");
+  assert.equal(await placeResolver(rows(undefined))("Paris"), null, "older database without `exact`: name search");
+  assert.equal(await placeResolver(rows("true"))("Paris"), null, "only a real boolean counts");
+  assert.deepEqual(await placeResolver(rows(true, "AT"))("Wien"), { latitude: 50, longitude: 9, countryCode: "AT" });
+  assert.equal(await placeResolver(geonamesLookup(async () => ({ data: [], error: null })))("Atlantis"), null);
+});
+
+Deno.test("events: an Austrian or Swiss place is searched in its own country", async () => {
+  const tm = ticketmasterProvider({ TICKETMASTER_API_KEY: "k" })!;
+  for (const [place, cc] of [[{ latitude: 48.20849, longitude: 16.37208, countryCode: "AT" }, "AT"], [{ latitude: 52.52, longitude: 13.4 }, "DE"]] as const) {
+    const calls: Call[] = [];
+    await tm.fetch("x", "", fakeFetch({ "app.ticketmaster.com": { _embedded: { events: [] } } }, calls), place);
+    assert.equal(new URL(calls[0].url).searchParams.get("countryCode"), cc);
+  }
+});

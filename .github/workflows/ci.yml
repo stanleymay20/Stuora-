@@ -7,7 +7,7 @@ on:
     # Also gate stacked PRs that target a feature branch (e.g. remediation PRs).
     # 'feature/**' covers PRs stacked on feature branches (e.g. #46 on
     # feature/stuora-moderator-double-submit-*), which previously ran no CI at all.
-    branches: [main, 'feat/**', 'feature/**', 'claude/stuora-0.1.7-integration', 'claude/audit-0.1.7-fixes']
+    branches: [main, 'feat/**', 'feature/**', 'audit/**', 'claude/stuora-0.1.7-integration', 'claude/audit-0.1.7-fixes']
 
 jobs:
   dependency-audit:
