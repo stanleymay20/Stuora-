@@ -7,9 +7,11 @@ push behaviour. Only this script does.
 
 **Before you start**
 
-- Installing the build on testers' phones counts as distribution and needs your
-  approval: Play internal track (Android) and TestFlight (iOS), built from the
-  merged commit, pointing at **staging**.
+- Builds (approved 26 Nov 2026): run `eas workflow:run .eas/workflows/device-test.yml`
+  from a computer signed in to the `stuora` Expo account, on the commit under test.
+  Android: install the APK from the EAS link or QR code (uninstall any
+  Play-installed Stuora first). iOS: install from TestFlight once Apple has
+  processed the upload. Both point at **staging**.
 - Two GISMA test accounts: A on the phone, B on a laptop browser.
 - Note per phone: model, OS version, app build number.
 
@@ -41,7 +43,7 @@ Mark each step ✅ / ❌ and write one line for every ❌ (what you saw, a scree
 | # | Do | Expect |
 | --- | --- | --- |
 | 3.1 | Phone (A): create a Housing listing with a photo from the gallery | Photo permission prompt once; listing appears with the photo |
-| 3.2 | Same with the camera | Camera opens; photo attached |
+| 3.2 | Look for a camera option when adding a photo | None offered (camera permission is off in this build), and the gallery still works |
 | 3.3 | Laptop (B): find A's listing, send a message | Listing visible with photo |
 | 3.4 | Phone (A): open the message, reply | Arrives on the laptop; survives app restart |
 | 3.5 | Phone (A): Report on B's message | "Report sent" confirmation; reporting again says it was already reported |

@@ -46,3 +46,22 @@ test('TestFlight workflow is manual-only and never submits for external beta rev
   assert.doesNotMatch(workflow, /environment:\s*production/);
   assert.doesNotMatch(workflow, /^\s*(?:external_groups|internal_groups):/m);
 });
+
+test('device-test workflow: manual, staging, internal Android APK and internal TestFlight only', () => {
+  const wf = readFileSync('.eas/workflows/device-test.yml', 'utf8');
+  const android = eas.build['device-test-android'];
+  assert.equal(android.extends, 'play-internal', 'inherits the staging backend');
+  assert.equal(android.distribution, 'internal');
+  assert.equal(android.android.buildType, 'apk');
+  assert.equal(android.android.credentialsSource, 'remote');
+  assert.equal(Object.hasOwn(android.env ?? {}, 'EXPO_PUBLIC_SUPABASE_URL'), false, 'no backend override');
+  assert.match(wf, /^on:\s*\r?\n\s+workflow_dispatch:/m);
+  assert.doesNotMatch(wf, /^\s*(?:push|schedule|pull_request):/m);
+  assert.match(wf, /profile:\s*device-test-android/);
+  assert.equal((wf.match(/run:\s*npm run check:environment/g) ?? []).length, 2);
+  assert.match(wf, /build_id:\s*\$\{\{ needs\.build_ios\.outputs\.build_id \}\}/);
+  assert.match(wf, /submit_beta_review:\s*false/);
+  assert.match(wf.slice(wf.indexOf('submit_ios:')), /^\s+environment:\s*preview\s*$/m);
+  assert.doesNotMatch(wf, /environment:\s*production|type:\s*submit\b/);
+  assert.doesNotMatch(wf, /^\s*(?:external_groups|internal_groups):/m);
+});

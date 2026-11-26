@@ -28,6 +28,14 @@
       "ios": {
         "simulator": true
       }
+    },
+    "device-test-android": {
+      "extends": "play-internal",
+      "distribution": "internal",
+      "android": {
+        "buildType": "apk",
+        "credentialsSource": "remote"
+      }
     }
   },
   "submit": {
