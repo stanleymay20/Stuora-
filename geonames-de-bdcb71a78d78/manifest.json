@@ -1,0 +1,49 @@
+{
+  "version": "geonames-de-bdcb71a78d78",
+  "source": "https://download.geonames.org/export/dump/",
+  "licence": "CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/)",
+  "attribution": "City data © GeoNames (geonames.org), CC BY 4.0",
+  "country": "DE",
+  "featureCodes": [
+    "PPL",
+    "PPLA",
+    "PPLA2",
+    "PPLA3",
+    "PPLA4",
+    "PPLA5",
+    "PPLC",
+    "PPLF",
+    "PPLG",
+    "PPLL",
+    "PPLR",
+    "PPLS"
+  ],
+  "files": {
+    "DE.zip": {
+      "url": "https://download.geonames.org/export/dump/DE.zip",
+      "bytes": 7543328,
+      "sha256": "41c5c66e6901284c9ec8b908f9bd4c7420eec27dae6558dbb9ba1a96319ff88e"
+    },
+    "DE.txt": {
+      "url": "https://download.geonames.org/export/dump/DE.zip (unzipped)",
+      "bytes": 28664248,
+      "sha256": "bdcb71a78d781def966a9cc94dddaece2a52bf9781f81df3299d6e8c6fd9357a"
+    },
+    "admin1CodesASCII.txt": {
+      "url": "https://download.geonames.org/export/dump/admin1CodesASCII.txt",
+      "bytes": 151571,
+      "sha256": "2e4867f5397acb056ea26377601b57af37cb4c81399770225018e9e439e91ad3"
+    },
+    "admin2Codes.txt": {
+      "url": "https://download.geonames.org/export/dump/admin2Codes.txt",
+      "bytes": 2371539,
+      "sha256": "d06471ff728a59dd494cb84d7c6512719f53f84e5694d1e6275590745a35e42d"
+    }
+  },
+  "places": 77409,
+  "names": 121291,
+  "outputs": {
+    "places.tsv": "f9e1cfb3413872152c2a3e0cbad6cd08337e74bc3ab78afeb36c94ac1f9be276",
+    "names.tsv": "ec11884df2a391487939523439652723dc9576b5fa0d251c4730e5eeae4150b1"
+  }
+}
