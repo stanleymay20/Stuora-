@@ -38,8 +38,9 @@ get their district in `region`, so older apps still show distinct rows.
 GeoNames (https://www.geonames.org/), Creative Commons Attribution 4.0
 (stated in https://download.geonames.org/export/dump/readme.txt). The app shows
 "City data © GeoNames (CC BY 4.0)" under every GeoNames result, linking to
-geonames.org. Files used: `DE.zip`, `admin1CodesASCII.txt`, `admin2Codes.txt`,
-`alternatenames/DE.zip`.
+geonames.org. Countries: Germany, Austria and Switzerland. Files used, per
+country `CC` in DE, AT, CH: `CC.zip` and `alternatenames/CC.zip`; once:
+`admin1CodesASCII.txt`, `admin2Codes.txt`.
 
 ## Import pipeline (reproducible, versioned)
 
@@ -61,7 +62,9 @@ always give the same version. The workflow never connects to a database.
 
 ## Loading a version
 
-Requires migration `20261126090000_gismate_location_engine.sql`.
+Requires migrations `20261126090000_gismate_location_engine.sql` and
+`20261126120000_geo_city_search_exact.sql`. Production steps:
+[GISMATE_PRODUCTION_ROLLOUT.md](GISMATE_PRODUCTION_ROLLOUT.md).
 
 With `psql`, from a checkout of the `geonames-data` branch:
 
@@ -97,18 +100,24 @@ Reviewed 26 Nov 2026 from Geoapify's pricing page and privacy policy:
   published. Only the typed city name and the Edge Function's IP would be sent:
   no student identifiers.
 
-Recommendation: not needed while GeoNames covers Germany. Worth adding only for
-cities outside Germany, behind its own flag, after a signed DPA and a privacy-notice
+Recommendation: not needed while GeoNames covers Germany, Austria and Switzerland.
+Worth adding only for cities elsewhere, behind its own flag, after a signed DPA and a privacy-notice
 update. No account was created and no key was added.
 
 ## Known limits
 
-- Germany only. Non-German cities fall back to OpenStreetMap, which currently
+- Germany, Austria and Switzerland only (dataset `geonames-dach-12ec671b485f`:
+  108,888 places). Other cities fall back to OpenStreetMap, which currently
   refuses Supabase traffic, so they return no candidates.
+- Swiss and Austrian places show their German name ("Genf", "Wien"); the local
+  name ("Genève") still finds them.
 - Students can still save a typed city without checking it; the check is advisory.
 - Not-yet-expired feed cache entries (30 min) keep the previous behaviour after a deploy.
-- Prefix matches stop the OpenStreetMap fallback: "Wien" returns German places
-  starting with "Wien" rather than Vienna (OpenStreetMap is refusing us anyway).
+- Prefix matches stop the OpenStreetMap fallback for the city picker: "Paris"
+  lists "Parisdorf" (Austria) rather than Paris, France. Feeds are not affected:
+  they take a position only from an exact match (see below).
+- A saved name shared by several places ("Neustadt") positions the feed at the
+  largest of them; the app saves only the name.
 
 ## Feeds use the city's position
 
@@ -116,5 +125,8 @@ Ticketmaster names cities in its own language ("Munich", "Cologne"). Live on
 26 Nov 2026, "München" returned 0 events while "Munich" returned 11. Feeds now
 resolve the saved city through `geo_city_search` and ask Ticketmaster for events
 within 10 km of its coordinates (`geoPoint` geohash, `radius=10`, `unit=km`).
-Cities GeoNames does not know, or a failed lookup, still search by name. Adzuna
+Only an **exact** name match (official or alternate name, after folding) gives a
+position; a prefix-only match ("Paris" → "Parisdorf") or a failed lookup searches by
+name instead. Ticketmaster is asked for the place's own country, so Wien and Zürich
+get Austrian and Swiss events. Adzuna
 and the Bundesagentur still receive the city name (both are disabled).
