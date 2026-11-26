@@ -20,10 +20,12 @@ export type Attribution = { id: ProviderId | "nominatim" | "geonames"; label: st
 export type CityCandidate = {
   name: string; region: string; country: string; countryCode: string;
   district?: string; latitude?: number; longitude?: number; population?: number; geonameId?: number;
+  /** True when the typed name matched this place exactly (not only as a prefix). */
+  exact?: boolean;
 };
 
-/** Coordinates of the student's city, when the Location Engine knows it. */
-export type PlacePoint = { latitude: number; longitude: number };
+/** Where the student's city is, when the Location Engine knows it. */
+export type PlacePoint = { latitude: number; longitude: number; countryCode?: string };
 
 export interface FeedProvider {
   readonly id: ProviderId;
@@ -66,7 +68,7 @@ export function ticketmasterProvider(env: Env, timeoutMs = 5000): FeedProvider |
     attribution: { id: "ticketmaster", label: "Event data from Ticketmaster", url: "https://www.ticketmaster.com" },
     async fetch(city, query, fetcher, place) {
       const params = new URLSearchParams({
-        apikey: key, countryCode: country, size: "20", sort: "date,asc",
+        apikey: key, countryCode: place?.countryCode ?? country, size: "20", sort: "date,asc",
         startDateTime: new Date().toISOString().replace(/\.\d{3}Z$/, "Z"),
       });
       // Ticketmaster names cities in its own language ("Munich", not "München"),
@@ -204,6 +206,7 @@ export function geonamesLookup(search: (query: string) => Promise<{ data: unknow
       return [{
         name, region: cleanText(r.region, 160), district: cleanText(r.district, 120), country: cleanText(r.country, 80), countryCode,
         latitude: lat, longitude: lon, population: Number.isFinite(Number(r.population)) ? Number(r.population) : 0, geonameId: id,
+        exact: r.exact === true,
       }];
     });
   };
@@ -298,5 +301,18 @@ export function cityLookupChain(env: Env, breaker?: NominatimBreaker) {
       }
     }
     return photon(query, fetcher);
+  };
+}
+
+/**
+ * Position of a saved feed city, only when the Location Engine matched its name
+ * exactly. A prefix-only match ("Paris" → "Parisberg") returns null, so the feed
+ * searches by name instead of around the wrong town.
+ */
+export function placeResolver(lookup: (query: string) => Promise<CityCandidate[]>) {
+  return async (city: string): Promise<PlacePoint | null> => {
+    const [best] = await lookup(city);
+    if (!best?.exact || best.latitude === undefined || best.longitude === undefined) return null;
+    return { latitude: best.latitude, longitude: best.longitude, countryCode: best.countryCode };
   };
 }

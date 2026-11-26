@@ -629,7 +629,7 @@ test('Location engine: GeoNames search, umlauts, partials, ambiguity, versioned 
   const { buildRows, buildTsv, fold } = await import('../scripts/geonames/build-import.mjs');
   const { createHash } = await import('node:crypto');
   const hex = t => createHash('sha256').update(Buffer.from(t)).digest('hex');
-  const { FIXTURE_DE, FIXTURE_ADMIN1, FIXTURE_ADMIN2, FIXTURE_ALT } = await import('../scripts/geonames/build-import.test.mjs');
+  const { FIXTURE_DE, FIXTURE_AT_CH, FIXTURE_ADMIN1, FIXTURE_ADMIN2, FIXTURE_ALT } = await import('../scripts/geonames/build-import.test.mjs');
   const { db } = await harness();
   // SQL and JS folding must agree, or imported keys would never match queries.
   for (const s of ['München', 'Frankfurt (Oder)', 'Gießen', 'Brandenburg an der Havel', 'Łódź', 'Halle  (Saale)'])
@@ -650,13 +650,13 @@ test('Location engine: GeoNames search, umlauts, partials, ambiguity, versioned 
   const search = async q => (await db.query('select public.geo_city_search($1) r', [q])).rows[0].r;
   assert.deepEqual(await search('Berlin'), [], 'nothing active yet');
 
-  const v1 = await load('geonames-de-fixture01', FIXTURE_DE, { tamper: true });
+  const v1 = await load('geonames-de-fixture01', `${FIXTURE_DE}\n${FIXTURE_AT_CH}`, { tamper: true });
   // An incomplete load refuses to activate.
   await db.exec(`delete from private.geo_place_names where dataset_version = 'geonames-de-fixture01' and name_key = 'munich'`);
   await assert.rejects(db.query(`select private.geo_activate_dataset('geonames-de-fixture01')`), /incomplete/);
   await db.exec(`insert into private.geo_place_names values ('geonames-de-fixture01', 2867714, 'munich', false)`);
   await db.query(`select private.geo_activate_dataset('geonames-de-fixture01')`);
-  assert.ok(v1.places.length === 10);
+  assert.ok(v1.places.length === 14);
   await assert.rejects(db.query(`select private.geo_load_tsv('geonames-de-fixture01', 'names.tsv', '')`), /already active/);
 
   const first = async q => (await search(q))[0];
@@ -682,7 +682,16 @@ test('Location engine: GeoNames search, umlauts, partials, ambiguity, versioned 
   assert.match(neustadt[0].region, /Bavaria · Upper/);
   const munich = await first('Munich');
   assert.equal(munich.region, 'Bavaria');
-  assert.deepEqual(Object.keys(munich).sort(), ['country', 'countryCode', 'district', 'geonameId', 'latitude', 'longitude', 'name', 'population', 'region']);
+  assert.deepEqual(Object.keys(munich).sort(), ['country', 'countryCode', 'district', 'exact', 'geonameId', 'latitude', 'longitude', 'name', 'population', 'region']);
+  assert.equal(munich.exact, true, 'alternate name "Munich" is an exact match');
+  assert.equal((await first('Mün')).exact, false, 'a prefix is not exact');
+  assert.equal((await first('Pots')).exact, false);
+  const wien = await first('Wien');
+  assert.deepEqual([wien.name, wien.region, wien.countryCode, wien.exact], ['Wien', 'Vienna', 'AT', true]);
+  assert.equal((await first('Vienna')).name, 'Wien');
+  assert.equal((await first('Zurich')).name, 'Zürich');
+  assert.equal((await first('Genève')).countryCode, 'CH');
+  assert.equal((await first('Salzburg')).country, 'Austria');
   assert.equal(munich.countryCode, 'DE');
   assert.equal(Number(munich.latitude), 48.13743);
   assert.deepEqual(await search('Mitte'), [], 'PPLX sections excluded');
@@ -692,7 +701,7 @@ test('Location engine: GeoNames search, umlauts, partials, ambiguity, versioned 
   assert.ok((await db.query(`select public.geo_city_search('B', 500) r`)).rows[0].r.length <= 10);
 
   // A new version replaces the old one atomically; the old one stays for rollback.
-  await load('geonames-de-fixture02', FIXTURE_DE.replace('Halberstadt\tHalberstadt\t', 'Halberstadt\tHalberstadt\tHalberstadt (Harz)'));
+  await load('geonames-de-fixture02', `${FIXTURE_DE}\n${FIXTURE_AT_CH}`.replace('Halberstadt\tHalberstadt\t', 'Halberstadt\tHalberstadt\tHalberstadt (Harz)'));
   await db.query(`select private.geo_activate_dataset('geonames-de-fixture02')`);
   const versions = (await db.query('select version, active from private.geo_datasets order by version')).rows;
   assert.deepEqual(versions, [{ version: 'geonames-de-fixture01', active: false }, { version: 'geonames-de-fixture02', active: true }]);

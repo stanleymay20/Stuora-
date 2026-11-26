@@ -7,7 +7,7 @@ import { createClient } from "npm:@supabase/supabase-js@2.117.3";
 import { allowedOrigins, bearer, corsHeaders, HttpError, json, preflight, readJson } from "../_shared/http.ts";
 import { type ExternalDeps, loadFeed, lookupCity } from "./core.ts";
 import {
-  adzunaProvider, bundesagenturProvider, cityLookupChain, type FeedProvider, geonamesLookup, ticketmasterProvider,
+  adzunaProvider, bundesagenturProvider, cityLookupChain, type FeedProvider, geonamesLookup, placeResolver, ticketmasterProvider,
 } from "./providers.ts";
 
 const env = Deno.env.toObject();
@@ -37,10 +37,7 @@ const cityLookup = cityLookupChain(env, {
 const localCityLookup = geonamesLookup(async query => await admin.rpc("geo_city_search", { p_query: query, p_limit: 8 }));
 // Feeds: the saved city's best GeoNames match, so providers can search by position.
 const placeLookup = geonamesLookup(async query => await admin.rpc("geo_city_search", { p_query: query, p_limit: 1 }));
-async function resolvePlace(city: string) {
-  const [best] = await placeLookup(city);
-  return best?.latitude !== undefined && best.longitude !== undefined ? { latitude: best.latitude, longitude: best.longitude } : null;
-}
+const resolvePlace = placeResolver(placeLookup);
 console.log(JSON.stringify({ event: "external_config", feeds: feeds.map(f => f.id), cityLookup: cityLookup !== null, origins: origins.size }));
 
 async function rpcBoolean(name: string, args: Record<string, unknown> = {}): Promise<boolean> {

@@ -391,3 +391,23 @@ Deno.test("events: unknown city or a failing lookup falls back to the city name;
   await loadFeed(cachedDeps.d, "events", "Berlin", "");
   assert.equal(resolvedCalls, 0);
 });
+
+// ---- Review fixes (26 Nov 2026): positions only for exact matches; country follows the place.
+import { placeResolver } from "./providers.ts";
+Deno.test("feeds: only an exact Location Engine match gives a position", async () => {
+  const rows = (exact: unknown, cc = "DE") => geonamesLookup(async () => ({ data: [geoRow("Parisberg", "x", { exact, countryCode: cc, latitude: 50, longitude: 9 })], error: null }));
+  assert.equal(await placeResolver(rows(false))("Paris"), null, "prefix-only match is not a position");
+  assert.equal(await placeResolver(rows(undefined))("Paris"), null, "older database without `exact`: name search");
+  assert.equal(await placeResolver(rows("true"))("Paris"), null, "only a real boolean counts");
+  assert.deepEqual(await placeResolver(rows(true, "AT"))("Wien"), { latitude: 50, longitude: 9, countryCode: "AT" });
+  assert.equal(await placeResolver(geonamesLookup(async () => ({ data: [], error: null })))("Atlantis"), null);
+});
+
+Deno.test("events: an Austrian or Swiss place is searched in its own country", async () => {
+  const tm = ticketmasterProvider({ TICKETMASTER_API_KEY: "k" })!;
+  for (const [place, cc] of [[{ latitude: 48.20849, longitude: 16.37208, countryCode: "AT" }, "AT"], [{ latitude: 52.52, longitude: 13.4 }, "DE"]] as const) {
+    const calls: Call[] = [];
+    await tm.fetch("x", "", fakeFetch({ "app.ticketmaster.com": { _embedded: { events: [] } } }, calls), place);
+    assert.equal(new URL(calls[0].url).searchParams.get("countryCode"), cc);
+  }
+});
