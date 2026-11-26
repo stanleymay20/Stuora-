@@ -4,6 +4,7 @@ import { HttpError } from "../_shared/http.ts";
 import { isPlausibleCity } from "../_shared/intent.ts";
 import {
   type Attribution, type CityCandidate, type FeedProvider, GEONAMES_ATTRIBUTION, NOMINATIM_ATTRIBUTION, type Opportunity,
+  type PlacePoint,
 } from "./providers.ts";
 
 export interface ExternalDeps {
@@ -16,6 +17,8 @@ export interface ExternalDeps {
   /** Gismate Location Engine (GeoNames in our own database). Tried before OpenStreetMap. */
   localCityLookup?: ((query: string) => Promise<CityCandidate[]>) | null;
   fetcher: typeof fetch;
+  /** Where the feed city is, if the Location Engine knows it (null: search by name). */
+  resolvePlace?: ((city: string) => Promise<PlacePoint | null>) | null;
   /** Identical provider fetches already in flight in this isolate (provider|key). */
   inflight?: Map<string, Promise<Opportunity[]>>;
 }
@@ -95,6 +98,12 @@ export async function loadFeed(deps: ExternalDeps, kind: unknown, rawCity: unkno
   if (misses.length && !(await deps.consumeQuota())) throw new HttpError(429, "RATE_LIMIT", "Too many requests. Try again later.");
   const sources: SourceStatus[] = [];
   const items: Opportunity[] = [];
+  // Resolve the city once, only when a provider actually has to be called.
+  let place: PlacePoint | null = null;
+  if (misses.length && deps.resolvePlace) {
+    try { place = await deps.resolvePlace(city); }
+    catch (err) { console.warn(JSON.stringify({ event: "provider_failed", provider: "geonames", reason: failureReason(err) })); }
+  }
   await Promise.all(providers.map(async (provider, i) => {
     let rows = cached[i] as Opportunity[] | null;
     if (!Array.isArray(rows)) {
@@ -103,7 +112,7 @@ export async function loadFeed(deps: ExternalDeps, kind: unknown, rawCity: unkno
       let pending = inflight.get(flightKey);
       if (!pending) {
         pending = (async () => {
-          const fresh = await provider.fetch(city, query, deps.fetcher);
+          const fresh = await provider.fetch(city, query, deps.fetcher, place);
           // A cache write failure must not throw away vacancies we already have.
           try { await deps.cachePut(provider.id, key, fresh, provider.ttlSeconds); }
           catch (err) { console.warn(JSON.stringify({ event: "cache_put_failed", provider: provider.id, reason: failureReason(err) })); }

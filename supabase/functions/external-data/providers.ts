@@ -22,12 +22,30 @@ export type CityCandidate = {
   district?: string; latitude?: number; longitude?: number; population?: number; geonameId?: number;
 };
 
+/** Coordinates of the student's city, when the Location Engine knows it. */
+export type PlacePoint = { latitude: number; longitude: number };
+
 export interface FeedProvider {
   readonly id: ProviderId;
   readonly kind: "jobs" | "events";
   readonly attribution: Attribution;
   readonly ttlSeconds: number;
-  fetch(city: string, query: string, fetcher: typeof fetch): Promise<Opportunity[]>;
+  fetch(city: string, query: string, fetcher: typeof fetch, place?: PlacePoint | null): Promise<Opportunity[]>;
+}
+
+/** Standard geohash (base32), used by Ticketmaster's geoPoint filter. */
+export function geohash(latitude: number, longitude: number, precision = 9): string {
+  const base32 = "0123456789bcdefghjkmnpqrstuvwxyz";
+  let lat: [number, number] = [-90, 90], lon: [number, number] = [-180, 180];
+  let hash = "", bit = 0, ch = 0, even = true;
+  while (hash.length < precision) {
+    const range = even ? lon : lat, value = even ? longitude : latitude;
+    const mid = (range[0] + range[1]) / 2;
+    if (value >= mid) { ch = (ch << 1) | 1; range[0] = mid; } else { ch <<= 1; range[1] = mid; }
+    even = !even;
+    if (++bit === 5) { hash += base32[ch]; bit = 0; ch = 0; }
+  }
+  return hash;
 }
 
 type Env = Record<string, string | undefined>;
@@ -46,11 +64,20 @@ export function ticketmasterProvider(env: Env, timeoutMs = 5000): FeedProvider |
   return {
     id: "ticketmaster", kind: "events", ttlSeconds: 1800,
     attribution: { id: "ticketmaster", label: "Event data from Ticketmaster", url: "https://www.ticketmaster.com" },
-    async fetch(city, query, fetcher) {
+    async fetch(city, query, fetcher, place) {
       const params = new URLSearchParams({
-        apikey: key, city, countryCode: country, size: "20", sort: "date,asc",
+        apikey: key, countryCode: country, size: "20", sort: "date,asc",
         startDateTime: new Date().toISOString().replace(/\.\d{3}Z$/, "Z"),
       });
+      // Ticketmaster names cities in its own language ("Munich", not "München"),
+      // so a known place is searched by position: within 10 km of its centre.
+      if (place) {
+        params.set("geoPoint", geohash(place.latitude, place.longitude));
+        params.set("radius", "10");
+        params.set("unit", "km");
+      } else {
+        params.set("city", city);
+      }
       if (query) params.set("keyword", query);
       const res = await fetchWithTimeout(fetcher, `https://app.ticketmaster.com/discovery/v2/events.json?${params}`, {
         headers: { Accept: "application/json" },

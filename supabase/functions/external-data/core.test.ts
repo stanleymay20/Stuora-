@@ -353,3 +353,41 @@ Deno.test("events: a missing venue name falls back to place name, then the stree
   const rows = await tm.fetch("Berlin", "", fakeFetch({ "app.ticketmaster.com": body }, []));
   assert.deepEqual(rows.map(r => [r.subtitle, r.location]), [["Uber Arena", "Berlin"], ["Potsdamer Platz 1", "Berlin"], ["Tempelhofer Feld", "Berlin"], ["", "Berlin"]]);
 });
+
+import { geohash } from "./providers.ts";
+Deno.test("geohash matches the published reference values", () => {
+  assert.equal(geohash(57.64911, 10.40744, 11), "u4pruydqqvj");
+  assert.equal(geohash(48.13743, 11.57549, 5), "u281z");
+  assert.equal(geohash(52.52437, 13.41053, 6), "u33dc1");
+});
+
+Deno.test("events: a known city is searched by position, so München finds Ticketmaster's 'Munich'", async () => {
+  const calls: Call[] = [];
+  const resolved: string[] = [];
+  const { d } = deps({ feeds: [ticketmasterProvider({ TICKETMASTER_API_KEY: "k" })!], inflight: new Map(),
+    fetcher: fakeFetch({ "app.ticketmaster.com": { _embedded: { events: [] } } }, calls),
+    resolvePlace: async (city: string) => { resolved.push(city); return { latitude: 48.13743, longitude: 11.57549 }; } });
+  await loadFeed(d, "events", "München", "");
+  const p = new URL(calls[0].url).searchParams;
+  assert.deepEqual(resolved, ["München"]);
+  assert.equal(p.get("geoPoint"), geohash(48.13743, 11.57549));
+  assert.equal(p.get("radius"), "10");
+  assert.equal(p.get("unit"), "km");
+  assert.equal(p.get("city"), null, "no name filter when searching by position");
+});
+
+Deno.test("events: unknown city or a failing lookup falls back to the city name; cache hits resolve nothing", async () => {
+  for (const resolvePlace of [async () => null, async () => { throw new Error("geonames 503"); }]) {
+    const calls: Call[] = [];
+    const { d } = deps({ feeds: [ticketmasterProvider({ TICKETMASTER_API_KEY: "k" })!], inflight: new Map(),
+      fetcher: fakeFetch({ "app.ticketmaster.com": { _embedded: { events: [] } } }, calls), resolvePlace });
+    const r = await loadFeed(d, "events", "Wien", "");
+    assert.equal(new URL(calls[0].url).searchParams.get("city"), "Wien");
+    assert.equal(r.sources[0].status, "ok");
+  }
+  let resolvedCalls = 0;
+  const cachedDeps = deps({ feeds: [ticketmasterProvider({ TICKETMASTER_API_KEY: "k" })!], cacheGet: async () => [],
+    resolvePlace: async () => { resolvedCalls++; return null; } });
+  await loadFeed(cachedDeps.d, "events", "Berlin", "");
+  assert.equal(resolvedCalls, 0);
+});
