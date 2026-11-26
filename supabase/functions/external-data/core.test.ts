@@ -339,3 +339,17 @@ Deno.test("city: GeoNames rows are re-validated and keep the fields old apps ren
   assert.equal(out[0].latitude, 50.11552);
   for (const c of out) for (const k of ["name", "region", "country", "countryCode"]) assert.equal(typeof (c as Record<string, unknown>)[k], "string");
 });
+
+Deno.test("events: a missing venue name falls back to place name, then the street address", async () => {
+  const ev = (id: string, extra: Record<string, unknown>) => ({ id, name: `Event ${id}`, url: `https://www.ticketmaster.de/event/${id}`,
+    dates: { start: { dateTime: "2030-01-02T19:00:00Z" } }, ...extra });
+  const body = { _embedded: { events: [
+    ev("a", { _embedded: { venues: [{ name: "Uber Arena", city: { name: "Berlin" } }] } }),
+    ev("b", { _embedded: { venues: [{ address: { line1: "Potsdamer Platz 1" }, city: { name: "Berlin" } }] } }),
+    ev("c", { place: { name: "Tempelhofer Feld", city: { name: "Berlin" } } }),
+    ev("d", { _embedded: { venues: [{ city: { name: "Berlin" } }] } }),
+  ] } };
+  const tm = ticketmasterProvider({ TICKETMASTER_API_KEY: "k" })!;
+  const rows = await tm.fetch("Berlin", "", fakeFetch({ "app.ticketmaster.com": body }, []));
+  assert.deepEqual(rows.map(r => [r.subtitle, r.location]), [["Uber Arena", "Berlin"], ["Potsdamer Platz 1", "Berlin"], ["Tempelhofer Feld", "Berlin"], ["", "Berlin"]]);
+});

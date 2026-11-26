@@ -63,9 +63,13 @@ export function ticketmasterProvider(env: Env, timeoutMs = 5000): FeedProvider |
         const title = cleanText(e.name, 140);
         if (!url || !title || typeof e.id !== "string") return [];
         const venue = e._embedded?.venues?.[0] ?? {};
+        // Ticketmaster may omit a venue name, or send `place` instead of a venue
+        // (Discovery v2 docs); fall back rather than show a blank venue line.
+        const place = e.place ?? {};
         return [{
           id: `ticketmaster:${cleanText(e.id, 64)}`, source: "ticketmaster", title,
-          subtitle: cleanText(venue.name, 120), location: cleanText(venue.city?.name, 80) || city,
+          subtitle: cleanText(venue.name, 120) || cleanText(place.name, 120) || cleanText(venue.address?.line1, 120) || cleanText(place.address?.line1, 120),
+          location: cleanText(venue.city?.name, 80) || cleanText(place.city?.name, 80) || city,
           startsAt: iso(e.dates?.start?.dateTime) ?? (typeof e.dates?.start?.localDate === "string" ? cleanText(e.dates.start.localDate, 10) : null),
           postedAt: null, url,
         }];
