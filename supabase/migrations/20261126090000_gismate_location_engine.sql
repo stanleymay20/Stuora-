@@ -124,8 +124,9 @@ revoke all on function private.geo_load_tsv(text, text, text) from public, anon,
 
 revoke all on function private.geo_fold(text, boolean) from public, anon, authenticated;
 
--- City candidates for a typed name: exact matches first (official name before
--- alternate names such as "Munich"), then prefix matches, larger places first.
+-- City candidates for a typed name: exact matches (official or alternate, e.g.
+-- "Munich") before prefix matches; within each, larger places first, so the
+-- city beats the hamlets that share its name.
 -- Same-named places in one state get their district added, so every row is distinct.
 create function public.geo_city_search(p_query text, p_limit integer default 8)
 returns jsonb language plpgsql stable security definer set search_path = '' as $$
@@ -137,9 +138,7 @@ begin
   if v_version is null or char_length(v_key) < 2 then return '[]'::jsonb; end if;
   with hits as (
     select n.geonameid,
-           max(case when n.name_key = v_key and n.is_primary then 3
-                    when n.name_key = v_key then 2
-                    when n.is_primary then 1 else 0 end) as score
+           max(case when n.name_key = v_key then 1 else 0 end) as score
       from private.geo_place_names n
      where n.dataset_version = v_version
        and (n.name_key = v_key or n.name_key like v_key || '%')
@@ -148,15 +147,13 @@ begin
     select p.*, h.score,
            count(*) over (partition by p.name, p.admin1_name) as same_name
       from hits h join private.geo_places p on p.dataset_version = v_version and p.geonameid = h.geonameid
-     order by h.score desc,
-              case when p.feature_code = 'PPLC' then 0 when p.feature_code ~ '^PPLA' then 1 else 2 end,
-              p.population desc, p.geonameid
+     order by h.score desc, p.population desc,
+              case when p.feature_code = 'PPLC' then 0 when p.feature_code ~ '^PPLA' then 1 else 2 end, p.geonameid
      limit 50
   ), picked as (
     select * from ranked
-     order by score desc,
-              case when feature_code = 'PPLC' then 0 when feature_code ~ '^PPLA' then 1 else 2 end,
-              population desc, geonameid
+     order by score desc, population desc,
+              case when feature_code = 'PPLC' then 0 when feature_code ~ '^PPLA' then 1 else 2 end, geonameid
      limit v_limit
   )
   select coalesce(jsonb_agg(jsonb_build_object(
@@ -170,9 +167,8 @@ begin
            'longitude', longitude,
            'population', population,
            'geonameId', geonameid)
-         order by score desc,
-                  case when feature_code = 'PPLC' then 0 when feature_code ~ '^PPLA' then 1 else 2 end,
-                  population desc, geonameid), '[]'::jsonb)
+         order by score desc, population desc,
+                  case when feature_code = 'PPLC' then 0 when feature_code ~ '^PPLA' then 1 else 2 end, geonameid), '[]'::jsonb)
     into result from picked;
   return result;
 end $$;

@@ -4,7 +4,18 @@ import { supabase } from './supabase';
 import { decodeExternalFeed, type Attribution, type FeedKind, type FeedReply } from './externalFeedReply';
 export type { Attribution, FeedReply, Opportunity } from './externalFeedReply';
 
-export type CityCandidate = { name: string; region: string; country: string; countryCode: string };
+export type CityCandidate = {
+  name: string; region: string; country: string; countryCode: string;
+  // Present when the Gismate Location Engine (GeoNames) answered.
+  district?: string; latitude?: number; longitude?: number; population?: number; geonameId?: number;
+};
+const OSM_CITY_ATTRIBUTION: Attribution = { id: 'nominatim', label: 'City data © OpenStreetMap contributors', url: 'https://www.openstreetmap.org/copyright' };
+/** The source the server named, if it is one we know how to credit; OpenStreetMap otherwise (older servers). */
+export function cityAttribution(value: unknown): Attribution {
+  const a = value as Partial<Attribution> | null;
+  if (a && a.id === 'geonames' && a.url === 'https://www.geonames.org/' && typeof a.label === 'string' && a.label.length < 80) return a as Attribution;
+  return OSM_CITY_ATTRIBUTION;
+}
 
 export class ServiceError extends Error {
   constructor(readonly code: string, message: string) { super(message); }

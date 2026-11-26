@@ -15,8 +15,12 @@ export type Opportunity = {
   url: string;
 };
 export type ProviderId = "ticketmaster" | "adzuna" | "bundesagentur";
-export type Attribution = { id: ProviderId | "nominatim"; label: string; url: string };
-export type CityCandidate = { name: string; region: string; country: string; countryCode: string };
+export type Attribution = { id: ProviderId | "nominatim" | "geonames"; label: string; url: string };
+/** The first four fields are what every app version renders; the rest are optional extras. */
+export type CityCandidate = {
+  name: string; region: string; country: string; countryCode: string;
+  district?: string; latitude?: number; longitude?: number; population?: number; geonameId?: number;
+};
 
 export interface FeedProvider {
   readonly id: ProviderId;
@@ -145,6 +149,32 @@ export function bundesagenturProvider(env: Env, timeoutMs = 5000): FeedProvider 
         }];
       });
     },
+  };
+}
+
+export const GEONAMES_ATTRIBUTION: Attribution = {
+  id: "geonames", label: "City data © GeoNames (CC BY 4.0)", url: "https://www.geonames.org/",
+};
+
+/**
+ * Gismate Location Engine: GeoNames data in our own database, searched by
+ * public.geo_city_search (service_role only). `search` is that RPC call. Rows
+ * are re-validated here so a bad row can never reach a student.
+ */
+export function geonamesLookup(search: (query: string) => Promise<{ data: unknown; error: unknown }>) {
+  return async (query: string): Promise<CityCandidate[]> => {
+    const { data, error } = await search(query);
+    if (error || !Array.isArray(data)) throw new Error("geonames 503");
+    return data.slice(0, 10).flatMap((raw): CityCandidate[] => {
+      const r = raw as Record<string, unknown>;
+      const name = cleanText(r.name, 120), countryCode = typeof r.countryCode === "string" && /^[A-Z]{2}$/.test(r.countryCode) ? r.countryCode : "";
+      const lat = Number(r.latitude), lon = Number(r.longitude), id = Number(r.geonameId);
+      if (!name || !countryCode || !Number.isFinite(lat) || !Number.isFinite(lon) || !Number.isInteger(id)) return [];
+      return [{
+        name, region: cleanText(r.region, 160), district: cleanText(r.district, 120), country: cleanText(r.country, 80), countryCode,
+        latitude: lat, longitude: lon, population: Number.isFinite(Number(r.population)) ? Number(r.population) : 0, geonameId: id,
+      }];
+    });
   };
 }
 

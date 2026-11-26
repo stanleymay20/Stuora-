@@ -31,8 +31,10 @@ jobs:
             curl -fsS --retry 3 -o "$f" "https://download.geonames.org/export/dump/$f"
           done
           unzip -o -q DE.zip DE.txt
+          curl -fsS --retry 3 -o alternatenames-DE.zip "https://download.geonames.org/export/dump/alternatenames/DE.zip"
+          unzip -p alternatenames-DE.zip DE.txt > alternateNames-DE.txt
           grep -q "Creative Commons Attribution 4.0" readme.txt
-          sha256sum DE.zip DE.txt admin1CodesASCII.txt admin2Codes.txt | tee SHA256SUMS
+          sha256sum DE.zip DE.txt admin1CodesASCII.txt admin2Codes.txt alternatenames-DE.zip alternateNames-DE.txt | tee SHA256SUMS
       - name: Unit-test the importer
         run: node --test scripts/geonames/build-import.test.mjs
       - name: Build versioned import

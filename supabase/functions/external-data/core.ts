@@ -3,7 +3,7 @@
 import { HttpError } from "../_shared/http.ts";
 import { isPlausibleCity } from "../_shared/intent.ts";
 import {
-  type Attribution, type CityCandidate, type FeedProvider, NOMINATIM_ATTRIBUTION, type Opportunity,
+  type Attribution, type CityCandidate, type FeedProvider, GEONAMES_ATTRIBUTION, NOMINATIM_ATTRIBUTION, type Opportunity,
 } from "./providers.ts";
 
 export interface ExternalDeps {
@@ -13,6 +13,8 @@ export interface ExternalDeps {
   acquireNominatimSlot(): Promise<boolean>;
   feeds: FeedProvider[];
   cityLookup: ((query: string, fetcher: typeof fetch) => Promise<CityCandidate[]>) | null;
+  /** Gismate Location Engine (GeoNames in our own database). Tried before OpenStreetMap. */
+  localCityLookup?: ((query: string) => Promise<CityCandidate[]>) | null;
   fetcher: typeof fetch;
   /** Identical provider fetches already in flight in this isolate (provider|key). */
   inflight?: Map<string, Promise<Opportunity[]>>;
@@ -40,22 +42,41 @@ function cleanQuery(value: unknown): string {
 
 /** Our own fixed failure strings only (e.g. "nominatim 403"); otherwise the error class. */
 function failureReason(err: unknown): string {
-  if (err instanceof Error && /^(nominatim|photon|ticketmaster|adzuna|bundesagentur) \d{3}$/.test(err.message)) return err.message;
+  if (err instanceof Error && /^(nominatim|photon|ticketmaster|adzuna|bundesagentur|geonames) \d{3}$/.test(err.message)) return err.message;
   return err instanceof Error ? err.name : "unknown";
 }
 
 export async function lookupCity(deps: ExternalDeps, rawQuery: unknown): Promise<CityReply> {
-  if (!deps.cityLookup) throw new HttpError(503, "FEATURE_DISABLED", "City lookup is not enabled");
+  if (!deps.cityLookup && !deps.localCityLookup) throw new HttpError(503, "FEATURE_DISABLED", "City lookup is not enabled");
   const query = cleanCity(rawQuery);
+  // Local GeoNames first: every lookup is quota-limited, found or not.
+  let local: CityCandidate[] | null = null;
+  if (deps.localCityLookup) {
+    if (!(await deps.consumeQuota())) throw new HttpError(429, "RATE_LIMIT", "Too many lookups. Try again later.");
+    try { local = await deps.localCityLookup(query); }
+    catch (err) { console.warn(JSON.stringify({ event: "provider_failed", provider: "geonames", reason: failureReason(err) })); }
+    if (local?.length) return { candidates: local, attribution: GEONAMES_ATTRIBUTION };
+  }
+  // Nothing local (e.g. a city outside Germany): OpenStreetMap, as before. If it is
+  // unavailable, an empty local answer is still a real answer, not an outage.
+  const localEmpty: CityReply | null = local ? { candidates: [], attribution: GEONAMES_ATTRIBUTION } : null;
+  if (!deps.cityLookup) {
+    if (localEmpty) return localEmpty;
+    throw new HttpError(503, "PROVIDER", "City lookup is temporarily unavailable");
+  }
   const key = fold(query);
   const cached = await deps.cacheGet("nominatim", key);
   if (Array.isArray(cached)) return { candidates: cached as CityCandidate[], attribution: NOMINATIM_ATTRIBUTION };
-  if (!(await deps.consumeQuota())) throw new HttpError(429, "RATE_LIMIT", "Too many lookups. Try again later.");
-  if (!(await deps.acquireNominatimSlot())) throw new HttpError(429, "BUSY", "City lookup is busy. Try again in a moment.");
+  if (!deps.localCityLookup && !(await deps.consumeQuota())) throw new HttpError(429, "RATE_LIMIT", "Too many lookups. Try again later.");
+  if (!(await deps.acquireNominatimSlot())) {
+    if (localEmpty) return localEmpty;
+    throw new HttpError(429, "BUSY", "City lookup is busy. Try again in a moment.");
+  }
   let candidates: CityCandidate[];
   try { candidates = await deps.cityLookup(query, deps.fetcher); }
   catch (err) {
     console.warn(JSON.stringify({ event: "provider_failed", provider: "city_lookup", reason: failureReason(err) }));
+    if (localEmpty) return localEmpty;
     throw new HttpError(503, "PROVIDER", "City lookup is temporarily unavailable");
   }
   await deps.cachePut("nominatim", key, candidates, 30 * 24 * 3600);

@@ -7,6 +7,8 @@
 //   DE.txt (unzipped from https://download.geonames.org/export/dump/DE.zip)
 //   admin1CodesASCII.txt, admin2Codes.txt (same directory on the server)
 //   DE.zip (kept only to record its checksum)
+//   alternateNames-DE.txt (from alternatenames/DE.zip): per-language names,
+//     used so places show their German name ("München", not "Munich")
 //
 // Output (nothing here connects to a database; same inputs → identical bytes):
 //   places.tsv, names.tsv  plain data, loaded by private.geo_load_tsv() or psql \copy
@@ -44,9 +46,30 @@ function usefulAlternate(name) {
 
 const sql = v => v === null || v === undefined ? 'null' : `'${String(v).replace(/'/g, "''")}'`;
 
-export function buildRows(deTxt, admin1Txt, admin2Txt) {
+/**
+ * German display name per place from the alternate-names table
+ * (alternateNameId, geonameid, isolanguage, name, isPreferredName, isShortName,
+ * isColloquial, isHistoric, from, to). Preferred, non-short, current names win.
+ */
+export function germanNames(altTxt) {
+  const best = new Map(), all = new Map();
+  for (const line of (altTxt ?? '').split('\n')) {
+    const c = line.split('\t');
+    if (c.length < 8 || c[2] !== 'de' || !c[3] || c[6] === '1' || c[7] === '1' || (c[9] && c[9].trim())) continue;
+    const id = Number(c[1]);
+    const rank = (c[4] === '1' ? 2 : 0) + (c[5] === '1' ? 0 : 1);
+    if (!all.has(id)) all.set(id, []);
+    all.get(id).push(c[3]);
+    const cur = best.get(id);
+    if (!cur || rank > cur.rank) best.set(id, { name: c[3], rank });
+  }
+  return { display: new Map([...best].map(([id, v]) => [id, v.name])), all };
+}
+
+export function buildRows(deTxt, admin1Txt, admin2Txt, altTxt = '') {
+  const german = germanNames(altTxt);
   const admin1 = new Map(), admin2 = new Map();
-  for (const line of admin1Txt.split('\n')) { const c = line.split('\t'); if (c.length >= 2 && c[0].startsWith('DE.')) admin1.set(c[0], c[1].replace(/^Land /, '')); }
+  for (const line of admin1Txt.split('\n')) { const c = line.split('\t'); if (c.length >= 2 && c[0].startsWith('DE.')) admin1.set(c[0], c[1].replace(/^(Land|State of) /, '')); }
   for (const line of admin2Txt.split('\n')) { const c = line.split('\t'); if (c.length >= 2 && c[0].startsWith('DE.')) admin2.set(c[0], c[1]); }
   const places = [], names = [];
   for (const line of deTxt.split('\n')) {
@@ -54,8 +77,9 @@ export function buildRows(deTxt, admin1Txt, admin2Txt) {
     if (c.length < 19 || c[6] !== 'P' || !KEEP_CODES.has(c[7]) || !COUNTRY[c[8]]) continue;
     const id = Number(c[0]);
     if (!Number.isInteger(id) || !c[1]) continue;
+    const officialName = c[1];
     const place = {
-      id, name: c[1], ascii: c[2], featureCode: c[7], countryCode: c[8], countryName: COUNTRY[c[8]],
+      id, name: german.display.get(id) ?? officialName, ascii: c[2], featureCode: c[7], countryCode: c[8], countryName: COUNTRY[c[8]],
       admin1: admin1.get(`${c[8]}.${c[10]}`) ?? null,
       admin2: admin2.get(`${c[8]}.${c[10]}.${c[11]}`) ?? null,
       lat: Number(c[4]).toFixed(5), lon: Number(c[5]).toFixed(5), population: Number(c[14]) || 0,
@@ -66,7 +90,9 @@ export function buildRows(deTxt, admin1Txt, admin2Txt) {
       for (const k of [fold(n), fold(n, true)]) if (k.length >= 2 && (!keys.has(k) || primary)) keys.set(k, primary || keys.get(k) === true);
     };
     add(place.name, true);
+    add(officialName, true);
     if (place.ascii) add(place.ascii, true);
+    for (const de of german.all.get(id) ?? []) if (usefulAlternate(de)) add(de, true);
     for (const alt of c[3] ? c[3].split(',') : []) if (usefulAlternate(alt)) add(alt, false);
     for (const [key, primary] of [...keys].sort((a, b) => a[0].localeCompare(b[0]))) names.push({ id, key, primary });
   }
@@ -92,15 +118,18 @@ function main() {
   const [inDir, outDir, versionArg] = process.argv.slice(2);
   if (!inDir || !outDir) { console.error('usage: build-import.mjs <input-dir> <output-dir> [version]'); process.exit(2); }
   const files = {};
-  for (const name of ['DE.zip', 'DE.txt', 'admin1CodesASCII.txt', 'admin2Codes.txt']) {
+  const urls = { 'DE.zip': `${SOURCE}DE.zip`, 'DE.txt': `${SOURCE}DE.zip (unzipped)`, 'admin1CodesASCII.txt': `${SOURCE}admin1CodesASCII.txt`,
+    'admin2Codes.txt': `${SOURCE}admin2Codes.txt`, 'alternateNames-DE.txt': `${SOURCE}alternatenames/DE.zip (unzipped DE.txt)` };
+  for (const name of Object.keys(urls)) {
     const buf = readFileSync(join(inDir, name));
-    files[name] = { url: name === 'DE.txt' ? `${SOURCE}DE.zip (unzipped)` : SOURCE + name, bytes: buf.length, sha256: sha256(buf) };
+    files[name] = { url: urls[name], bytes: buf.length, sha256: sha256(buf) };
   }
   // Version = dataset content, not the clock: same inputs give the same version.
-  const version = versionArg || `geonames-de-${files['DE.txt'].sha256.slice(0, 12)}`;
+  const version = versionArg || `geonames-de-${createHash('sha256').update(files['DE.txt'].sha256 + files['alternateNames-DE.txt'].sha256 + files['admin1CodesASCII.txt'].sha256 + files['admin2Codes.txt'].sha256).digest('hex').slice(0, 12)}`;
   if (!/^[a-z0-9-]{8,64}$/.test(version)) throw new Error('version must be 8-64 of [a-z0-9-]');
   const { places, names } = buildRows(readFileSync(join(inDir, 'DE.txt'), 'utf8'),
-    readFileSync(join(inDir, 'admin1CodesASCII.txt'), 'utf8'), readFileSync(join(inDir, 'admin2Codes.txt'), 'utf8'));
+    readFileSync(join(inDir, 'admin1CodesASCII.txt'), 'utf8'), readFileSync(join(inDir, 'admin2Codes.txt'), 'utf8'),
+    readFileSync(join(inDir, 'alternateNames-DE.txt'), 'utf8'));
   if (places.length < 10_000) throw new Error(`only ${places.length} places: refusing a truncated dataset`);
   rmSync(outDir, { recursive: true, force: true });
   mkdirSync(outDir, { recursive: true });

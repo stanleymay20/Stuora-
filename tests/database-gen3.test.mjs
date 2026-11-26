@@ -629,7 +629,7 @@ test('Location engine: GeoNames search, umlauts, partials, ambiguity, versioned 
   const { buildRows, buildTsv, fold } = await import('../scripts/geonames/build-import.mjs');
   const { createHash } = await import('node:crypto');
   const hex = t => createHash('sha256').update(Buffer.from(t)).digest('hex');
-  const { FIXTURE_DE, FIXTURE_ADMIN1, FIXTURE_ADMIN2 } = await import('../scripts/geonames/build-import.test.mjs');
+  const { FIXTURE_DE, FIXTURE_ADMIN1, FIXTURE_ADMIN2, FIXTURE_ALT } = await import('../scripts/geonames/build-import.test.mjs');
   const { db } = await harness();
   // SQL and JS folding must agree, or imported keys would never match queries.
   for (const s of ['München', 'Frankfurt (Oder)', 'Gießen', 'Brandenburg an der Havel', 'Łódź', 'Halle  (Saale)'])
@@ -637,7 +637,7 @@ test('Location engine: GeoNames search, umlauts, partials, ambiguity, versioned 
       assert.equal((await db.query('select private.geo_fold($1, $2) k', [s, t])).rows[0].k, fold(s, t), `${s}/${t}`);
 
   const load = async (version, de, { tamper = false } = {}) => {
-    const { places, names } = buildRows(de, FIXTURE_ADMIN1, FIXTURE_ADMIN2);
+    const { places, names } = buildRows(de, FIXTURE_ADMIN1, FIXTURE_ADMIN2, FIXTURE_ALT);
     const { placesTsv, namesTsv } = buildTsv(places, names);
     const manifest = { outputs: { 'places.tsv': hex(placesTsv), 'names.tsv': hex(namesTsv) } };
     await db.query(`insert into private.geo_datasets (version, source, licence, attribution, manifest, expected_places, expected_names)
@@ -656,7 +656,7 @@ test('Location engine: GeoNames search, umlauts, partials, ambiguity, versioned 
   await assert.rejects(db.query(`select private.geo_activate_dataset('geonames-de-fixture01')`), /incomplete/);
   await db.exec(`insert into private.geo_place_names values ('geonames-de-fixture01', 2867714, 'munich', false)`);
   await db.query(`select private.geo_activate_dataset('geonames-de-fixture01')`);
-  assert.ok(v1.places.length === 9);
+  assert.ok(v1.places.length === 10);
   await assert.rejects(db.query(`select private.geo_load_tsv('geonames-de-fixture01', 'names.tsv', '')`), /already active/);
 
   const first = async q => (await search(q))[0];
@@ -665,7 +665,12 @@ test('Location engine: GeoNames search, umlauts, partials, ambiguity, versioned 
   assert.equal((await first('Potsdam')).region, 'Brandenburg');
   assert.equal((await first('Brandenburg an der Havel')).name, 'Brandenburg an der Havel');
   assert.equal((await first('Halberstadt')).region, 'Saxony-Anhalt');
-  for (const q of ['München', 'Munchen', 'Muenchen', 'Munich', 'münchen', 'MUNICH', 'Mün']) assert.equal((await first(q)).name, 'München', q);
+  for (const q of ['München', 'Munchen', 'Muenchen', 'Munich', 'münchen', 'MUNICH', 'Mün']) {
+    const top = await first(q);
+    assert.equal(top.geonameId, 2867714, `${q}: the city, not the hamlet named München`);
+    assert.equal(top.name, 'München', q);
+  }
+  assert.equal((await search('München')).length, 2, 'the hamlet is still offered, second');
   assert.equal((await first('Frankfurt am Main')).name, 'Frankfurt am Main');
   assert.equal((await first('Frankfurt (Oder)')).name, 'Frankfurt (Oder)');
   assert.equal((await first('frankfurt oder')).name, 'Frankfurt (Oder)');
@@ -676,6 +681,7 @@ test('Location engine: GeoNames search, umlauts, partials, ambiguity, versioned 
   assert.notEqual(neustadt[0].region, neustadt[1].region, 'same-named places are told apart');
   assert.match(neustadt[0].region, /Bavaria · Upper/);
   const munich = await first('Munich');
+  assert.equal(munich.region, 'Bavaria');
   assert.deepEqual(Object.keys(munich).sort(), ['country', 'countryCode', 'district', 'geonameId', 'latitude', 'longitude', 'name', 'population', 'region']);
   assert.equal(munich.countryCode, 'DE');
   assert.equal(Number(munich.latitude), 48.13743);
