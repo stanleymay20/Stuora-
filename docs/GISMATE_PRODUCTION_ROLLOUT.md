@@ -5,7 +5,7 @@ below needs Stanley's explicit approval at the time it is run. Staging ran the
 same steps on 26 Nov 2026 (evidence at the end).
 
 Scope: PR #47 (city lookup from GeoNames, feeds by position, Adzuna label), which
-is stacked on PR #46 (Jobs API integrity). Merge #46 first, then #47.
+is stacked on PR #46 (Jobs API integrity). Both PRs target feature branches. Trace their parent PRs through to `main` and verify that the reviewed changes are present on `main` before building or deploying.
 
 ## 0. Go / no-go before starting
 
@@ -13,9 +13,9 @@ is stacked on PR #46 (Jobs API integrity). Merge #46 first, then #47.
 | --- | --- | --- |
 | PR #46 and #47 reviewed and merged | GitHub | merged, CI green on the merge commit |
 | Production project ref known | Supabase dashboard | written here before step 1: `__________` |
-| Production migration history matches the repo up to PR #46's base | `supabase migration list --project-ref <prod>` (or `list_migrations`) | no unknown or missing migrations |
-| Backup point | Dashboard → Database → Backups (or PITR timestamp) | a backup newer than today noted: `__________` |
-| Groq zero data retention | Groq console → Data Controls | **Enabled** (separate blocker, but launch-blocking) |
+| Production migration history matches the repo up to PR #46's base | Migration history on the verified production project | no unknown or missing migrations |
+| Backup point | Dashboard → Database → Backups (or PITR timestamp) | a verified restore point less than 24 hours old noted: `__________` |
+| Groq inference API zero data retention | Groq console → Data Controls | **Enabled** (separate blocker, but launch-blocking) |
 | Device test script passed | [DEVICE_TEST_SCRIPT.md](DEVICE_TEST_SCRIPT.md) | one Android + one iPhone, signed |
 
 If any row is not met, stop. Nothing below is partly useful on its own.
@@ -27,7 +27,15 @@ If any row is not met, stop. Nothing below is partly useful on its own.
 3. `20261126120000_geo_city_search_exact.sql`
 
 ```
-supabase db push --project-ref <prod>        # applies exactly the files above if history matched in step 0
+supabase link --project-ref "$PROD_PROJECT_REF"
+supabase migration list --linked
+supabase db push --linked --dry-run
+```
+
+Compare the dry run with the pending migrations listed above. Stop on any discrepancy. After approval, apply the reviewed plan from the same checkout.
+
+```sh
+supabase db push --linked
 ```
 
 Verify:
@@ -51,20 +59,35 @@ on the `geonames-data` branch. Expected output hashes (from the CI build log):
 - `places.tsv` `be10094238abea5ceb836182561fe0ca30ec4ce08364e6c24df632f98dd53a2e`
 - `names.tsv` `8259ff7316b26c23e0ce58fd12d767891cfacc21683c5f8fc1435cabb9fea684`
 
-**Preferred: psql from a checkout** (no extension added to production):
+**Load from the pinned checkout with Python 3 and psycopg 3.** Set `PROD_DB` to the verified production connection. The loader preserves the exact UTF-8 bytes, including the trailing newline. Registration, both loads and activation commit together.
 
-```
-git fetch origin geonames-data && git worktree add /tmp/geo 60e0338905670e437c9d0ebe8326e11cd3274ac0
+```sh
+set -eu
+git fetch origin geonames-data
+git worktree add --detach /tmp/geo 60e0338905670e437c9d0ebe8326e11cd3274ac0
 cd /tmp/geo/geonames-dach-12ec671b485f
-sha256sum places.tsv names.tsv              # must equal the two hashes above
-psql "$PROD_DB" -f begin.sql
-psql "$PROD_DB" -v v=geonames-dach-12ec671b485f <<'SQL'
-\set places `cat places.tsv`
-select private.geo_load_tsv(:'v', 'places.tsv', :'places');
-\set names `cat names.tsv`
-select private.geo_load_tsv(:'v', 'names.tsv', :'names');
-SQL
-psql "$PROD_DB" -f activate.sql
+python3 - <<'PY'
+import hashlib
+import os
+from pathlib import Path
+
+import psycopg
+
+version = "geonames-dach-12ec671b485f"
+hashes = {
+    "places.tsv": "be10094238abea5ceb836182561fe0ca30ec4ce08364e6c24df632f98dd53a2e",
+    "names.tsv": "8259ff7316b26c23e0ce58fd12d767891cfacc21683c5f8fc1435cabb9fea684",
+}
+with psycopg.connect(os.environ["PROD_DB"]) as conn:
+    conn.execute(Path("begin.sql").read_text(encoding="utf-8"))
+    for name, digest in hashes.items():
+        raw = Path(name).read_bytes()
+        if hashlib.sha256(raw).hexdigest() != digest:
+            raise ValueError(f"Checksum mismatch for {name}")
+        conn.execute("select private.geo_load_tsv(%s, %s, %s)",
+                     (version, name, raw.decode("utf-8")))
+    conn.execute(Path("activate.sql").read_text(encoding="utf-8"))
+PY
 ```
 
 `geo_load_tsv` refuses any body whose SHA-256 differs from the manifest, and
@@ -146,5 +169,5 @@ for up to that long.
 - Dataset `geonames-dach-12ec671b485f` active at 06:41 UTC; `geonames-de-e349e99a43a8`
   kept for rollback; `http` extension removed (verified: 0 rows in `pg_extension`).
 - Section 3 query: every row as in the table above.
-- `external-data` v23 deployed. Signed-in live check of v23 **still to run** (the
-  browser was unavailable); v22 passed the same city and feed checks for Germany.
+- Signed-in PR #47 preview at `12dfd39`: Wien and Zürich ranked first and returned local Ticketmaster venues. Paris suggested Parisdorf; retaining the typed city produced an empty Paris feed. All three lookups displayed GeoNames attribution. The provider adapter uses the configured country (default DE) for name-only queries, so this test does not establish French event coverage.
+- Groq Inference APIs ZDR was enabled and verified for the organization containing the Stuora key. Physical-device sign-off and production verification remain pending.
