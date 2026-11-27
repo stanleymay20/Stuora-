@@ -11,11 +11,16 @@ is stacked on PR #46 (Jobs API integrity). Both PRs target feature branches. Tra
 
 | Check | How | Must be |
 | --- | --- | --- |
-| PR #46 and #47 reviewed and merged | GitHub | merged, CI green on the merge commit |
+| The 0.1.7 stack (#46–#52) reviewed and merged | GitHub | merged, CI green on the merge commit |
 | Production project ref known | Supabase dashboard | written here before step 1: `__________` |
 | Production migration history matches the repo up to PR #46's base | Migration history on the verified production project | no unknown or missing migrations |
 | Backup point | Dashboard → Database → Backups (or PITR timestamp) | a verified restore point less than 24 hours old noted: `__________` |
 | Groq inference API zero data retention | Groq console → Data Controls | **Enabled** (separate blocker, but launch-blocking) |
+| GISMA-only sign-up hook | Supabase Auth → Hooks → Before user created → `public.hook_require_gisma_signup` | **On** in production (not confirmed on staging, which already holds a non-GISMA account) |
+| Auth redirect URLs | Supabase Auth → URL configuration | `stuora://auth-callback` and the production web origin listed |
+| Legal details | Production build env (`EXPO_PUBLIC_STUORA_OPERATOR_*`, privacy contact, `..._LEGAL_REVIEWED`) | Set; `npm run check:environment production` passes |
+| Moderator | `public.moderators` | At least one named moderator and a response procedure |
+| Separate production go decision | Stanley, in writing | Given after every row above is met |
 | Device test script passed | [DEVICE_TEST_SCRIPT.md](DEVICE_TEST_SCRIPT.md) | one Android + one iPhone, signed |
 
 If any row is not met, stop. Nothing below is partly useful on its own.
@@ -25,6 +30,9 @@ If any row is not met, stop. Nothing below is partly useful on its own.
 1. `20261125090000_job_application_integrity.sql` (PR #46), only if not already applied
 2. `20261126090000_gismate_location_engine.sql`
 3. `20261126120000_geo_city_search_exact.sql`
+4. `20261127090000_student_partner_offers.sql` (PR #49), if the 0.1.7 release ships Student Savings partner offers. Applied on staging 27 Nov as `20261127180110 student_partner_offers` and verified (current offers only; partner offers hidden from non-GISMA and signed-out users). Rollback: `supabase/rollback/20261127090000_student_partner_offers.down.sql`.
+
+The complete 0.1.7 release adds about 40 migrations relative to `main` (see PR #48). Reconcile the whole list against production history before step 1; the four above are only those added by #46, #47 and #49. Feature inventory and go/no-go: [RELEASE_CANDIDATE_0.1.7.md](RELEASE_CANDIDATE_0.1.7.md).
 
 ```
 supabase link --project-ref "$PROD_PROJECT_REF"

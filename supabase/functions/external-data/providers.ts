@@ -108,9 +108,10 @@ export function ticketmasterProvider(env: Env, timeoutMs = 5000): FeedProvider |
 }
 
 /**
- * Adzuna job search. Adzuna's free key is a 14-day EVALUATION licence; any
- * production use requires a signed commercial licence, so the operator must
- * also set ADZUNA_COMMERCIAL_LICENSE=confirmed.
+ * Adzuna job search. The trial key allows 25 calls; the Standard plan covers
+ * public listings only. Gismate shows jobs to signed-in students, which needs a
+ * separate commercial licence (Adzuna, 26 Nov 2026; docs/PROVIDER_DECISIONS.md),
+ * so the operator must also set ADZUNA_COMMERCIAL_LICENSE=confirmed.
  */
 export function adzunaProvider(env: Env, timeoutMs = 5000): FeedProvider | null {
   const appId = env.ADZUNA_APP_ID?.trim(), appKey = env.ADZUNA_APP_KEY?.trim();
@@ -147,9 +148,9 @@ export function adzunaProvider(env: Env, timeoutMs = 5000): FeedProvider | null 
 }
 
 /**
- * Bundesagentur für Arbeit Jobsuche. This endpoint is publicly reachable but
- * UNOFFICIAL: the BA publishes no API terms. It stays off unless the operator
- * sets BA_JOBSUCHE_ENABLED=true after confirming permission with the BA.
+ * Bundesagentur für Arbeit Jobsuche. The BA declined a data partnership for
+ * Gismate's current use (26 Nov 2026; docs/PROVIDER_DECISIONS.md). It stays off
+ * unless the operator sets BA_JOBSUCHE_ENABLED=true after new written approval.
  */
 export function bundesagenturProvider(env: Env, timeoutMs = 5000): FeedProvider | null {
   if (env.BA_JOBSUCHE_ENABLED !== "true") return null;

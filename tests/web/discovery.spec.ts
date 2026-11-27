@@ -30,6 +30,7 @@ test('Savings uses verified backend prices with errors, refresh and no invented 
   await page.route('**/rest/v1/student_benefits?*', async route => {
     const params = new URL(route.request().url()).searchParams;
     expect(params.get('verified_at')).toBe('not.is.null');
+    expect(params.get('or')).toMatch(/^\(ends_at\.is\.null,ends_at\.gt\.\d{4}-/);
     if (fail) { fail = false; return route.fulfill({ status: 403, json: { message: 'temporary' } }); }
     return route.fulfill({ json: rows });
   });
@@ -38,8 +39,10 @@ test('Savings uses verified backend prices with errors, refresh and no invented 
   await page.getByRole('button', { name: 'Retry benefits' }).click();
   await expect(page.getByText('No verified benefits available yet.')).toBeVisible();
   rows = [{ id: 'test-benefit', title: 'Database offer', sponsor_name: 'Real partner record', original_price_cents: 1250, student_price_cents: 850, currency: 'EUR', description: 'From the backend', eligibility_text: 'Student ID', starts_at: null, ends_at: null, terms_url: 'https://example.invalid/terms', verified_at: '2026-10-01T00:00:00Z' }];
+  rows.push({ ...rows[0] as object, id: 'future-benefit', title: 'Not started yet', starts_at: '2099-01-01T00:00:00Z' });
   await page.getByRole('button', { name: 'Refresh benefits' }).click();
   await expect(page.getByText('Database offer', { exact: true })).toBeVisible();
+  await expect(page.getByText('Not started yet')).toHaveCount(0);
   await expect(page.getByText('Funded by Real partner record')).toBeVisible();
   await expect(page.getByText('12,50 €', { exact: true })).toBeVisible();
   await expect(page.getByText('8,50 €', { exact: true })).toBeVisible();
@@ -104,6 +107,9 @@ test('Funding requires student access and remembers self-reported applications o
   await openSavings();
   await browse.click();
   await expect(page.getByText('Erasmus+ traineeship abroad', { exact: true })).toBeVisible();
+  await expect(page.getByText(/B2 level is accepted, also without a certificate/)).toBeVisible();
+  await expect(page.getByText(/shorter than three semesters are not funded/)).toBeVisible();
+  await expect(page.getByRole('link', { name: 'FES information in English' })).toBeVisible();
   await page.getByRole('button', { name: 'Save opportunity' }).first().click();
   await expect(page.getByText('My status: Saved')).toBeVisible();
   await page.getByRole('button', { name: 'Mark as applied' }).first().click();

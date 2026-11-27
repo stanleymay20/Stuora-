@@ -13,9 +13,10 @@ const opportunities = [
   {
     id: 'fes-international',
     title: 'Friedrich-Ebert-Stiftung scholarship',
-    details: 'For international students from eligible countries studying in Germany. The foundation considers grades, civic engagement and German language skills (B2).',
-    terms: 'Monthly funding of €992. For master’s students, apply before or at the start of the first semester, by 30 November for winter or 31 May for summer.',
+    details: 'For international students at a state or state-recognised German university. The foundation considers grades and civic engagement. German at B2 level is accepted, also without a certificate, even if your degree is taught in English.',
+    terms: 'Up to €992 a month plus health insurance; income above €400 a month is deducted. Master’s students apply before or at the start of the first semester: by 30 November (winter) or 31 May (summer). Programmes shorter than three semesters are not funded.',
     url: 'https://www.fes.de/studienfoerderung/stipendium/grundfoerderung-fuer-auslaender-innen',
+    moreUrl: 'https://www.fes.de/studienfoerderung/information-in-english/', moreLabel: 'FES information in English',
   },
 ];
 
@@ -50,6 +51,9 @@ function FundingCard({ award, userId }: { award: typeof opportunities[number]; u
     <Pressable accessibilityRole="link" onPress={() => Linking.openURL(award.url).catch(() => setError('Could not open the programme website.'))}>
       <Text style={styles.action}>Official programme details</Text>
     </Pressable>
+    {'moreUrl' in award && !!award.moreUrl && <Pressable accessibilityRole="link" onPress={() => Linking.openURL(award.moreUrl).catch(() => setError('Could not open the programme website.'))}>
+      <Text style={styles.action}>{award.moreLabel}</Text>
+    </Pressable>}
     {progress && <Text>My status: {progress}</Text>}
     <View style={styles.row}>
       {progress === null && <Pressable accessibilityRole="button" disabled={!ready} onPress={() => update('Saved')}><Text style={styles.action}>Save opportunity</Text></Pressable>}

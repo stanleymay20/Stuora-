@@ -9,7 +9,7 @@ export const features = {
   aiAssistant: process.env.EXPO_PUBLIC_STUORA_AI_ASSISTANT === 'enabled',
   /** Shows licensed Jobs/Events feeds from the external-data Edge Function. */
   externalFeeds: process.env.EXPO_PUBLIC_STUORA_EXTERNAL_FEEDS === 'enabled',
-  /** Lets the city picker check a name against OpenStreetMap Nominatim. */
+  /** City picker "Check": Gismate Location Engine (GeoNames), OpenStreetMap only as fallback. */
   cityLookup: process.env.EXPO_PUBLIC_STUORA_CITY_LOOKUP === 'enabled',
   /** Group file listing/save is staging-only and remains OFF without explicit build configuration. */
   groupFiles: process.env.EXPO_PUBLIC_STUORA_ENV === 'staging'

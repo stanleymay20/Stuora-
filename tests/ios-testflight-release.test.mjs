@@ -25,6 +25,11 @@ test('signed TestFlight profile targets staging and the existing App Store Conne
   assert.equal(staging.environment, 'preview');
   assert.equal(staging.env.EXPO_PUBLIC_STUORA_ENV, 'staging');
   assert.equal(staging.env.EXPO_PUBLIC_SUPABASE_URL, 'https://uptjcspizukpjcoayhtn.supabase.co');
+  // Staging device builds exercise every released feature: feeds, city check, assistant.
+  for (const flag of ['EXPO_PUBLIC_STUORA_EXTERNAL_FEEDS', 'EXPO_PUBLIC_STUORA_CITY_LOOKUP', 'EXPO_PUBLIC_STUORA_AI_ASSISTANT'])
+    assert.equal(staging.env[flag], 'enabled', flag);
+  // Group files stay off until the scanner is deployed and approved.
+  assert.equal(Object.hasOwn(staging.env, 'EXPO_PUBLIC_STUORA_GROUP_FILES'), false);
   assert.equal(eas.submit.testflight.ios.ascAppId, '6838005817');
   // Expo's publishable staging key is read from Expo environment; never commit
   // an Apple credential, EXPO_TOKEN, or a service-role key into this profile.
