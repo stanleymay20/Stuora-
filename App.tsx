@@ -1,3 +1,4 @@
+import ArrivalGuide from './src/ArrivalGuide';
 import React, { useEffect, useRef, useState } from 'react';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -351,6 +352,7 @@ export default function App({ onOpenSavings }: { onOpenSavings: () => void }) {
             </View>
           </View>
 
+          <ArrivalGuide key={session?.user.id ?? 'guest'} studentId={access === 'student' ? session?.user.id : undefined} onSignIn={() => setTab('profile')} />
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Browse by category</Text>
             <Text style={styles.sectionHint}>Three student spaces: Uni, Life and Business</Text>
