@@ -90,3 +90,27 @@ test('People lets members view opt-in public profiles and filter by city without
   await page.getByRole('button',{name:'Clear city filter'}).click();
   await expect(page.getByRole('textbox',{name:'Filter people by city'})).toHaveValue('');
 });
+
+test('Funding requires student access and remembers self-reported applications on this device', async ({ page }) => {
+  await backend(page);
+  async function openSavings() {
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Open Student Savings' }).click();
+  }
+  const browse = page.getByRole('button', { name: 'Browse scholarships and grants' });
+  await openSavings();
+  await expect(browse).toHaveCount(0);
+  await asStudent(page);
+  await openSavings();
+  await browse.click();
+  await expect(page.getByText('Erasmus+ traineeship abroad', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Save opportunity' }).first().click();
+  await expect(page.getByText('My status: Saved')).toBeVisible();
+  await page.getByRole('button', { name: 'Mark as applied' }).first().click();
+  await expect(page.getByText('My status: Applied')).toBeVisible();
+  await openSavings();
+  await browse.click();
+  await expect(page.getByText('My status: Applied')).toBeVisible();
+  await page.getByRole('button', { name: 'Clear status' }).click();
+  await expect(page.getByText('My status: Applied')).toHaveCount(0);
+});

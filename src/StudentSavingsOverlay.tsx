@@ -2,10 +2,16 @@ import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Linking, Modal, Pressable, SafeAreaView, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { supabase } from './backend/supabase';
 import type { Database } from './backend/database.types';
+import StudentFunding from './StudentFunding';
+import { useAuth } from './account/AuthProvider';
+import { catalogueAccess } from './account/studentAccess';
 type Benefit = Database['public']['Tables']['student_benefits']['Row'];
 function euro(cents: number, currency: string) { return new Intl.NumberFormat(undefined, { style: 'currency', currency }).format(cents / 100); }
 function date(value: string | null) { return value ? new Date(value).toLocaleDateString(undefined, { timeZone: 'Europe/Berlin' }) : 'No end date specified'; }
 export default function StudentSavingsOverlay({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
+  const { session } = useAuth();
+  const canBrowse = catalogueAccess(session) === 'student';
+  const [funding, setFunding] = useState(false);
   const [filter, setFilter] = useState<'all' | 'subscription' | 'coupon'>('all');
   const [linkError, setLinkError] = useState(false);
   const [benefits, setBenefits] = useState<Benefit[]>([]);
@@ -14,7 +20,7 @@ export default function StudentSavingsOverlay({ open, onOpenChange }: { open: bo
   const [revision, setRevision] = useState(0);
   const [pages, setPages] = useState(1);
   const [more, setMore] = useState(false);
-  useEffect(() => { if (!open) { setPages(1); setFilter('all'); setLinkError(false); } }, [open]);
+  useEffect(() => { if (!open) { setFunding(false); setPages(1); setFilter('all'); setLinkError(false); } }, [open]);
   useEffect(() => {
     if (!open) return;
     const ac = new AbortController(); setLoading(true); setIssue(false); setBenefits([]);
@@ -34,8 +40,13 @@ export default function StudentSavingsOverlay({ open, onOpenChange }: { open: bo
   }, [open, pages, revision, filter]);
   return <>
     <Modal visible={open} animationType="slide" onRequestClose={() => onOpenChange(false)}><SafeAreaView style={styles.safeArea}>
-      <View style={styles.header}><View><Text style={styles.eyebrow}>STUORA SAVINGS</Text><Text style={styles.title}>Student life for less.</Text></View><Pressable accessibilityRole="button" accessibilityLabel="Close Student Savings" onPress={() => onOpenChange(false)} style={styles.closeButton}><Text style={styles.closeText}>Close</Text></Pressable></View>
+      <View style={styles.header}><View><Text style={styles.eyebrow}>STUORA SAVINGS</Text><Text style={styles.title}>{funding ? 'Scholarships and grants' : 'Student life for less.'}</Text></View><Pressable accessibilityRole="button" accessibilityLabel="Close Student Savings" onPress={() => onOpenChange(false)} style={styles.closeButton}><Text style={styles.closeText}>Close</Text></Pressable></View>
       <ScrollView contentContainerStyle={styles.page}>
+        {funding && canBrowse && session ? <>
+          <Pressable accessibilityRole="button" onPress={() => setFunding(false)}><Text style={styles.closeText}>Back to savings</Text></Pressable>
+          <StudentFunding userId={session.user.id} />
+        </> : <>
+        {canBrowse && <Pressable accessibilityRole="button" onPress={() => setFunding(true)}><Text style={styles.closeText}>Browse scholarships and grants</Text></Pressable>}
         <View style={styles.integrityCard}><Text style={styles.integrityTitle}>Verified partner benefits</Text><Text style={styles.integrityText}>Check eligibility and terms before redeeming with the partner.</Text></View>
         <View style={styles.filterRow}>
           {([['all', 'All offers'], ['subscription', 'Free subscriptions'], ['coupon', 'Coupons']] as const).map(([value, label]) => (
@@ -65,6 +76,7 @@ export default function StudentSavingsOverlay({ open, onOpenChange }: { open: bo
             </View>;
           })}
           {more ? <Pressable accessibilityRole="button" onPress={() => setPages(v => v + 1)}><Text style={styles.closeText}>Load more benefits</Text></Pressable> : null}
+        </>}
         </>}
       </ScrollView>
     </SafeAreaView></Modal>
