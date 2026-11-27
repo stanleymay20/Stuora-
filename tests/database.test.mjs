@@ -155,7 +155,19 @@ for (const inheritedGrants of [false, true]) {
       await deny(b, `select public.start_listing_conversation('${draft}')`, '22023');
       await deny(b, `select public.start_listing_conversation('${job}')`, '22023');
 
+      await db.exec(`insert into public.student_benefits
+        (title, benefit_type, sponsor_name, verified_at, offer_kind, redemption_instructions)
+        values ('Test coupon', 'discount', 'Fixture sponsor', now(), 'coupon', 'Present student ID')`);
       await count('anon', null, 'select * from public.student_benefits', 1);
+      await count('authenticated', b, "select id from public.student_benefits where offer_kind = 'coupon'", 1);
+      await assert.rejects(db.exec(`insert into public.student_benefits
+        (title, benefit_type, sponsor_name, redemption_instructions)
+        values ('Unclassified coupon', 'discount', 'Fixture sponsor', 'Use code at checkout')`),
+        error => error.code === '23514');
+      await assert.rejects(db.exec(`insert into public.student_benefits
+        (title, benefit_type, sponsor_name, offer_kind, redemption_instructions, student_price_cents)
+        values ('Missing renewal terms', 'freebie', 'Fixture sponsor', 'subscription', 'Redeem online', 0)`),
+        error => error.code === '23514');
       await deny(a, `insert into public.student_benefits (title, benefit_type, sponsor_name, verified_at) values ('Fake verified offer', 'discount', 'Me', now())`);
       await deny(a, 'update public.student_benefits set verified_at = now()');
       await deny(a, `insert into public.benefit_redemptions (benefit_id, user_id, savings_cents) select id, '${a}', 999999 from public.student_benefits`);

@@ -45,6 +45,19 @@ test('Savings uses verified backend prices with errors, refresh and no invented 
   await expect(page.getByText('8,50 €', { exact: true })).toBeVisible();
   await expect(page.getByText('4,00 € (32%)', { exact: true })).toBeVisible();
   await expect(page.getByText(/42,80|Savings this month|Demo Partner/)).toHaveCount(0);
+  await page.route('**/rest/v1/student_benefits?*', async route => {
+    const kind = new URL(route.request().url()).searchParams.get('offer_kind');
+    expect(kind).toBe('eq.subscription');
+    return route.fulfill({ json: [{
+      ...rows[0] as object, offer_kind: 'subscription', title: 'Test student access',
+      student_price_cents: 0, subscription_terms: 'One month free, no card, no renewal.',
+      redemption_instructions: 'Verify your student email with the partner.',
+      redemption_url: 'https://example.invalid/redeem',
+    }] });
+  });
+  await page.getByRole('button', { name: 'Free subscriptions' }).click();
+  await expect(page.getByText('Subscription terms: One month free, no card, no renewal.')).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Redeem with partner' })).toBeVisible();
   await page.getByRole('button', { name: 'Close Student Savings' }).click();
 });
 
