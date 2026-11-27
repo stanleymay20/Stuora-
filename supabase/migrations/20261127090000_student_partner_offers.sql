@@ -5,7 +5,8 @@ alter table public.student_benefits
   add column redemption_instructions text,
   add column subscription_terms text,
   add constraint student_offer_details check (
-    offer_kind is null or (
+    (offer_kind is null and redemption_url is null and redemption_instructions is null and subscription_terms is null)
+    or (offer_kind is not null and
       nullif(trim(redemption_instructions), '') is not null
       and (offer_kind <> 'subscription' or (
         student_price_cents is not distinct from 0

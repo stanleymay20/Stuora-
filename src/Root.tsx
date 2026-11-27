@@ -27,7 +27,7 @@ function RootContent() {
       <Pressable accessibilityRole="button" accessibilityLabel="Dismiss link message" onPress={dismissLinkNotice} style={styles.bannerClose}><Text style={styles.bannerCloseText}>OK</Text></Pressable>
     </View>
   ) : null;
-  return <View style={styles.root}>{banner}<App onOpenSavings={() => setSavingsOpen(true)} /><StudentSavingsOverlay open={savingsOpen} onOpenChange={setSavingsOpen} /></View>;
+  return <View style={styles.root}>{banner}<App onOpenSavings={() => setSavingsOpen(true)} /><StudentSavingsOverlay key={session?.user.id ?? 'signed-out'} open={savingsOpen} onOpenChange={setSavingsOpen} /></View>;
 }
 
 export default function Root() {

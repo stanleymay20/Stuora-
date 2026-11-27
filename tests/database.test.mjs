@@ -161,6 +161,10 @@ for (const inheritedGrants of [false, true]) {
       await count('anon', null, 'select * from public.student_benefits', 1);
       await count('authenticated', b, "select id from public.student_benefits where offer_kind = 'coupon'", 1);
       await assert.rejects(db.exec(`insert into public.student_benefits
+        (title, benefit_type, sponsor_name, redemption_instructions)
+        values ('Unclassified coupon', 'discount', 'Fixture sponsor', 'Use code at checkout')`),
+        error => error.code === '23514');
+      await assert.rejects(db.exec(`insert into public.student_benefits
         (title, benefit_type, sponsor_name, offer_kind, redemption_instructions, student_price_cents)
         values ('Missing renewal terms', 'freebie', 'Fixture sponsor', 'subscription', 'Redeem online', 0)`),
         error => error.code === '23514');

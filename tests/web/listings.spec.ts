@@ -308,6 +308,13 @@ for (const category of ['Housing', 'Marketplace'] as const) {
     await expect.poll(() => requests.some(r => r.kind === `eq.${category.toLowerCase()}` &&
       r.city === 'ilike.%Potsdam%' && r.maximum === 'lte.65025')).toBe(true);
     await expect(page.getByText('No real listings match these filters. Clear the filters or adjust the city and maximum price.')).toBeVisible();
+    if (category === 'Marketplace') {
+      await page.getByRole('button', { name: 'Show free items' }).click();
+      await expect.poll(() => requests.at(-1)?.maximum).toBe('lte.0');
+      await expect(page.getByRole('textbox', { name: 'Filter listings by city' })).toHaveValue('Potsdam');
+      await page.getByRole('button', { name: 'Remove free items filter' }).click();
+      await expect.poll(() => requests.at(-1)?.maximum).toBeNull();
+    }
     await page.getByRole('button', { name: 'Clear listing filters' }).click();
     await expect(page.getByRole('textbox', { name: 'Filter listings by city' })).toHaveValue('');
     await expect(page.getByRole('textbox', { name: 'Maximum listing price (EUR)' })).toHaveValue('');
