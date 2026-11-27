@@ -1,25 +1,29 @@
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, Modal, Pressable, SafeAreaView, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Linking, Modal, Pressable, SafeAreaView, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { supabase } from './backend/supabase';
 import type { Database } from './backend/database.types';
 type Benefit = Database['public']['Tables']['student_benefits']['Row'];
 function euro(cents: number, currency: string) { return new Intl.NumberFormat(undefined, { style: 'currency', currency }).format(cents / 100); }
 function date(value: string | null) { return value ? new Date(value).toLocaleDateString(undefined, { timeZone: 'Europe/Berlin' }) : 'No end date specified'; }
 export default function StudentSavingsOverlay({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
+  const [filter, setFilter] = useState<'all' | 'subscription' | 'coupon'>('all');
+  const [linkError, setLinkError] = useState(false);
   const [benefits, setBenefits] = useState<Benefit[]>([]);
   const [loading, setLoading] = useState(false);
   const [issue, setIssue] = useState(false);
   const [revision, setRevision] = useState(0);
   const [pages, setPages] = useState(1);
   const [more, setMore] = useState(false);
-  useEffect(() => { if (!open) setPages(1); }, [open]);
+  useEffect(() => { if (!open) { setPages(1); setFilter('all'); setLinkError(false); } }, [open]);
   useEffect(() => {
     if (!open) return;
     const ac = new AbortController(); setLoading(true); setIssue(false); setBenefits([]);
     const timeout = setTimeout(() => { setIssue(true); setLoading(false); ac.abort(); }, 15000);
     async function load() {
       try {
-        const { data, error } = await supabase.from('student_benefits').select('*').not('verified_at', 'is', null).order('created_at', { ascending: false }).order('id').range(0, pages * 24).abortSignal(ac.signal);
+        let query = supabase.from('student_benefits').select('*').not('verified_at', 'is', null);
+        if (filter !== 'all') query = query.eq('offer_kind', filter);
+        const { data, error } = await query.order('created_at', { ascending: false }).order('id').range(0, pages * 24).abortSignal(ac.signal);
         if (ac.signal.aborted) return;
         if (error) { setIssue(true); return; }
         setMore((data?.length ?? 0) > pages * 24); setBenefits((data ?? []).slice(0, pages * 24));
@@ -27,12 +31,22 @@ export default function StudentSavingsOverlay({ open, onOpenChange }: { open: bo
       finally { clearTimeout(timeout); if (!ac.signal.aborted) setLoading(false); }
     }
     void load(); return () => { clearTimeout(timeout); ac.abort(); };
-  }, [open, pages, revision]);
+  }, [open, pages, revision, filter]);
   return <>
     <Modal visible={open} animationType="slide" onRequestClose={() => onOpenChange(false)}><SafeAreaView style={styles.safeArea}>
       <View style={styles.header}><View><Text style={styles.eyebrow}>STUORA SAVINGS</Text><Text style={styles.title}>Student life for less.</Text></View><Pressable accessibilityRole="button" accessibilityLabel="Close Student Savings" onPress={() => onOpenChange(false)} style={styles.closeButton}><Text style={styles.closeText}>Close</Text></Pressable></View>
       <ScrollView contentContainerStyle={styles.page}>
-        <View style={styles.integrityCard}><Text style={styles.integrityTitle}>Verified partner benefits</Text><Text style={styles.integrityText}>Only verified, currently valid offers from Stuora are shown. Personal redemption accounting is not available yet. Stuora does not hold money or show a cash balance.</Text></View>
+        <View style={styles.integrityCard}><Text style={styles.integrityTitle}>Verified partner benefits</Text><Text style={styles.integrityText}>Check eligibility and terms before redeeming with the partner.</Text></View>
+        <View style={styles.filterRow}>
+          {([['all', 'All offers'], ['subscription', 'Free subscriptions'], ['coupon', 'Coupons']] as const).map(([value, label]) => (
+            <Pressable key={value} accessibilityRole="button" accessibilityState={{ selected: filter === value }}
+              style={[styles.filterPill, filter === value && styles.filterPillActive]}
+              onPress={() => { setPages(1); setFilter(value); setLinkError(false); }}>
+              <Text style={styles.filterText}>{label}</Text>
+            </Pressable>
+          ))}
+        </View>
+        {linkError && <Text accessibilityRole="alert">Could not open the partner link.</Text>}
         {loading ? <ActivityIndicator accessibilityLabel="Loading benefits" /> : issue ? <View><Text accessibilityRole="alert">Could not load benefits. Check your connection and retry.</Text><Pressable accessibilityRole="button" onPress={() => setRevision(v => v + 1)}><Text style={styles.closeText}>Retry benefits</Text></Pressable></View> : <>
           <Pressable accessibilityRole="button" onPress={() => setRevision(v => v + 1)}><Text style={styles.closeText}>Refresh benefits</Text></Pressable>
           {!benefits.length ? <Text>No verified benefits available yet.</Text> : benefits.map(benefit => {
@@ -41,7 +55,13 @@ export default function StudentSavingsOverlay({ open, onOpenChange }: { open: bo
             return <View key={benefit.id} style={styles.benefitCard}><Text style={styles.benefitTitle}>{benefit.title}</Text><Text style={styles.sponsor}>Funded by {benefit.sponsor_name}</Text><Text>{benefit.description}</Text><Text>Verification: verified</Text>
               {priced ? <View style={styles.priceRow}><View><Text style={styles.priceLabel}>Normal</Text><Text style={styles.normalPrice}>{euro(benefit.original_price_cents!, benefit.currency)}</Text></View><View><Text style={styles.priceLabel}>Student</Text><Text style={styles.studentPrice}>{euro(benefit.student_price_cents!, benefit.currency)}</Text></View><View><Text style={styles.priceLabel}>Save</Text><Text style={styles.saveValue}>{euro(saving!, benefit.currency)}{benefit.original_price_cents! > 0 ? ` (${Math.round(saving! / benefit.original_price_cents! * 100)}%)` : ''}</Text></View></View> : <Text>Price comparison not provided by the sponsor.</Text>}
               <Text>Eligibility: {benefit.eligibility_text || 'Not provided'}</Text><Text>Valid from: {benefit.starts_at ? date(benefit.starts_at) : 'No start date specified'}</Text><Text>Valid until: {date(benefit.ends_at)}</Text><Text selectable>Terms: {benefit.terms_url || 'No terms link provided'}</Text>{benefit.sponsor_url ? <Text selectable>Source: {benefit.sponsor_url}</Text> : null}
-              <Text>Redemption is not available in Stuora yet.</Text>
+              {benefit.subscription_terms && <Text>Subscription terms: {benefit.subscription_terms}</Text>}
+              {benefit.redemption_instructions && <Text selectable>{benefit.redemption_instructions}</Text>}
+              {benefit.redemption_url?.startsWith('https://') && <Pressable accessibilityRole="link"
+                onPress={async () => {
+                  setLinkError(false);
+                  try { await Linking.openURL(benefit.redemption_url!); } catch { setLinkError(true); }
+                }}><Text style={styles.closeText}>Redeem with partner</Text></Pressable>}
             </View>;
           })}
           {more ? <Pressable accessibilityRole="button" onPress={() => setPages(v => v + 1)}><Text style={styles.closeText}>Load more benefits</Text></Pressable> : null}
@@ -78,7 +98,7 @@ const styles = StyleSheet.create({
   integrityCard: { backgroundColor: '#EDFBF5', borderWidth: 1, borderColor: '#BCEBD4', borderRadius: 16, padding: 15 },
   integrityTitle: { color: '#0C724A', fontWeight: '900' },
   integrityText: { color: '#45655A', lineHeight: 20, marginTop: 5, fontSize: 13 },
-  filters: { paddingVertical: 2 },
+  filterRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
   filterPill: { backgroundColor: '#F0F1F5', borderRadius: 999, paddingHorizontal: 13, paddingVertical: 8, marginRight: 8 },
   filterPillActive: { backgroundColor: '#EAE5FF' },
   filterText: { color: '#667085', fontWeight: '800', fontSize: 12 },

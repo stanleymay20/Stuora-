@@ -672,6 +672,10 @@ export type Database = {
       }
       student_benefits: {
         Row: {
+          offer_kind: string | null
+          redemption_url: string | null
+          redemption_instructions: string | null
+          subscription_terms: string | null
           benefit_type: Database["public"]["Enums"]["benefit_type"]
           created_at: string
           currency: string
@@ -690,6 +694,10 @@ export type Database = {
           verified_at: string | null
         }
         Insert: {
+          offer_kind?: string | null
+          redemption_url?: string | null
+          redemption_instructions?: string | null
+          subscription_terms?: string | null
           benefit_type: Database["public"]["Enums"]["benefit_type"]
           created_at?: string
           currency?: string
@@ -708,6 +716,10 @@ export type Database = {
           verified_at?: string | null
         }
         Update: {
+          offer_kind?: string | null
+          redemption_url?: string | null
+          redemption_instructions?: string | null
+          subscription_terms?: string | null
           benefit_type?: Database["public"]["Enums"]["benefit_type"]
           created_at?: string
           currency?: string

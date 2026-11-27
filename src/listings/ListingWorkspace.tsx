@@ -366,6 +366,8 @@ export default function ListingWorkspace({ category, mode = 'browse', search: se
               <TextInput accessibilityLabel="Maximum listing price (EUR)" inputMode="decimal" value={maxPrice} onChangeText={value => { if (/^\d{0,7}(\.\d{0,2})?$/.test(value)) setMaxPrice(value); }} placeholder="No maximum" placeholderTextColor="#646B80" style={s.filterInput} />
             </View>
           </View>
+          {kind === 'marketplace' && <Button title={maxPrice === '0' ? 'Remove free items filter' : 'Show free items'}
+            onPress={() => setMaxPrice(maxPrice === '0' ? '' : '0')} />}
           {hasListingFilters ? <View style={s.clearFilters}><Button title="Clear listing filters" onPress={() => { setCityFilter(''); setMaxPrice(''); }} /></View> : null}
         </View>
       ) : null}
