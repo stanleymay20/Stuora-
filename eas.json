@@ -9,7 +9,9 @@
       "env": {
         "EXPO_PUBLIC_STUORA_ENV": "staging",
         "EXPO_PUBLIC_SUPABASE_URL": "https://uptjcspizukpjcoayhtn.supabase.co",
-        "EXPO_PUBLIC_STUORA_EXTERNAL_FEEDS": "enabled"
+        "EXPO_PUBLIC_STUORA_EXTERNAL_FEEDS": "enabled",
+        "EXPO_PUBLIC_STUORA_CITY_LOOKUP": "enabled",
+        "EXPO_PUBLIC_STUORA_AI_ASSISTANT": "enabled"
       },
       "android": {
         "buildType": "app-bundle",

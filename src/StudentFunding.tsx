@@ -13,8 +13,8 @@ const opportunities = [
   {
     id: 'fes-international',
     title: 'Friedrich-Ebert-Stiftung scholarship',
-    details: 'For international students from eligible countries studying in Germany. The foundation considers grades, civic engagement and German language skills (B2).',
-    terms: 'Monthly funding of €992. For master’s students, apply before or at the start of the first semester, by 30 November for winter or 31 May for summer.',
+    details: 'For international students at a state or state-recognised German university. The foundation considers grades, civic engagement and asks for very good German.',
+    terms: 'Up to €992 a month plus health insurance; income above €400 a month is deducted. Master’s students apply before or at the start of the first semester: by 30 November (winter) or 31 May (summer). Programmes shorter than three semesters are not funded.',
     url: 'https://www.fes.de/studienfoerderung/stipendium/grundfoerderung-fuer-auslaender-innen',
   },
 ];

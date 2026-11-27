@@ -27,12 +27,16 @@ export default function StudentSavingsOverlay({ open, onOpenChange }: { open: bo
     const timeout = setTimeout(() => { setIssue(true); setLoading(false); ac.abort(); }, 15000);
     async function load() {
       try {
-        let query = supabase.from('student_benefits').select('*').not('verified_at', 'is', null);
+        // Only offers that have started and not yet expired.
+        const now = new Date().toISOString();
+        let query = supabase.from('student_benefits').select('*').not('verified_at', 'is', null)
+          .or(`ends_at.is.null,ends_at.gt.${now}`);
         if (filter !== 'all') query = query.eq('offer_kind', filter);
         const { data, error } = await query.order('created_at', { ascending: false }).order('id').range(0, pages * 24).abortSignal(ac.signal);
         if (ac.signal.aborted) return;
         if (error) { setIssue(true); return; }
-        setMore((data?.length ?? 0) > pages * 24); setBenefits((data ?? []).slice(0, pages * 24));
+        const started = (data ?? []).filter(b => !b.starts_at || b.starts_at <= now);
+        setMore((data?.length ?? 0) > pages * 24); setBenefits(started.slice(0, pages * 24));
       } catch { if (!ac.signal.aborted) setIssue(true); }
       finally { clearTimeout(timeout); if (!ac.signal.aborted) setLoading(false); }
     }
