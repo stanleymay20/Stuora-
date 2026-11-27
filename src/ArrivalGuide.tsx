@@ -7,9 +7,10 @@ const cities = {
   Potsdam: 'https://www.potsdam.de/de/potsdamer-werden',
   'Brandenburg an der Havel': 'https://service.stadt-brandenburg.de/dienstleistungen/-/egov-bis-detail/dienstleistung/245231/show',
 };
-// Potsdam: published address. Berlin: street number not yet confirmed from a GISMA
-// source, so students are sent to GISMA's contact page instead of a guessed address.
-const campuses = { Berlin: '', Potsdam: 'Konrad-Zuse-Ring 11, 14469 Potsdam' };
+// Both as published on GISMA's contact page (checked 27 Nov 2026).
+const campuses = { Berlin: 'Donaustraße 42, 12043 Berlin', Potsdam: 'Konrad-Zuse-Ring 11, 14469 Potsdam' };
+// Ticket contact published in GISMA's student guide (gisma-uas-vcr-guide_jan-2024.pdf).
+const ticketMail = 'mailto:potsdam.reception@gisma.com';
 const gisma = 'https://www.gisma.com/en/contact-us';
 const vbb = 'https://www.vbb.de/unterwegs-im-vbb/';
 type Plan = { home: keyof typeof cities | ''; campus: keyof typeof campuses | ''; arrival: string; done: string[] };
@@ -62,8 +63,8 @@ export default function ArrivalGuide({ studentId, onSignIn }: { studentId?: stri
   }
   function link(url: string) { void Linking.openURL(url).catch(() => setError('Could not open the official page. Please try again.')); }
   const tasks = [
-    { id: 'travel-' + plan.campus, name: 'Plan your first campus trip', body: !plan.campus ? 'Choose your campus above to see the destination address.' : campuses[plan.campus] ? 'Enter your starting point and this destination in VBB: ' + campuses[plan.campus] : 'Copy the Berlin campus address (Neukölln) from GISMA’s contact page, then enter it in VBB with your starting point.', label: 'Open VBB journey planner', url: vbb, tip: 'Check the campus address against your timetable. GISMA lists both campuses on its contact page.', contact: gisma, contactLabel: 'Check GISMA campus addresses' },
-    { id: 'ticket', name: 'Find your semester ticket', body: 'Check your university inbox and spam folder for your semester ticket instructions.', label: 'Read VBB semester ticket guidance', url: 'https://www.vbb.de/en/tickets/special-tickets/semester-ticket/', tip: 'Missing the activation email? VBB sends ticket instructions when you enrol or re-register. Ask GISMA Student Support to check your enrolment and resend the link.', contact: gisma, contactLabel: 'Contact GISMA about my ticket' },
+    { id: 'travel-' + plan.campus, name: 'Plan your first campus trip', body: plan.campus ? 'Enter your starting point and this destination in VBB: ' + campuses[plan.campus] : 'Choose your campus above to see the destination address.', label: 'Open VBB journey planner', url: vbb, tip: 'Check the campus address against your timetable. GISMA lists both campuses on its contact page.', contact: gisma, contactLabel: 'Check GISMA campus addresses' },
+    { id: 'ticket', name: 'Find your semester ticket', body: 'Check your university inbox and spam folder for your semester ticket instructions.', label: 'Read VBB semester ticket guidance', url: 'https://www.vbb.de/en/tickets/special-tickets/semester-ticket/', tip: 'Missing the activation email? GISMA’s January 2024 student guide lists potsdam.reception@gisma.com for semester ticket questions. If that address does not answer, use GISMA’s current contact page.', contact: ticketMail, contactLabel: 'Email potsdam.reception@gisma.com', fallback: gisma, fallbackLabel: 'Open GISMA contact page' },
     { id: 'register-' + plan.home, name: 'Register your home address', body: 'Anmeldung means registering where you live. Check your home city’s instructions for documents and appointment options.', label: 'Open city registration service', url: plan.home ? cities[plan.home] : '', tip: plan.home ? 'Use the contact or appointment information on your city’s registration page.' : 'Choose your home city above. If you live elsewhere, contact the Bürgeramt where you live.', contact: plan.home ? cities[plan.home] : '', contactLabel: 'Find the registration office' },
   ];
   const today = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Berlin' });
@@ -85,7 +86,7 @@ export default function ArrivalGuide({ studentId, onSignIn }: { studentId?: stri
           {!!task.url && <Choice label={task.label} onPress={() => link(task.url)} />}
           <View style={s.row}><Choice label="I’m stuck" selected={help === task.id} onPress={() => setHelp(help === task.id ? '' : task.id)} />
             {studentId && <Choice label={plan.done.includes(task.id) ? 'Done · undo' : 'Mark done'} onPress={() => change({ ...plan, done: plan.done.includes(task.id) ? plan.done.filter(id => id !== task.id) : [...plan.done, task.id] })} />}</View>
-          {help === task.id && <><Text>{task.tip}</Text>{!!task.contact && <Choice label={task.contactLabel} onPress={() => link(task.contact)} />}</>}
+          {help === task.id && <><Text>{task.tip}</Text>{!!task.contact && <Choice label={task.contactLabel} onPress={() => link(task.contact)} />}{'fallback' in task && !!task.fallback && <Choice label={task.fallbackLabel} onPress={() => link(task.fallback)} />}</>}
         </View>)}
       </>}
     </>}

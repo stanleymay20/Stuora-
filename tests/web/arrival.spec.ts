@@ -7,10 +7,12 @@ test('new arrival can live in Brandenburg, study in Berlin and find ticket help 
   await page.getByRole('button', { name: 'My first 30 days', exact: true }).click();
   await page.getByRole('button', { name: 'Brandenburg an der Havel' }).click();
   await page.getByRole('button', { name: 'Berlin campus' }).click();
-  await expect(page.getByText(/contact page, then enter it in VBB/)).toBeVisible();
+  await expect(page.getByText(/Donaustraße 42, 12043 Berlin/)).toBeVisible();
   await expect(page.getByRole('button', { name: 'Mark done' })).toHaveCount(0);
   await page.getByRole('button', { name: 'I’m stuck' }).nth(1).click();
-  await expect(page.getByText(/resend the link/)).toBeVisible();
+  await expect(page.getByText(/January 2024 student guide lists potsdam\.reception@gisma\.com/)).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Email potsdam.reception@gisma.com' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Open GISMA contact page' })).toBeVisible();
   const popup = page.waitForEvent('popup');
   await page.context().route('https://service.stadt-brandenburg.de/**', route => route.fulfill({ body: 'City' }));
   await page.getByRole('button', { name: 'Open city registration service' }).click();

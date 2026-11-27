@@ -78,6 +78,14 @@ end $$;
 reset role;
 
 -- C (GISMA, unrelated): cannot read, list or post into the conversation.
+select set_config('request.jwt.claim.sub', (select b::text from _qa), true);
+set local role authenticated;
+do $$ declare n int; begin
+  select count(*) into n from public.messages where conversation_id = (select conv from _qa);
+  insert into _r(step, ok, detail) values ('B reads both messages', n = 2, n::text);
+end $$;
+reset role;
+
 select set_config('request.jwt.claim.sub', (select c::text from _qa), true);
 set local role authenticated;
 do $$ declare n int; begin
@@ -121,13 +129,16 @@ reset role;
 
 -- Signed out.
 set local role anon;
-do $$ declare n int; begin
-  select count(*) into n from public.listings where id = (select desk from _qa);
-  insert into _r(step, ok, detail) values ('Signed out: desk not visible', n = 0, n::text);
-  select count(*) into n from public.messages;
-  insert into _r(step, ok, detail) values ('Signed out: no messages visible', n = 0, n::text);
-  select count(*) into n from public.profiles;
-  insert into _r(step, ok, detail) values ('Signed out: no profiles visible', n = 0, n::text);
+do $$ declare n int; t text; begin
+  -- Signed out: an empty result or "permission denied" (42501) both pass.
+  foreach t in array array['listings','messages','profiles','conversations'] loop
+    begin
+      execute format('select count(*) from public.%I', t) into n;
+      insert into _r(step, ok, detail) values ('Signed out: no '||t||' visible', n = 0, n::text||' rows');
+    exception when insufficient_privilege then
+      insert into _r(step, ok, detail) values ('Signed out: no '||t||' visible', true, 'permission denied');
+    end;
+  end loop;
 end $$;
 reset role;
 

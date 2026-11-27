@@ -107,6 +107,9 @@ test('Funding requires student access and remembers self-reported applications o
   await openSavings();
   await browse.click();
   await expect(page.getByText('Erasmus+ traineeship abroad', { exact: true })).toBeVisible();
+  await expect(page.getByText(/B2 level is accepted, also without a certificate/)).toBeVisible();
+  await expect(page.getByText(/shorter than three semesters are not funded/)).toBeVisible();
+  await expect(page.getByRole('link', { name: 'FES information in English' })).toBeVisible();
   await page.getByRole('button', { name: 'Save opportunity' }).first().click();
   await expect(page.getByText('My status: Saved')).toBeVisible();
   await page.getByRole('button', { name: 'Mark as applied' }).first().click();
